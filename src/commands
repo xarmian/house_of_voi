@@ -1,0 +1,19 @@
+## voi main
+#node main.js deploy -t SlotMachine -n slotmachine # 40048754
+#node main.js deploy -t SlotMachinePayoutModel -n slotmachine-payout-model # 40048751
+#node main.js deploy -t Beacon -n beacon # 40048752
+#node main.js deploy -t YieldBearingToken -n ybt # 40048753
+#node main.js set-payout-model -a 40048754 -p 40048751 # set payout model
+#node main.js bootstrap -a 40048753 # bootstrap ybt
+#node main.js transfer-ownership -a 40048754 -n XSL2PFJQDEOHCNDC66FNZAIQGG2OWIJAYNNVPGKH6FVXFQGWI3TWD5Y7LQ # transfer slot machine owner to ybt
+#node main.js set-yield-bearing-source -a 40048753 -s 40048754 # set yield bearing source
+#node main.js ybt-deposit -a 40048753 -a 1000000 # deposit via ybt to slot machine
+## voi test
+node main.js deploy -t SlotMachine -n 5reel2 # 92861
+node main.js deploy -t YieldBearingToken -n 5reelYbt # 92668
+node main.js bootstrap -a 92861 # bootstrap slot
+node main.js bootstrap -a 92668 # bootstrap ybt
+node main.js transfer-ownership -a 92861 -n RIBRXIC5M4TMJ6LGXQZJUMRL62OA4YAIP4HRVOT7ZFSYRRBIM77W4RMIBY # transfer slot machine owner to ybt 
+node main.js get-owner -a 92861 # JTJ53NTLPQHIPFQ4TXH3DALEMH64WT3CGIRIN7Q4CGDIPKE4KXUUNUFTVE
+node main.js set-yield-bearing-source -a 92668 -s 92861  # set yield bearing source
+node main.js ybt-deposit -a 92668 -b 1000000 # deposit via ybt to slot machine

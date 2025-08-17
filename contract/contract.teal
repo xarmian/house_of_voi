@@ -1,0 +1,1426 @@
+#pragma version 10
+intcblock 0 1 8 32 37700 100 5 350000000000 2 1000000
+bytecblock 0x62616c616e63655f617661696c61626c65 0x62616c616e63655f746f74616c 0x7570677261646572 0x6f776e6572 0x62616c616e63655f6c6f636b6564 0x151f7c75 0x757064617461626c65 0x6d61785f6265745f616d6f756e74 0x6d696e5f6265745f616d6f756e74 0x64656c657461626c65 0x64656c6567617465 0x6d696e5f62616e6b5f616d6f756e74 0x7061796f75745f6d6f64656c 0x7374616b6561626c65 0x0000000000000000000000000000000000000000000000000000000000000000 0x 0x0000000000000000 0x146209de 0x636f6e74726163745f76657273696f6e 0x6465706c6f796d656e745f76657273696f6e
+txn ApplicationID
+bnz label1
+callsub label2
+label1:
+txn NumAppArgs
+bz label3
+pushbytes 0x5505baf3 // 0x5505baf3
+pushbytes 0x9adc3aea // 0x9adc3aea
+pushbytes 0x1c2a99d3 // 0x1c2a99d3
+pushbytes 0x47c30431 // 0x47c30431
+pushbytes 0x4584c169 // 0x4584c169
+pushbytes 0x7de3089c // 0x7de3089c
+pushbytes 0x9a070136 // 0x9a070136
+pushbytes 0xa0faf5bc // 0xa0faf5bc
+pushbytes 0x85f0c93f // 0x85f0c93f
+pushbytes 0xff2ba5c5 // 0xff2ba5c5
+pushbytes 0x92e03b1c // 0x92e03b1c
+pushbytes 0x21f1ddff // 0x21f1ddff
+pushbytes 0x195fc777 // 0x195fc777
+pushbytes 0xad2e937c // 0xad2e937c
+pushbytes 0x094da2a9 // 0x094da2a9
+pushbytes 0x47b41893 // 0x47b41893
+pushbytes 0xb9c21155 // 0xb9c21155
+pushbytes 0x6a66f852 // 0x6a66f852
+pushbytes 0x8720eb26 // 0x8720eb26
+pushbytes 0xadf92ae4 // 0xadf92ae4
+pushbytes 0x78bc99d4 // 0x78bc99d4
+pushbytes 0x6b0b8ff8 // 0x6b0b8ff8
+pushbytes 0xd496bf43 // 0xd496bf43
+pushbytes 0x5f7ea248 // 0x5f7ea248
+pushbytes 0xcd24de88 // 0xcd24de88
+txna ApplicationArgs 0
+match label4 label5 label6 label7 label8 label9 label10 label11 label12 label13 label14 label15 label16 label17 label18 label19 label20 label21 label22 label23 label24 label25 label26 label27 label28
+err
+label4:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+callsub label29
+intc_1 // 1
+return
+label5:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+callsub label30
+intc_1 // 1
+return
+label6:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+callsub label31
+intc_1 // 1
+return
+label7:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+callsub label32
+intc_1 // 1
+return
+label8:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+callsub label33
+intc_1 // 1
+return
+label9:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+callsub label34
+intc_1 // 1
+return
+label10:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+callsub label35
+intc_1 // 1
+return
+label11:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+callsub label36
+intc_1 // 1
+return
+label12:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+callsub label37
+intc_1 // 1
+return
+label13:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+callsub label38
+bytec 5 // 0x151f7c75
+swap
+concat
+log
+intc_1 // 1
+return
+label14:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+callsub label39
+intc_1 // 1
+return
+label15:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+callsub label40
+intc_1 // 1
+return
+label16:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+callsub label41
+bytec 5 // 0x151f7c75
+swap
+concat
+log
+intc_1 // 1
+return
+label17:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+callsub label42
+bytec 5 // 0x151f7c75
+swap
+concat
+log
+intc_1 // 1
+return
+label18:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+callsub label43
+bytec 5 // 0x151f7c75
+swap
+concat
+log
+intc_1 // 1
+return
+label19:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+txna ApplicationArgs 2
+txna ApplicationArgs 3
+txna ApplicationArgs 4
+callsub label44
+bytec 5 // 0x151f7c75
+swap
+concat
+log
+intc_1 // 1
+return
+label20:
+txn OnCompletion
+intc 6 // 5
+==
+assert
+txn ApplicationID
+assert
+callsub label45
+intc_1 // 1
+return
+label21:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+txna ApplicationArgs 2
+txna ApplicationArgs 3
+callsub label46
+bytec 5 // 0x151f7c75
+swap
+concat
+log
+intc_1 // 1
+return
+label22:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+callsub label47
+bytec 5 // 0x151f7c75
+swap
+concat
+log
+intc_1 // 1
+return
+label23:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+callsub label48
+intc_1 // 1
+return
+label24:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+txna ApplicationArgs 2
+callsub label49
+intc_1 // 1
+return
+label25:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+callsub label50
+intc_1 // 1
+return
+label26:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+callsub label51
+intc_1 // 1
+return
+label27:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+callsub label52
+intc_1 // 1
+return
+label28:
+txn OnCompletion
+!
+assert
+txn ApplicationID
+assert
+txna ApplicationArgs 1
+txna ApplicationArgs 2
+txna ApplicationArgs 3
+txna ApplicationArgs 4
+txna ApplicationArgs 5
+txna ApplicationArgs 6
+callsub label53
+intc_1 // 1
+return
+label3:
+txn OnCompletion
+switch label54 label55 label55 label55 label56 label57
+err
+label54:
+txn ApplicationID
+!
+assert
+intc_1 // 1
+return
+label56:
+txn ApplicationID
+assert
+callsub label58
+intc_1 // 1
+return
+label57:
+txn ApplicationID
+assert
+callsub label59
+intc_1 // 1
+return
+label55:
+err
+label29:
+proto 0 0
+txn Sender
+intc_0 // 0
+bytec_2 // "upgrader"
+app_global_get_ex
+assert
+==
+assert
+retsub
+label30:
+proto 1 0
+callsub label60
+frame_dig -1
+btoi
+dup
+intc 7 // 350000000000
+>=
+assert
+bytec 11 // "min_bank_amount"
+swap
+app_global_put
+retsub
+label60:
+proto 0 0
+txn Sender
+intc_0 // 0
+bytec_3 // "owner"
+app_global_get_ex
+assert
+==
+assert
+retsub
+label31:
+proto 1 0
+callsub label60
+frame_dig -1
+btoi
+dup
+assert
+bytec 12 // "payout_model"
+swap
+app_global_put
+retsub
+label32:
+proto 1 0
+callsub label60
+frame_dig -1
+btoi
+dup
+assert
+intc_0 // 0
+bytec 7 // "max_bet_amount"
+app_global_get_ex
+assert
+dig 1
+>=
+assert
+bytec 8 // "min_bet_amount"
+swap
+app_global_put
+retsub
+label33:
+proto 1 0
+callsub label60
+frame_dig -1
+btoi
+dup
+assert
+intc_0 // 0
+bytec 8 // "min_bet_amount"
+app_global_get_ex
+assert
+dig 1
+<=
+assert
+bytec 7 // "max_bet_amount"
+swap
+app_global_put
+retsub
+label34:
+proto 0 0
+callsub label60
+bytec 6 // "updatable"
+intc_0 // 0
+app_global_put
+retsub
+label35:
+proto 0 0
+callsub label60
+bytec 13 // "stakeable"
+intc_0 // 0
+app_global_put
+retsub
+label36:
+proto 0 0
+callsub label60
+bytec 9 // "deletable"
+intc_0 // 0
+app_global_put
+retsub
+label37:
+proto 1 0
+callsub label60
+intc_0 // 0
+bytec_1 // "balance_total"
+app_global_get_ex
+assert
+frame_dig -1
+btoi
+dup
+cover 2
++
+bytec_1 // "balance_total"
+swap
+app_global_put
+intc_0 // 0
+bytec_0 // "balance_available"
+app_global_get_ex
+assert
++
+bytec_0 // "balance_available"
+swap
+app_global_put
+retsub
+label38:
+proto 0 1
+intc_0 // 0
+bytec_3 // "owner"
+app_global_get_ex
+assert
+retsub
+label39:
+proto 0 0
+txn Sender
+callsub label61
+dup
+assert
+intc_0 // 0
+bytec_1 // "balance_total"
+app_global_get_ex
+assert
+dig 1
++
+bytec_1 // "balance_total"
+swap
+app_global_put
+intc_0 // 0
+bytec_0 // "balance_available"
+app_global_get_ex
+assert
++
+bytec_0 // "balance_available"
+swap
+app_global_put
+retsub
+label61:
+proto 1 1
+txn GroupIndex
+dup
+assert
+intc_1 // 1
+-
+dup
+gtxns TypeEnum
+intc_1 // 1
+==
+assert
+dup
+gtxns Sender
+frame_dig -1
+==
+assert
+dup
+gtxns Receiver
+global CurrentApplicationAddress
+==
+assert
+gtxns Amount
+retsub
+label40:
+proto 1 0
+callsub label60
+frame_dig -1
+btoi
+dup
+assert
+intc_0 // 0
+bytec_0 // "balance_available"
+app_global_get_ex
+assert
+dig 1
+>=
+assert
+itxn_begin
+txn Sender
+dig 1
+itxn_field Amount
+itxn_field Receiver
+intc_1 // 1
+itxn_field TypeEnum
+intc_0 // 0
+itxn_field Fee
+itxn_submit
+intc_0 // 0
+bytec_0 // "balance_available"
+app_global_get_ex
+assert
+dig 1
+-
+bytec_0 // "balance_available"
+swap
+app_global_put
+intc_0 // 0
+bytec_1 // "balance_total"
+app_global_get_ex
+assert
+swap
+-
+bytec_1 // "balance_total"
+swap
+app_global_put
+retsub
+label41:
+proto 0 1
+intc_0 // 0
+bytec_0 // "balance_available"
+app_global_get_ex
+assert
+itob
+retsub
+label42:
+proto 0 1
+intc_0 // 0
+bytec 4 // "balance_locked"
+app_global_get_ex
+assert
+itob
+retsub
+label43:
+proto 0 1
+intc_0 // 0
+bytec_1 // "balance_total"
+app_global_get_ex
+assert
+itob
+retsub
+label44:
+proto 4 1
+frame_dig -3
+btoi
+frame_dig -2
+btoi
+frame_dig -1
+btoi
+frame_dig -4
+cover 3
+callsub label62
+retsub
+label62:
+proto 4 1
+frame_dig -3
+itob
+frame_dig -4
+swap
+concat
+frame_dig -2
+itob
+concat
+frame_dig -1
+itob
+concat
+retsub
+label45:
+proto 0 0
+txn Sender
+intc_0 // 0
+bytec_2 // "upgrader"
+app_global_get_ex
+assert
+==
+assert
+intc_0 // 0
+bytec 6 // "updatable"
+app_global_get_ex
+assert
+intc_1 // 1
+==
+assert
+intc_0 // 0
+bytec 9 // "deletable"
+app_global_get_ex
+assert
+intc_1 // 1
+==
+assert
+intc_0 // 0
+bytec 4 // "balance_locked"
+app_global_get_ex
+assert
+!
+assert
+intc_0 // 0
+bytec_2 // "upgrader"
+app_global_get_ex
+assert
+intc_0 // 0
+bytec_2 // "upgrader"
+app_global_get_ex
+assert
+concat
+pushbytes 0x480810ee // 0x480810ee
+swap
+concat
+log
+intc_0 // 0
+bytec_2 // "upgrader"
+app_global_get_ex
+assert
+callsub label63
+retsub
+label63:
+proto 1 0
+txn OnCompletion
+intc 6 // 5
+==
+assert
+global CreatorAddress
+global MinBalance
+itxn_begin
+pushbytes 0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 // 0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+itxn_field StateProofPK
+intc_0 // 0
+itxn_field VoteKeyDilution
+intc_0 // 0
+itxn_field VoteLast
+intc_0 // 0
+itxn_field VoteFirst
+bytec 14 // addr AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ
+itxn_field SelectionPK
+bytec 14 // addr AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ
+itxn_field VotePK
+intc_1 // 1
+itxn_field Nonparticipation
+intc 8 // 2
+itxn_field TypeEnum
+intc_0 // 0
+itxn_field Fee
+itxn_next
+itxn_field Amount
+frame_dig -1
+itxn_field CloseRemainderTo
+itxn_field Receiver
+intc_1 // 1
+itxn_field TypeEnum
+intc_0 // 0
+itxn_field Fee
+itxn_submit
+retsub
+label46:
+proto 3 1
+frame_dig -3
+btoi
+frame_dig -2
+btoi
+frame_dig -1
+btoi
+callsub label64
+retsub
+label64:
+proto 3 1
+intc_0 // 0
+bytec 8 // "min_bet_amount"
+app_global_get_ex
+assert
+frame_dig -3
+<=
+assert
+intc_0 // 0
+bytec 7 // "max_bet_amount"
+app_global_get_ex
+assert
+frame_dig -3
+>=
+assert
+txn Sender
+callsub label61
+dup
+frame_dig -3
+>=
+assert
+frame_dig -3
+-
+dup
+intc 4 // 37700
+>=
+assert
+intc 9 // 1000000
+<=
+assert
+intc_0 // 0
+bytec_1 // "balance_total"
+app_global_get_ex
+assert
+intc_0 // 0
+bytec 11 // "min_bank_amount"
+app_global_get_ex
+assert
+>=
+assert
+intc_0 // 0
+bytec_1 // "balance_total"
+app_global_get_ex
+assert
+frame_dig -3
++
+bytec_1 // "balance_total"
+swap
+app_global_put
+intc_0 // 0
+bytec_0 // "balance_available"
+app_global_get_ex
+assert
+frame_dig -3
++
+bytec_0 // "balance_available"
+swap
+app_global_put
+frame_dig -3
+intc 5 // 100
+*
+intc_0 // 0
+bytec 4 // "balance_locked"
+app_global_get_ex
+assert
+dig 1
++
+bytec 4 // "balance_locked"
+swap
+app_global_put
+intc_0 // 0
+bytec_0 // "balance_available"
+app_global_get_ex
+assert
+dig 1
+>=
+assert
+intc_0 // 0
+bytec_0 // "balance_available"
+app_global_get_ex
+assert
+swap
+-
+bytec_0 // "balance_available"
+swap
+app_global_put
+global Round
+txn Sender
+frame_dig -3
+frame_dig -2
+frame_dig -1
+callsub label62
+dup
+box_len
+bury 1
+!
+assert
+dig 1
+intc_1 // 1
++
+swap
+txn Sender
+cover 2
+frame_dig -3
+itob
+swap
+uncover 4
+itob
+cover 2
+frame_dig -1
+itob
+cover 4
+uncover 3
+itob
+cover 4
+uncover 5
+dig 2
+concat
+dig 3
+concat
+dig 4
+concat
+dig 5
+concat
+dig 1
+swap
+box_put
+txn Sender
+uncover 2
+concat
+uncover 2
+concat
+uncover 2
+concat
+uncover 2
+concat
+pushbytes 0xc589d4d4 // 0xc589d4d4
+swap
+concat
+log
+retsub
+label47:
+proto 1 1
+frame_dig -1
+callsub label65
+itob
+retsub
+label65:
+proto 1 1
+intc_0 // 0
+dup
+bytec 15 // ""
+frame_dig -1
+box_len
+bury 1
+assert
+frame_dig -1
+box_get
+swap
+dup
+uncover 2
+assert
+global Round
+swap
+extract 56 8
+dup
+cover 2
+btoi
+dup
+cover 2
+pushint 1000
++
+>
+bz label66
+frame_dig -1
+box_del
+pop
+frame_dig 3
+dup
+extract 32 8
+dup
+btoi
+intc 5 // 100
+*
+intc_0 // 0
+bytec 4 // "balance_locked"
+app_global_get_ex
+assert
+dig 1
+-
+bytec 4 // "balance_locked"
+swap
+app_global_put
+intc_0 // 0
+bytec_0 // "balance_available"
+app_global_get_ex
+assert
++
+bytec_0 // "balance_available"
+swap
+app_global_put
+itxn_begin
+txn Sender
+intc 4 // 37700
+itxn_field Amount
+itxn_field Receiver
+intc_1 // 1
+itxn_field TypeEnum
+intc_0 // 0
+itxn_field Fee
+itxn_submit
+dig 1
+extract 0 32
+swap
+dig 2
+extract 40 8
+cover 2
+uncover 3
+extract 48 8
+cover 2
+concat
+uncover 2
+concat
+swap
+concat
+frame_dig 4
+concat
+bytec 16 // 0x0000000000000000
+concat
+bytec 17 // 0x146209de
+swap
+concat
+log
+intc_0 // 0
+frame_bury 0
+retsub
+label66:
+frame_dig 5
+callsub label67
+frame_dig -1
+concat
+sha256
+pushbytes 0x3b9aca00 // 0x3b9aca00
+b%
+dup
+len
+intc_3 // 32
+<=
+assert
+intc_3 // 32
+bzero
+b|
+dup
+len
+intc_2 // 8
+dig 1
+>=
+intc_2 // 8
+dig 2
+uncover 2
+select
+dig 1
+swap
+-
+swap
+substring3
+frame_dig 3
+extract 32 8
+dup
+frame_bury 1
+btoi
+swap
+btoi
+dig 1
+swap
+callsub label68
+itob
+dup
+cover 2
+frame_bury 0
+intc 5 // 100
+*
+intc_0 // 0
+bytec 4 // "balance_locked"
+app_global_get_ex
+assert
+dig 1
+-
+bytec 4 // "balance_locked"
+swap
+app_global_put
+intc_0 // 0
+bytec_0 // "balance_available"
+app_global_get_ex
+assert
+dig 2
+btoi
+dup
+frame_bury 2
+uncover 2
+dig 1
+-
+uncover 2
++
+bytec_0 // "balance_available"
+swap
+app_global_put
+intc_0 // 0
+bytec_1 // "balance_total"
+app_global_get_ex
+assert
+swap
+-
+bytec_1 // "balance_total"
+swap
+app_global_put
+bytec 16 // 0x0000000000000000
+b>
+bz label69
+itxn_begin
+frame_dig 3
+extract 0 32
+frame_dig 2
+itxn_field Amount
+itxn_field Receiver
+intc_1 // 1
+itxn_field TypeEnum
+intc_0 // 0
+itxn_field Fee
+itxn_submit
+label69:
+frame_dig -1
+box_del
+pop
+itxn_begin
+txn Sender
+intc 4 // 37700
+itxn_field Amount
+itxn_field Receiver
+intc_1 // 1
+itxn_field TypeEnum
+intc_0 // 0
+itxn_field Fee
+itxn_submit
+frame_dig 3
+dup
+extract 0 32
+swap
+dup
+extract 40 8
+cover 2
+extract 48 8
+cover 2
+frame_dig 1
+concat
+swap
+concat
+swap
+concat
+frame_dig 4
+concat
+frame_dig 0
+concat
+bytec 17 // 0x146209de
+swap
+concat
+log
+frame_dig 2
+frame_bury 0
+retsub
+label67:
+proto 1 1
+frame_dig -1
+block BlkSeed
+dup
+len
+intc_3 // 32
+dig 1
+>=
+intc_3 // 32
+dig 2
+uncover 2
+select
+dig 1
+swap
+-
+swap
+substring3
+retsub
+label68:
+proto 2 1
+bytec 15 // ""
+dup
+intc_0 // 0
+label72:
+frame_dig 2
+pushint 6
+<
+bz label70
+frame_dig 2
+intc_2 // 8
+*
+dup
+frame_bury 0
+pushbytes 0x0000000000014346000000000019418400000000007e47960000000000fc8f2c00000000027765ee0000000009dd97b9 // 0x0000000000014346000000000019418400000000007e47960000000000fc8f2c00000000027765ee0000000009dd97b9
+swap
+intc_2 // 8
+extract3
+btoi
+dup
+frame_bury 1
+frame_dig -1
+>
+bz label71
+pushbytes 0x000000000000006400000000000000320000000000000014000000000000000a00000000000000050000000000000002 // 0x000000000000006400000000000000320000000000000014000000000000000a00000000000000050000000000000002
+frame_dig 0
+intc_2 // 8
+extract3
+btoi
+frame_dig -2
+*
+frame_bury 0
+retsub
+label71:
+frame_dig -1
+frame_dig 1
+-
+frame_bury -1
+frame_dig 2
+intc_1 // 1
++
+frame_bury 2
+b label72
+label70:
+intc_0 // 0
+frame_bury 0
+retsub
+label48:
+proto 1 0
+txn Sender
+intc_0 // 0
+bytec_3 // "owner"
+app_global_get_ex
+assert
+==
+assert
+intc_0 // 0
+bytec_3 // "owner"
+app_global_get_ex
+assert
+frame_dig -1
+concat
+pushbytes 0x9a223efb // 0x9a223efb
+swap
+concat
+log
+bytec_3 // "owner"
+frame_dig -1
+app_global_put
+retsub
+label49:
+proto 2 0
+txn Sender
+intc_0 // 0
+bytec_2 // "upgrader"
+app_global_get_ex
+assert
+==
+assert
+frame_dig -2
+frame_dig -1
+concat
+pushbytes 0x8c8cf9cd // 0x8c8cf9cd
+swap
+concat
+log
+frame_dig -2
+btoi
+bytec 18 // "contract_version"
+swap
+app_global_put
+frame_dig -1
+btoi
+bytec 19 // "deployment_version"
+swap
+app_global_put
+retsub
+label50:
+proto 1 0
+txn Sender
+intc_0 // 0
+bytec_3 // "owner"
+app_global_get_ex
+assert
+==
+assert
+intc_0 // 0
+bytec_3 // "owner"
+app_global_get_ex
+assert
+frame_dig -1
+concat
+pushbytes 0xc279658b // 0xc279658b
+swap
+concat
+log
+frame_dig -1
+intc_0 // 0
+getbit
+bytec 6 // "updatable"
+swap
+app_global_put
+retsub
+label51:
+proto 1 0
+txn Sender
+global CreatorAddress
+==
+assert
+intc_0 // 0
+bytec_2 // "upgrader"
+app_global_get_ex
+assert
+frame_dig -1
+concat
+pushbytes 0xadf5e2b8 // 0xadf5e2b8
+swap
+concat
+log
+bytec_2 // "upgrader"
+frame_dig -1
+app_global_put
+retsub
+label52:
+proto 1 0
+txn Sender
+intc_0 // 0
+bytec_3 // "owner"
+app_global_get_ex
+assert
+==
+bnz label73
+txn Sender
+global CreatorAddress
+==
+bz label74
+label73:
+intc_1 // 1
+b label75
+label74:
+intc_0 // 0
+label75:
+assert
+intc_0 // 0
+bytec 10 // "delegate"
+app_global_get_ex
+assert
+frame_dig -1
+concat
+pushbytes 0x78665577 // "xfUw"
+swap
+concat
+log
+bytec 10 // "delegate"
+frame_dig -1
+app_global_put
+retsub
+label53:
+proto 6 0
+txn Sender
+intc_0 // 0
+bytec_3 // "owner"
+app_global_get_ex
+assert
+==
+bnz label76
+txn Sender
+intc_0 // 0
+bytec 10 // "delegate"
+app_global_get_ex
+assert
+==
+bz label77
+label76:
+intc_1 // 1
+b label78
+label77:
+intc_0 // 0
+label78:
+assert
+global MinTxnFee
+txn Sender
+callsub label61
+dig 1
+==
+assert
+txn Sender
+dup
+frame_dig -6
+concat
+frame_dig -5
+concat
+frame_dig -4
+concat
+frame_dig -3
+concat
+frame_dig -2
+concat
+frame_dig -1
+concat
+concat
+pushbytes 0x6d44903f // 0x6d44903f
+swap
+concat
+log
+itxn_begin
+frame_dig -4
+btoi
+frame_dig -3
+btoi
+frame_dig -2
+btoi
+frame_dig -1
+itxn_field StateProofPK
+itxn_field VoteKeyDilution
+itxn_field VoteLast
+itxn_field VoteFirst
+frame_dig -5
+itxn_field SelectionPK
+frame_dig -6
+itxn_field VotePK
+intc 8 // 2
+itxn_field TypeEnum
+itxn_field Fee
+itxn_submit
+retsub
+label58:
+proto 0 0
+txn Sender
+intc_0 // 0
+bytec_2 // "upgrader"
+app_global_get_ex
+assert
+==
+assert
+intc_0 // 0
+bytec 6 // "updatable"
+app_global_get_ex
+assert
+intc_1 // 1
+==
+assert
+retsub
+label59:
+proto 0 0
+txn Sender
+global CreatorAddress
+==
+assert
+intc_0 // 0
+bytec 9 // "deletable"
+app_global_get_ex
+assert
+intc_1 // 1
+==
+assert
+retsub
+label2:
+proto 0 0
+bytec_3 // "owner"
+global CreatorAddress
+app_global_put
+bytec 10 // "delegate"
+global ZeroAddress
+app_global_put
+bytec 13 // "stakeable"
+intc_1 // 1
+app_global_put
+bytec 18 // "contract_version"
+intc_0 // 0
+app_global_put
+bytec 19 // "deployment_version"
+intc_0 // 0
+app_global_put
+bytec 6 // "updatable"
+intc_1 // 1
+app_global_put
+bytec_2 // "upgrader"
+global CreatorAddress
+app_global_put
+bytec 9 // "deletable"
+intc_1 // 1
+app_global_put
+bytec_1 // "balance_total"
+intc_0 // 0
+app_global_put
+bytec_0 // "balance_available"
+intc_0 // 0
+app_global_put
+bytec 4 // "balance_locked"
+intc_0 // 0
+app_global_put
+bytec 8 // "min_bet_amount"
+intc 9 // 1000000
+app_global_put
+bytec 7 // "max_bet_amount"
+pushint 1000000000
+app_global_put
+bytec 11 // "min_bank_amount"
+intc 7 // 350000000000
+app_global_put
+bytec 12 // "payout_model"
+intc_0 // 0
+app_global_put
+retsub

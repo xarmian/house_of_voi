@@ -1,0 +1,218 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  
+  body {
+    @apply bg-slate-900 text-white;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-voi-600 hover:bg-voi-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
+  }
+  
+  .btn-secondary {
+    @apply bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
+  }
+  
+  .card {
+    @apply bg-slate-800 rounded-lg shadow-lg border border-slate-700;
+  }
+  
+  .input-field {
+    @apply bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-400 focus:border-voi-500 focus:ring-1 focus:ring-voi-500;
+  }
+}
+
+@layer utilities {
+  .text-glow {
+    text-shadow: 0 0 10px currentColor;
+  }
+  
+  .animate-reel-spin {
+    animation: reel-spin 0.5s ease-out;
+  }
+  
+  /* Custom responsive text sizes */
+  .text-responsive-xl {
+    @apply text-xl;
+  }
+  
+  @screen md {
+    .text-responsive-xl {
+      @apply text-2xl;
+    }
+  }
+  
+  @screen lg {
+    .text-responsive-xl {
+      @apply text-3xl;
+    }
+  }
+  
+  /* Custom spacing utilities */
+  .section-padding {
+    @apply py-12 px-4;
+  }
+  
+  @screen md {
+    .section-padding {
+      @apply py-20 px-6;
+    }
+  }
+  
+  /* Animation utilities */
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  .animate-glow {
+    animation: glow 2s ease-in-out infinite alternate;
+  }
+  
+  /* Touch-friendly interactions */
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+  
+  /* Mobile slot machine optimizations */
+  .mobile-slot-grid {
+    @apply grid grid-cols-5 gap-1 p-2;
+  }
+  
+  @screen sm {
+    .mobile-slot-grid {
+      @apply gap-2 p-3;
+    }
+  }
+  
+  @screen md {
+    .mobile-slot-grid {
+      @apply gap-4 p-4;
+    }
+  }
+  
+  /* Mobile symbol sizing */
+  .mobile-symbol {
+    @apply min-h-12 w-full;
+  }
+  
+  @screen sm {
+    .mobile-symbol {
+      @apply min-h-16;
+    }
+  }
+  
+  @screen md {
+    .mobile-symbol {
+      @apply min-h-20;
+    }
+  }
+}
+
+@keyframes reel-spin {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-100px); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+}
+
+@keyframes glow {
+  from { box-shadow: 0 0 20px rgba(16, 185, 129, 0.2); }
+  to { box-shadow: 0 0 30px rgba(16, 185, 129, 0.4); }
+}
+
+/* Global styles for smooth scrolling and mobile optimization */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  /* Prevent horizontal scroll on mobile */
+  overflow-x: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Mobile viewport optimizations */
+@media (max-width: 375px) {
+  /* iPhone SE, small mobile devices */
+  .mobile-compact-spacing {
+    @apply space-y-2;
+  }
+  
+  .mobile-compact-padding {
+    @apply p-1.5;
+  }
+}
+
+@media (min-width: 376px) and (max-width: 414px) {
+  /* iPhone 12/13/14, common mobile sizes */
+  .mobile-compact-spacing {
+    @apply space-y-3;
+  }
+  
+  .mobile-compact-padding {
+    @apply p-2;
+  }
+}
+
+@media (min-width: 415px) and (max-width: 768px) {
+  /* Large mobile devices, small tablets */
+  .mobile-compact-spacing {
+    @apply space-y-4;
+  }
+  
+  .mobile-compact-padding {
+    @apply p-3;
+  }
+}
+
+/* Prevent zoom on input focus (iOS Safari) */
+@media screen and (max-width: 768px) {
+  input[type="number"],
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Safe area handling for devices with notches */
+@supports (padding: max(0px)) {
+  .safe-area-top {
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+  }
+  
+  .safe-area-bottom {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+  
+  .safe-area-left {
+    padding-left: max(0.5rem, env(safe-area-inset-left));
+  }
+  
+  .safe-area-right {
+    padding-right: max(0.5rem, env(safe-area-inset-right));
+  }
+}
