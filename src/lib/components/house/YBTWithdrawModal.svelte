@@ -8,6 +8,8 @@
   export let userShares: bigint = BigInt(0);
   
   let tokenDecimals = 9; // Default to 9, will be fetched
+  let totalSupply = BigInt(0);
+  let contractValue = BigInt(0);
 
   const dispatch = createEventDispatcher();
 
@@ -20,6 +22,7 @@
   $: transactionFee = BigInt(6000); // 6000 microAlgos for app call + inner payment
   $: canWithdraw = sharesAmount > 0 && sharesBigInt <= userShares && !isProcessing && $walletStore.account && $walletStore.balance >= Number(transactionFee);
   $: maxShares = Number(userShares) / (10 ** tokenDecimals);
+  $: voiAmount = ybtService.calculateUserPortfolioValue(sharesBigInt, totalSupply, contractValue);
 
   async function handleWithdraw() {
     if (!canWithdraw || !$walletStore.account) return;
@@ -67,19 +70,21 @@
     withdrawAmount = (maxShares * percent / 100).toFixed(tokenDecimals);
   }
   
-  async function loadTokenDecimals() {
+  async function loadTokenData() {
     try {
       const globalState = await ybtService.getGlobalState();
       tokenDecimals = globalState.decimals;
+      totalSupply = globalState.totalSupply;
+      contractValue = await ybtService.getContractTotalValue();
     } catch (error) {
-      console.error('Error loading token decimals:', error);
-      // Keep default value of 9
+      console.error('Error loading token data:', error);
+      // Keep default values
     }
   }
   
-  // Load token decimals when modal opens
+  // Load token data when modal opens
   $: if (open) {
-    loadTokenDecimals();
+    loadTokenData();
   }
 </script>
 
@@ -196,7 +201,7 @@
             </div>
             <div class="flex justify-between text-sm">
               <span class="text-slate-300">You'll receive:</span>
-              <span class="text-yellow-400">VOI</span>
+              <span class="text-yellow-400">{(Number(voiAmount) / 1_000_000).toFixed(6)} VOI</span>
             </div>
           </div>
         {/if}
