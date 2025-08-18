@@ -22,6 +22,7 @@
     "@algorandfoundation/algokit-utils": "^7.1.0",
     "@sveltejs/adapter-auto": "^6.1.0",
     "algosdk": "^2.11.0",
+    "avm-wallet-svelte": "^0.8.1",
     "buffer": "^6.0.3",
     "crypto-js": "^4.2.0",
     "lucide-svelte": "^0.539.0",

@@ -140,22 +140,22 @@ export class BlockchainService {
           console.log('💔 Better luck next time - but you can still claim to recover box storage fees!');
         }
 
-        // For losing spins, mark as completed and auto-claim silently
-        // For winning spins, mark as ready to claim so user sees they can claim winnings
+        // Always show the outcome and winnings immediately, then proceed to claim
+        // This allows users to see win/loss result even if claim fails
+        queueStore.updateSpin({
+          id: spin.id,
+          status: SpinStatus.READY_TO_CLAIM,
+          data: {
+            outcome: gridOutcome.grid,
+            winnings,
+            outcomeRound: gridOutcome.round
+          }
+        });
+        
+        // For losing spins, trigger silent auto-claim in the background
+        // For winning spins, let the auto-claim processor handle it normally
         if (winnings === 0) {
-          // Losing spin - mark as completed and trigger silent auto-claim
-          queueStore.updateSpin({
-            id: spin.id,
-            status: SpinStatus.COMPLETED,
-            data: {
-              outcome: gridOutcome.grid,
-              winnings,
-              outcomeRound: gridOutcome.round,
-              isLosingSpinAutoClaim: true // Flag to indicate this should be auto-claimed silently
-            }
-          });
-          
-          // Trigger silent auto-claim in the background
+          // Small delay to let UI show the result first
           setTimeout(async () => {
             try {
               // Get the updated spin object with latest data
@@ -163,7 +163,7 @@ export class BlockchainService {
               await this.submitClaim(updatedSpin, true); // Auto-claim silently
             } catch (error) {
               console.error('Silent auto-claim failed for losing spin:', error);
-              // If auto-claim fails, revert to ready to claim so user can manually claim
+              // If auto-claim fails, keep as ready to claim so user can manually claim
               queueStore.updateSpin({
                 id: spin.id,
                 status: SpinStatus.READY_TO_CLAIM,
@@ -173,17 +173,6 @@ export class BlockchainService {
               });
             }
           }, 1000); // Small delay to let UI settle
-        } else {
-          // Winning spin - mark as ready to claim so user can see their winnings
-          queueStore.updateSpin({
-            id: spin.id,
-            status: SpinStatus.READY_TO_CLAIM,
-            data: {
-              outcome: gridOutcome.grid,
-              winnings,
-              outcomeRound: gridOutcome.round
-            }
-          });
         }
       }
     } catch (error) {
@@ -261,8 +250,9 @@ export class BlockchainService {
         status: SpinStatus.COMPLETED,
         data: {
           claimTxId: result.txId,
-          winnings: result.payout,
+          totalPayout: result.payout,
           isAutoClaimInProgress: undefined
+          // Keep the original winnings value (game winnings only, not including storage refund)
         }
       });
 
@@ -405,7 +395,7 @@ export class BlockchainService {
       const payline = paylines[line];
       const firstSymbol = grid[0][payline[0]];
       
-      if (firstSymbol === '_') continue;
+      if (!['A', 'B', 'C', 'D'].includes(firstSymbol)) continue;
 
       let consecutiveCount = 1;
       for (let reel = 1; reel < 5; reel++) {

@@ -23,6 +23,7 @@ if (typeof window !== 'undefined') {
 
 export const CONTRACT_CONFIG = {
   slotMachineAppId: parseInt(env.PUBLIC_SLOT_MACHINE_APP_ID || '0'),
+  ybtAppId: parseInt(env.PUBLIC_YBT_APP_ID || '0'),
 } as const;
 
 // Phase 7: Enable contract validation for blockchain integration  
@@ -31,13 +32,17 @@ if (typeof window !== 'undefined') {
   if (!CONTRACT_CONFIG.slotMachineAppId || CONTRACT_CONFIG.slotMachineAppId === 0) {
     console.warn('Missing or invalid slot machine app ID. Check PUBLIC_SLOT_MACHINE_APP_ID environment variable.');
   }
+  
+  if (!CONTRACT_CONFIG.ybtAppId || CONTRACT_CONFIG.ybtAppId === 0) {
+    console.warn('Missing or invalid YBT app ID. Check PUBLIC_YBT_APP_ID environment variable.');
+  }
 }
 
 export const GAME_CONFIG = {
   minBet: 1000000, // 1 VOI in microVOI
   maxBet: 20000000, // 20 VOI in microVOI
   maxPaylines: 20,
-  symbols: ['A', 'B', 'C', 'D', '_'] as const
+  symbols: ['A', 'B', 'C', 'D', 'boat', 'clock', 'bird', 'star', 'anchor', 'crown'] as const
 } as const;
 
 // Phase 7: Additional network configuration for blockchain integration

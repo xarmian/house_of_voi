@@ -22,7 +22,7 @@ function createGameStore() {
       Array(100).fill(null).map(() => getRandomSymbol())
     ),
     visibleGrid: Array(5).fill(null).map(() => 
-      Array(3).fill(null).map(() => getSymbol('_'))
+      Array(3).fill(null).map(() => getRandomSymbol())
     )
   };
 

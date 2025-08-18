@@ -1,0 +1,38 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="goldHighlight" x1="0%" y1="0%" x2="100%" y2="50%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.6" />
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0" />
+    </linearGradient>
+    <filter id="goldGlow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Main coin shape -->
+  <circle cx="32" cy="32" r="24" fill="url(#goldGradient)" filter="url(#goldGlow)" stroke="#92400e" stroke-width="1"/>
+  
+  <!-- Inner ring -->
+  <circle cx="32" cy="32" r="18" fill="none" stroke="#92400e" stroke-width="1" opacity="0.3"/>
+  
+  <!-- Highlight -->
+  <ellipse cx="26" cy="26" rx="8" ry="12" fill="url(#goldHighlight)"/>
+  
+  <!-- Gold symbol in center -->
+  <text x="32" y="38" font-family="serif" font-size="20" font-weight="bold" fill="#92400e" text-anchor="middle">$</text>
+  
+  <!-- Decorative elements -->
+  <circle cx="20" cy="20" r="1" fill="#92400e" opacity="0.5"/>
+  <circle cx="44" cy="20" r="1" fill="#92400e" opacity="0.5"/>
+  <circle cx="20" cy="44" r="1" fill="#92400e" opacity="0.5"/>
+  <circle cx="44" cy="44" r="1" fill="#92400e" opacity="0.5"/>
+</svg>

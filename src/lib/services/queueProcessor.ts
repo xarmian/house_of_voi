@@ -130,8 +130,8 @@ export class QueueProcessor {
     const claimRetryCount = spin.claimRetryCount || 0;
     const lastClaimRetry = spin.lastClaimRetry || 0;
     
-    // Don't auto-claim if we've already tried twice
-    if (claimRetryCount >= 2) {
+    // Don't auto-claim if we've already tried 3 times
+    if (claimRetryCount >= 3) {
       console.log(`Auto-claim disabled for spin ${spin.id} after ${claimRetryCount} attempts. Manual claim required.`);
       return;
     }
@@ -142,7 +142,7 @@ export class QueueProcessor {
     }
     
     try {
-      console.log(`Attempting auto-claim for spin ${spin.id} (attempt ${claimRetryCount + 1}/2)`);
+      console.log(`Attempting auto-claim for spin ${spin.id} (attempt ${claimRetryCount + 1}/3)`);
       
       // Update retry tracking and mark as auto-claiming before attempting
       queueStore.updateSpin({
@@ -160,7 +160,7 @@ export class QueueProcessor {
     } catch (error) {
       console.error(`Auto-claim attempt ${claimRetryCount + 1} failed for spin ${spin.id}:`, error);
       
-      if (claimRetryCount + 1 >= 2) {
+      if (claimRetryCount + 1 >= 3) {
         console.log(`Auto-claim disabled for spin ${spin.id} after ${claimRetryCount + 1} failed attempts. Manual claim required.`);
       }
     }

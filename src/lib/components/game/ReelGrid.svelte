@@ -34,7 +34,8 @@
   // Handle main spinning state changes
   $: if (isMounted && isSpinning) {
     startSpinning();
-  } else if (isMounted) {
+  } else if (isMounted && !isSpinning) {
+    // Ensure complete cleanup when spinning stops
     stopAllSpinAnimations();
   }
   
@@ -90,6 +91,8 @@
   }
   
   function stopAllSpinAnimations() {
+    console.log('🛑 Stopping all spin animations');
+    
     // Stop all active animations
     activeAnimations.forEach((animation, index) => {
       if (animation) {
@@ -101,15 +104,31 @@
     // Clear animation store
     reelAnimations.stopAllReels();
     
-    // Clean up visual states
+    // Clean up visual states more thoroughly
     reelElements.forEach((element, index) => {
       if (element) {
         element.style.filter = '';
         element.style.transform = '';
         element.style.willChange = 'auto';
+        element.style.animationName = 'none';
+        element.style.animationDuration = '';
+        element.style.animationTimingFunction = '';
+        element.style.animationIterationCount = '';
         element.className = element.className.replace(/reel-\w+/g, '');
+        
+        // Force reflow to ensure styles are applied
+        element.offsetHeight;
       }
     });
+    
+    // Also clean up any animation classes on containers
+    reelContainers.forEach((container, index) => {
+      if (container) {
+        container.className = container.className.replace(/reel-\w+/g, '');
+      }
+    });
+    
+    console.log('✅ All spin animations stopped and cleaned up');
   }
   
   onMount(() => {

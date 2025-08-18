@@ -120,7 +120,7 @@
 
 <div 
   bind:this={symbolElement}
-  class="symbol-container {sizeClass}"
+  class="symbol-container"
   class:spinning={isSpinning}
   class:highlighted={isHighlighted}
   class:winning={isWinning}
@@ -291,8 +291,8 @@
   }
   
   .symbol-image {
-    width: 90%;
-    height: 90%;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
     border-radius: 6px;
     transition: all 0.3s ease;
@@ -300,8 +300,8 @@
   }
   
   .symbol-placeholder {
-    width: 90%;
-    height: 90%;
+    width: 100%;
+    height: 100%;
     background: linear-gradient(45deg, #374151, #4b5563);
     border-radius: 6px;
     display: flex;

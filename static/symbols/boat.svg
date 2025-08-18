@@ -1,0 +1,24 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="boatGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6b7280;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4b5563;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Boat hull -->
+  <path d="M12 42 Q32 38 52 42 L50 48 Q32 44 14 48 Z" fill="url(#boatGradient)"/>
+  
+  <!-- Mast -->
+  <line x1="32" y1="16" x2="32" y2="42" stroke="#4b5563" stroke-width="2"/>
+  
+  <!-- Main sail -->
+  <path d="M34 18 Q44 20 46 28 Q44 36 34 38 Z" fill="#9ca3af" opacity="0.8"/>
+  
+  <!-- Small sail -->
+  <path d="M30 20 Q22 22 20 28 Q22 34 30 36 Z" fill="#9ca3af" opacity="0.6"/>
+  
+  <!-- Water waves -->
+  <path d="M8 50 Q16 48 24 50 Q32 52 40 50 Q48 48 56 50" stroke="#4b5563" stroke-width="1" fill="none" opacity="0.4"/>
+  <path d="M8 54 Q16 52 24 54 Q32 56 40 54 Q48 52 56 54" stroke="#4b5563" stroke-width="1" fill="none" opacity="0.3"/>
+</svg>

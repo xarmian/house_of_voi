@@ -1,0 +1,32 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bronzeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#d97706;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#92400e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#78350f;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bronzeHighlight" x1="0%" y1="0%" x2="100%" y2="50%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main coin shape -->
+  <circle cx="32" cy="32" r="24" fill="url(#bronzeGradient)" stroke="#451a03" stroke-width="1"/>
+  
+  <!-- Inner ring -->
+  <circle cx="32" cy="32" r="18" fill="none" stroke="#451a03" stroke-width="1" opacity="0.3"/>
+  
+  <!-- Highlight -->
+  <ellipse cx="26" cy="26" rx="8" ry="12" fill="url(#bronzeHighlight)"/>
+  
+  <!-- Bronze symbol in center - simple geometric shape -->
+  <polygon points="32,20 38,26 38,38 32,44 26,38 26,26" fill="#451a03"/>
+  <polygon points="32,24 34,26 34,34 32,36 30,34 30,26" fill="#78350f"/>
+  
+  <!-- Decorative elements -->
+  <circle cx="16" cy="16" r="0.6" fill="#451a03" opacity="0.3"/>
+  <circle cx="48" cy="16" r="0.6" fill="#451a03" opacity="0.3"/>
+  <circle cx="16" cy="48" r="0.6" fill="#451a03" opacity="0.3"/>
+  <circle cx="48" cy="48" r="0.6" fill="#451a03" opacity="0.3"/>
+</svg>

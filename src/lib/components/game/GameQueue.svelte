@@ -59,7 +59,7 @@
       case SpinStatus.PROCESSING:
         return 'text-blue-400';
       case SpinStatus.READY_TO_CLAIM:
-        if (spin && (spin.claimRetryCount || 0) >= 2) {
+        if (spin && (spin.claimRetryCount || 0) >= 3) {
           return 'text-purple-400'; // Different color for manual claim required
         }
         return 'text-yellow-400';
@@ -86,7 +86,7 @@
       case SpinStatus.PROCESSING:
         return 'Processing...';
       case SpinStatus.READY_TO_CLAIM:
-        if (spin && (spin.claimRetryCount || 0) >= 2) {
+        if (spin && (spin.claimRetryCount || 0) >= 3) {
           return 'Manual Claim Required';
         }
         return 'Ready to Claim';
@@ -332,7 +332,7 @@
             
             <div class="status-text {getStatusColor(spin.status, spin)}">
               {getStatusText(spin.status, spin)}
-              {#if spin.status === SpinStatus.READY_TO_CLAIM && (spin.claimRetryCount || 0) >= 2}
+              {#if spin.status === SpinStatus.READY_TO_CLAIM && (spin.claimRetryCount || 0) >= 3}
                 <span class="retry-info">• Auto-claim failed {spin.claimRetryCount} times</span>
               {/if}
               {#if spin.error && spin.status === SpinStatus.READY_TO_CLAIM && !spin.isAutoClaimInProgress}
@@ -346,6 +346,44 @@
             {#if spin.status === SpinStatus.COMPLETED && spin.winnings}
               <div class="win-amount text-green-400">
                 +{formatVOI(spin.winnings)} VOI
+              </div>
+            {:else if (spin.status === SpinStatus.READY_TO_CLAIM || spin.status === SpinStatus.CLAIMING) && typeof spin.winnings === 'number'}
+              <!-- Show win/loss amount immediately when outcome is known -->
+              <div class="result-display">
+                {#if spin.winnings > 0}
+                  <div class="win-amount text-green-400">
+                    +{formatVOI(spin.winnings)} VOI
+                  </div>
+                {:else}
+                  <div class="loss-amount text-red-400">
+                    {formatVOI(spin.winnings)} VOI
+                  </div>
+                {/if}
+                {#if spin.status === SpinStatus.READY_TO_CLAIM && !spin.isAutoClaimInProgress}
+                  <button
+                    on:click={() => handleClaimSpin(spin)}
+                    class="claim-button"
+                    style="margin-top: 0.25rem;"
+                  >
+                    Claim
+                  </button>
+                {:else if spin.status === SpinStatus.READY_TO_CLAIM && spin.isAutoClaimInProgress}
+                  <div class="text-xs text-blue-400 font-medium" style="margin-top: 0.25rem;">
+                    Auto-claiming...
+                  </div>
+                {:else if spin.status === SpinStatus.CLAIMING && !spin.error}
+                  <div class="text-xs text-orange-400 font-medium" style="margin-top: 0.25rem;">
+                    Claiming...
+                  </div>
+                {:else if spin.status === SpinStatus.CLAIMING && spin.error}
+                  <button
+                    on:click={() => handleRetryClaim(spin)}
+                    class="retry-button"
+                    style="margin-top: 0.25rem;"
+                  >
+                    Retry Claim
+                  </button>
+                {/if}
               </div>
             {:else if spin.status === SpinStatus.READY_TO_CLAIM && !spin.isAutoClaimInProgress}
               <button
@@ -489,7 +527,8 @@
   }
   
   .stat-label {
-    @apply text-xs text-gray-400 mt-1;
+    @apply text-xs text-gray-400;
+    margin-top: 0.25rem;
   }
   
   .queue-tabs {
@@ -606,6 +645,10 @@
     @apply flex-shrink-0 text-right;
   }
   
+  .result-display {
+    @apply flex flex-col items-end gap-1;
+  }
+  
   .win-amount, .loss-amount {
     @apply text-sm font-semibold;
   }
@@ -682,7 +725,8 @@
   }
   
   .stat-value {
-    @apply text-lg font-bold text-white mt-1;
+    @apply text-lg font-bold text-white;
+    margin-top: 0.25rem;
   }
   
   @media (min-width: 640px) {

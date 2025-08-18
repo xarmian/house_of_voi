@@ -8,6 +8,8 @@
   import { loadingStates } from '$lib/stores/animations';
   import { SpinStatus } from '$lib/types/queue';
   import { formatVOI } from '$lib/constants/betting';
+  import { WINNING_SYMBOLS, getRandomWinningSymbol } from '$lib/constants/symbols';
+  import type { SlotSymbol } from '$lib/types/symbols';
   import { Zap, Trophy, Info } from 'lucide-svelte';
   import ReelGrid from './ReelGrid.svelte';
   import PaylineOverlay from './PaylineOverlay.svelte';
@@ -23,6 +25,7 @@
   let showWinCelebration = false;
   let winAmount = 0;
   let winLevel: 'small' | 'medium' | 'large' | 'jackpot' = 'small';
+  let winningSymbols: SlotSymbol[] = [];
   
   // Loss feedback state
   let showLossFeedback = false;
@@ -208,7 +211,7 @@
     // Simple win detection for demonstration
     // Check for three in a row on first payline
     const firstRow = outcome.map(reel => reel[0]);
-    const isWin = firstRow[0] !== '_' && firstRow.slice(0, 3).every(symbol => symbol === firstRow[0]);
+    const isWin = ['A', 'B', 'C', 'D'].includes(firstRow[0]) && firstRow.slice(0, 3).every(symbol => symbol === firstRow[0]);
     
     if (isWin) {
       const symbol = firstRow[0];
@@ -226,6 +229,32 @@
     return null;
   }
   
+  function generateWinningSymbols(level: 'small' | 'medium' | 'large' | 'jackpot'): SlotSymbol[] {
+    const symbols: SlotSymbol[] = [];
+    
+    // Generate symbols based on win level
+    switch (level) {
+      case 'small':
+        // Bronze and silver symbols
+        symbols.push(WINNING_SYMBOLS.D, WINNING_SYMBOLS.C); // Bronze, Silver
+        break;
+      case 'medium':
+        // Silver and gold symbols
+        symbols.push(WINNING_SYMBOLS.C, WINNING_SYMBOLS.B); // Silver, Gold
+        break;
+      case 'large':
+        // Gold and diamond symbols
+        symbols.push(WINNING_SYMBOLS.B, WINNING_SYMBOLS.A); // Gold, Diamond
+        break;
+      case 'jackpot':
+        // All premium symbols with emphasis on diamond
+        symbols.push(WINNING_SYMBOLS.A, WINNING_SYMBOLS.A, WINNING_SYMBOLS.B); // Diamond x2, Gold
+        break;
+    }
+    
+    return symbols;
+  }
+
   function triggerWinCelebration(win: { amount: number; level: 'small' | 'medium' | 'large' | 'jackpot' }, spinId?: string) {
     // Clear any existing celebration timeout to prevent conflicts
     if (celebrationTimeout) {
@@ -245,6 +274,7 @@
     
     winAmount = win.amount;
     winLevel = win.level;
+    winningSymbols = generateWinningSymbols(win.level);
     showWinCelebration = true;
     
     // Auto-hide celebration after duration
@@ -319,6 +349,12 @@
           }, replayId);
         }, 500); // Small delay after outcome is shown
       }
+      
+      // Ensure animation cleanup after replay completes
+      setTimeout(() => {
+        console.log('🧹 Cleaning up replay animation for:', replayId);
+        gameStore.reset();
+      }, 3000); // Clear the replay after 3 seconds
     }, 2500); // Show spinning for 2.5 seconds
   }
 </script>
@@ -455,7 +491,41 @@
     bind:isVisible={showWinCelebration}
     {winAmount}
     {winLevel}
+    {winningSymbols}
   />
+
+  <!-- Development Test Controls -->
+  {#if true}
+    <div class="fixed bottom-4 right-4 bg-black/80 text-white p-4 rounded-lg text-sm z-50">
+      <div class="font-bold mb-2">Test Win Animations</div>
+      <div class="flex flex-col gap-2">
+        <button 
+          class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-xs"
+          on:click={() => triggerWinCelebration({ amount: 5000000, level: 'small' }, 'test-small')}
+        >
+          Small Win
+        </button>
+        <button 
+          class="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs"
+          on:click={() => triggerWinCelebration({ amount: 25000000, level: 'medium' }, 'test-medium')}
+        >
+          Medium Win
+        </button>
+        <button 
+          class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-xs"
+          on:click={() => triggerWinCelebration({ amount: 75000000, level: 'large' }, 'test-large')}
+        >
+          Large Win
+        </button>
+        <button 
+          class="bg-yellow-600 hover:bg-yellow-700 px-3 py-1 rounded text-xs"
+          on:click={() => triggerWinCelebration({ amount: 150000000, level: 'jackpot' }, 'test-jackpot')}
+        >
+          Jackpot
+        </button>
+      </div>
+    </div>
+  {/if}
   
   <!-- Loss Feedback Overlay -->
   {#if showLossFeedback}
