@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { walletStore } from '$lib/stores/wallet';
+  import { walletStore } from '$lib/stores/walletAdapter';
   import { ybtService } from '$lib/services/ybt';
   import type { YBTDepositParams } from '$lib/types/ybt';
 
@@ -16,7 +16,10 @@
 
   $: voiAmount = parseFloat(depositAmount) || 0;
   $: microVoiAmount = BigInt(Math.floor(voiAmount * 1_000_000));
-  $: canDeposit = voiAmount > 0 && $walletStore.balance >= Number(microVoiAmount) && !isProcessing;
+  $: totalPaymentAmount = microVoiAmount + depositCost;
+  $: transactionFee = BigInt(4000); // 4000 microAlgos for app call + inner payment
+  $: totalRequired = totalPaymentAmount + transactionFee;
+  $: canDeposit = voiAmount > 0 && $walletStore.balance >= Number(totalRequired) && !isProcessing && $walletStore.account;
 
   async function loadDepositCost() {
     if (!open) return;
@@ -33,29 +36,40 @@
   }
 
   async function handleDeposit() {
+    console.log('handleDeposit called', { canDeposit, account: $walletStore.account });
+    
     if (!canDeposit || !$walletStore.account) return;
 
     isProcessing = true;
     error = '';
+    
+    console.log('Starting deposit with params:', { totalPaymentAmount: Number(totalPaymentAmount) });
 
     try {
       const params: YBTDepositParams = {
-        amount: microVoiAmount
+        amount: totalPaymentAmount
       };
 
-      const result = await ybtService.deposit($walletStore.account, params);
+      const result = await ybtService.deposit(params);
+      console.log('Deposit result:', result);
 
       if (result.success) {
+        console.log('Deposit successful, dispatching success event');
         dispatch('success', result);
-        open = false;
-        resetForm();
+        
+        // Show success message briefly before closing
+        setTimeout(() => {
+          open = false;
+          resetForm();
+        }, 1000);
       } else {
+        console.log('Deposit failed:', result.error);
         error = result.error || 'Deposit failed';
+        isProcessing = false;
       }
     } catch (err) {
       console.error('Deposit error:', err);
       error = err instanceof Error ? err.message : 'An unexpected error occurred';
-    } finally {
       isProcessing = false;
     }
   }
@@ -73,7 +87,10 @@
 
   function setMaxAmount() {
     const maxVoi = $walletStore.balance / 1_000_000;
-    depositAmount = Math.max(0, maxVoi - 0.01).toFixed(6); // Leave 0.01 VOI for fees
+    const depositCostVoi = Number(depositCost) / 1_000_000;
+    const transactionFeeVoi = Number(transactionFee) / 1_000_000;
+    const availableForDeposit = Math.max(0, maxVoi - depositCostVoi - transactionFeeVoi - 0.001); // Leave 0.001 VOI buffer
+    depositAmount = availableForDeposit.toFixed(6);
   }
 
   // Load deposit cost when modal opens
@@ -159,8 +176,20 @@
           <div class="mb-4 p-3 bg-slate-700 rounded-lg">
             <div class="text-sm text-slate-400 mb-2">Deposit Preview</div>
             <div class="flex justify-between text-sm">
-              <span class="text-slate-300">Amount:</span>
+              <span class="text-slate-300">Deposit Amount:</span>
               <span class="text-white">{voiAmount.toFixed(6)} VOI</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-300">Deposit Cost:</span>
+              <span class="text-white">{(Number(depositCost) / 1_000_000).toFixed(6)} VOI</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-300">Transaction Fee:</span>
+              <span class="text-white">{(Number(transactionFee) / 1_000_000).toFixed(6)} VOI</span>
+            </div>
+            <div class="flex justify-between text-sm border-t border-slate-600 pt-2 mt-2">
+              <span class="text-slate-300 font-medium">Total Required:</span>
+              <span class="text-white font-medium">{(Number(totalRequired) / 1_000_000).toFixed(6)} VOI</span>
             </div>
             <div class="flex justify-between text-sm">
               <span class="text-slate-300">You'll receive:</span>
@@ -179,6 +208,7 @@
         <!-- Actions -->
         <div class="flex gap-3">
           <button
+            type="button"
             on:click={closeModal}
             class="btn-secondary flex-1"
             disabled={isProcessing}
@@ -186,6 +216,7 @@
             Cancel
           </button>
           <button
+            type="button"
             on:click={handleDeposit}
             class="btn-primary flex-1"
             disabled={!canDeposit}

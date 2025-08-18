@@ -118,11 +118,6 @@
   }
 
   function handleQueueUpdate(queueState: any) {
-    // Set flag to false after first queue update to allow future celebrations
-    if (isInitialMount) {
-      isInitialMount = false;
-    }
-    
     // If there are no spins at all, make sure we're not spinning
     if (!queueState.spins || queueState.spins.length === 0) {
       if ($isSpinning || $waitingForOutcome) {
@@ -131,6 +126,10 @@
           clearInterval(spinningInterval);
           spinningInterval = null;
         }
+      }
+      // Set flag to false after initial processing when queue is empty
+      if (isInitialMount) {
+        isInitialMount = false;
       }
       return;
     }
@@ -146,10 +145,24 @@
       readySpins.sort((a: any, b: any) => b.timestamp - a.timestamp);
       const mostRecentSpin = readySpins[0];
       
+      // Additional safeguard: don't display very old outcomes on initial mount
+      const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+      const isTooOld = isInitialMount && mostRecentSpin.timestamp < fiveMinutesAgo;
+      
       // If this spin is currently displayed or can take over, show its outcome
-      if ($currentSpinId === mostRecentSpin.id || gameStore.canTakeOverDisplay(mostRecentSpin.id)) {
+      if (!isTooOld && ($currentSpinId === mostRecentSpin.id || gameStore.canTakeOverDisplay(mostRecentSpin.id))) {
         displayOutcome(mostRecentSpin);
       }
+    }
+    
+    // Set flag to false after processing any spins to allow future celebrations
+    // BUT don't set it to false immediately if we're about to display outcomes
+    // This prevents the race condition where loss feedback shows on initial mount
+    if (isInitialMount && readySpins.length > 0) {
+      // Wait longer to ensure all initial outcome displays complete first
+      setTimeout(() => {
+        isInitialMount = false;
+      }, 500);
     }
     
     // Check if we need to start spinning for a new pending spin
@@ -198,8 +211,8 @@
                    spin.winnings >= 20000000 ? 'medium' : 'small'
           }, spin.id);
         } else {
-          // Show loss feedback immediately (but only once per spin)
-          if (lastLossFeedbackSpinId !== spin.id) {
+          // Show loss feedback immediately (but only once per spin and not on initial mount)
+          if (lastLossFeedbackSpinId !== spin.id && !isInitialMount) {
             triggerLossFeedback(spin);
           }
         }
@@ -336,19 +349,26 @@
     setTimeout(() => {
       gameStore.completeSpin(replayId, replayData.outcome);
       
-      // Trigger win celebration if there were winnings
-      if (replayData.winnings > 0) {
-        const winLevel = replayData.winnings >= 100000000 ? 'jackpot' : 
-                        replayData.winnings >= 50000000 ? 'large' : 
-                        replayData.winnings >= 20000000 ? 'medium' : 'small';
-        
-        setTimeout(() => {
+      // Trigger appropriate outcome animation
+      setTimeout(() => {
+        if (replayData.winnings > 0) {
+          // Trigger win celebration for wins
+          const winLevel = replayData.winnings >= 100000000 ? 'jackpot' : 
+                          replayData.winnings >= 50000000 ? 'large' : 
+                          replayData.winnings >= 20000000 ? 'medium' : 'small';
+          
           triggerWinCelebration({
             amount: replayData.winnings,
             level: winLevel
           }, replayId);
-        }, 500); // Small delay after outcome is shown
-      }
+        } else {
+          // Trigger loss feedback for losses
+          triggerLossFeedback({
+            id: replayId,
+            totalBet: replayData.betAmount
+          });
+        }
+      }, 500); // Small delay after outcome is shown
       
       // Ensure animation cleanup after replay completes
       setTimeout(() => {

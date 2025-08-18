@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
-  import { walletStore } from '$lib/stores/wallet';
+  import { createEventDispatcher, onMount } from 'svelte';
+  import { walletStore } from '$lib/stores/walletAdapter';
   import { ybtService } from '$lib/services/ybt';
   import type { YBTWithdrawParams } from '$lib/types/ybt';
 
   export let open = false;
   export let userShares: bigint = BigInt(0);
+  
+  let tokenDecimals = 9; // Default to 9, will be fetched
 
   const dispatch = createEventDispatcher();
 
@@ -14,9 +16,10 @@
   let error = '';
 
   $: sharesAmount = parseFloat(withdrawAmount) || 0;
-  $: sharesBigInt = BigInt(Math.floor(sharesAmount * 1_000_000_000)); // 9 decimals
-  $: canWithdraw = sharesAmount > 0 && sharesBigInt <= userShares && !isProcessing;
-  $: maxShares = Number(userShares) / 1_000_000_000; // Convert from 9 decimals
+  $: sharesBigInt = BigInt(Math.floor(sharesAmount * (10 ** tokenDecimals)));
+  $: transactionFee = BigInt(6000); // 6000 microAlgos for app call + inner payment
+  $: canWithdraw = sharesAmount > 0 && sharesBigInt <= userShares && !isProcessing && $walletStore.account && $walletStore.balance >= Number(transactionFee);
+  $: maxShares = Number(userShares) / (10 ** tokenDecimals);
 
   async function handleWithdraw() {
     if (!canWithdraw || !$walletStore.account) return;
@@ -29,7 +32,7 @@
         shares: sharesBigInt
       };
 
-      const result = await ybtService.withdraw($walletStore.account, params);
+      const result = await ybtService.withdraw(params);
 
       if (result.success) {
         dispatch('success', result);
@@ -57,11 +60,26 @@
   }
 
   function setMaxAmount() {
-    withdrawAmount = maxShares.toFixed(9);
+    withdrawAmount = maxShares.toFixed(tokenDecimals);
   }
 
   function setPercentage(percent: number) {
-    withdrawAmount = (maxShares * percent / 100).toFixed(9);
+    withdrawAmount = (maxShares * percent / 100).toFixed(tokenDecimals);
+  }
+  
+  async function loadTokenDecimals() {
+    try {
+      const globalState = await ybtService.getGlobalState();
+      tokenDecimals = globalState.decimals;
+    } catch (error) {
+      console.error('Error loading token decimals:', error);
+      // Keep default value of 9
+    }
+  }
+  
+  // Load token decimals when modal opens
+  $: if (open) {
+    loadTokenDecimals();
   }
 </script>
 
@@ -89,7 +107,7 @@
         <div class="mb-4 p-3 bg-slate-700 rounded-lg">
           <div class="text-sm text-slate-400">Available Shares</div>
           <div class="text-lg font-bold text-white">
-            {maxShares.toFixed(9)} YBT
+            {maxShares.toFixed(tokenDecimals)} YBT
           </div>
         </div>
 
@@ -141,11 +159,11 @@
             <input
               id="withdrawAmount"
               type="number"
-              step="0.000000001"
+              step={1 / (10 ** tokenDecimals)}
               min="0"
               max={maxShares}
               bind:value={withdrawAmount}
-              placeholder="0.000000000"
+              placeholder={"0." + "0".repeat(tokenDecimals)}
               class="input-field w-full pr-16"
               disabled={isProcessing}
             />
@@ -166,7 +184,11 @@
             <div class="text-sm text-slate-400 mb-2">Withdrawal Preview</div>
             <div class="flex justify-between text-sm">
               <span class="text-slate-300">Shares:</span>
-              <span class="text-white">{sharesAmount.toFixed(9)} YBT</span>
+              <span class="text-white">{sharesAmount.toFixed(tokenDecimals)} YBT</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-300">Transaction Fee:</span>
+              <span class="text-white">{(Number(transactionFee) / 1_000_000).toFixed(6)} VOI</span>
             </div>
             <div class="flex justify-between text-sm">
               <span class="text-slate-300">Percentage:</span>
@@ -206,6 +228,7 @@
         <!-- Actions -->
         <div class="flex gap-3">
           <button
+            type="button"
             on:click={closeModal}
             class="btn-secondary flex-1"
             disabled={isProcessing}
@@ -213,6 +236,7 @@
             Cancel
           </button>
           <button
+            type="button"
             on:click={handleWithdraw}
             class="btn-withdraw flex-1"
             disabled={!canWithdraw}

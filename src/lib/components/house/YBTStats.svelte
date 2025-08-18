@@ -27,7 +27,7 @@
   });
 
   function formatSupply(supply: bigint): string {
-    return ybtService.formatShares(supply);
+    return globalState ? ybtService.formatShares(supply, globalState.decimals) : ybtService.formatShares(supply, 9);
   }
 </script>
 

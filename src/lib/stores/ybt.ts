@@ -1,5 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
-import { walletStore, walletAddress } from './wallet';
+import { walletAddress } from './walletAdapter';
+import { selectedWallet } from 'avm-wallet-svelte';
 import { ybtService } from '$lib/services/ybt';
 import type { YBTState, YBTGlobalState } from '$lib/types/ybt';
 import { browser } from '$app/environment';
@@ -21,11 +22,11 @@ function createYBTStore() {
     
     refreshInterval = setInterval(() => {
       // Only refresh if we have a connected wallet
-      const currentWallet = get(walletStore);
-      if (currentWallet.isConnected && currentWallet.account) {
-        refreshData(currentWallet.account.address);
+      const currentWallet = get(selectedWallet);
+      if (currentWallet && currentWallet.address) {
+        refreshData(currentWallet.address);
       }
-    }, 30000); // Refresh every 30 seconds
+    }, 60000); // Refresh every 60 seconds
   };
 
   const stopAutoRefresh = () => {
@@ -68,23 +69,35 @@ function createYBTStore() {
     }
   };
 
+  let currentAddress = '';
+  let addressSubscription: (() => void) | null = null;
+
   // Subscribe to wallet changes to refresh YBT data
   if (browser) {
-    walletAddress.subscribe((address) => {
-      if (address) {
-        refreshData(address);
-        startAutoRefresh();
-      } else {
-        stopAutoRefresh();
-        // Reset state when wallet disconnects
-        set({
-          userShares: BigInt(0),
-          totalSupply: BigInt(0),
-          sharePercentage: 0,
-          isLoading: false,
-          error: null,
-          lastUpdated: null
-        });
+    if (addressSubscription) {
+      addressSubscription();
+    }
+    
+    addressSubscription = walletAddress.subscribe((address) => {
+      // Only refresh if address actually changed
+      if (address !== currentAddress) {
+        currentAddress = address || '';
+        
+        if (address) {
+          refreshData(address);
+          startAutoRefresh();
+        } else {
+          stopAutoRefresh();
+          // Reset state when wallet disconnects
+          set({
+            userShares: BigInt(0),
+            totalSupply: BigInt(0),
+            sharePercentage: 0,
+            isLoading: false,
+            error: null,
+            lastUpdated: null
+          });
+        }
       }
     });
   }
@@ -93,18 +106,18 @@ function createYBTStore() {
     subscribe,
 
     async refresh() {
-      const currentWallet = get(walletStore);
-      if (currentWallet.account) {
-        await refreshData(currentWallet.account.address);
+      const currentWallet = get(selectedWallet);
+      if (currentWallet) {
+        await refreshData(currentWallet.address);
       }
     },
 
     async initialize() {
       if (!browser) return;
       
-      const currentWallet = get(walletStore);
-      if (currentWallet.isConnected && currentWallet.account) {
-        await refreshData(currentWallet.account.address);
+      const currentWallet = get(selectedWallet);
+      if (currentWallet) {
+        await refreshData(currentWallet.address);
         startAutoRefresh();
       }
     },

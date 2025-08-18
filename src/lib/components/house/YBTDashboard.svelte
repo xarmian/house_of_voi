@@ -1,24 +1,63 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { ybtStore, userShares, sharePercentage, totalSupply, isYBTLoading } from '$lib/stores/ybt';
-  import { walletStore } from '$lib/stores/wallet';
+  import { walletStore } from '$lib/stores/walletAdapter';
+  import { selectedWallet } from 'avm-wallet-svelte';
   import { ybtService } from '$lib/services/ybt';
   import YBTStats from './YBTStats.svelte';
   import YBTDepositModal from './YBTDepositModal.svelte';
   import YBTWithdrawModal from './YBTWithdrawModal.svelte';
+  import type { YBTGlobalState } from '$lib/types/ybt';
 
   let showDepositModal = false;
   let showWithdrawModal = false;
   let isRefreshing = false;
+  let globalState: YBTGlobalState | null = null;
+  let contractValue = BigInt(0);
+  let isLoadingContractValue = false;
 
   async function handleRefresh() {
     isRefreshing = true;
     await ybtStore.refresh();
+    await loadContractValue();
     isRefreshing = false;
   }
 
   function formatShares(shares: bigint): string {
-    return ybtService.formatShares(shares);
+    return globalState ? ybtService.formatShares(shares, globalState.decimals) : ybtService.formatShares(shares, 9);
   }
+  
+  async function loadGlobalState() {
+    try {
+      globalState = await ybtService.getGlobalState();
+    } catch (error) {
+      console.error('Error loading global state:', error);
+    }
+  }
+  
+  async function loadContractValue() {
+    isLoadingContractValue = true;
+    try {
+      contractValue = await ybtService.getContractTotalValue();
+    } catch (error) {
+      console.error('Error loading contract value:', error);
+      contractValue = BigInt(0);
+    } finally {
+      isLoadingContractValue = false;
+    }
+  }
+  
+  function calculateUserPortfolioValue(): bigint {
+    if (!globalState || $userShares === BigInt(0) || $totalSupply === BigInt(0) || contractValue === BigInt(0)) {
+      return BigInt(0);
+    }
+    return ybtService.calculateUserPortfolioValue($userShares, $totalSupply, contractValue);
+  }
+  
+  onMount(() => {
+    loadGlobalState();
+    loadContractValue();
+  });
 
   $: hasShares = $userShares > BigInt(0);
 </script>
@@ -73,17 +112,23 @@
           <div class="text-xs text-slate-500 mt-1">of Total Supply</div>
         </div>
 
-        <!-- Estimated Value -->
+        <!-- Portfolio Value -->
         <div class="bg-slate-700 rounded-lg p-4">
           <div class="text-slate-400 text-sm font-medium mb-1">Portfolio Value</div>
           <div class="text-2xl font-bold text-yellow-400">
-            {#if $totalSupply > BigInt(0)}
-              ~{(Number($userShares) / Number($totalSupply) * Number($walletStore.balance) / 1_000_000).toFixed(2)} VOI
+            {#if isLoadingContractValue}
+              <div class="flex items-center">
+                <svg class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Loading...
+              </div>
             {:else}
-              0 VOI
+              {(Number(calculateUserPortfolioValue()) / 1_000_000).toFixed(6)} VOI
             {/if}
           </div>
-          <div class="text-xs text-slate-500 mt-1">Estimated Value</div>
+          <div class="text-xs text-slate-500 mt-1">Based on Contract Value</div>
         </div>
       </div>
 
@@ -92,7 +137,7 @@
         <button
           on:click={() => showDepositModal = true}
           class="btn-primary flex-1"
-          disabled={!$walletStore.isConnected}
+          disabled={!$selectedWallet}
         >
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
@@ -103,10 +148,10 @@
         <button
           on:click={() => showWithdrawModal = true}
           class="btn-secondary flex-1"
-          disabled={!hasShares || !$walletStore.isConnected}
+          disabled={!hasShares || !$selectedWallet}
         >
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 12H6"></path>
           </svg>
           Withdraw
         </button>
@@ -174,6 +219,10 @@
   
   .btn-primary {
     @apply bg-voi-600 hover:bg-voi-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center;
+  }
+  
+  .btn-secondary {
+    @apply bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center;
   }
   
   .bg-voi-600 {
