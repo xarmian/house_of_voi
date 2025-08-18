@@ -210,15 +210,11 @@ export class BlockchainService {
       const betInfo = await algorandService.getBetInfo(spin.betKey);
       console.log('✅ Bet found in contract:', betInfo);
 
-      // For auto-claim of losing spins, skip the "claiming" status to avoid UI flicker
-      const isLosingSpinAutoClaim = isAutoClaim && (!spin.winnings || spin.winnings === 0);
-      
-      if (!isLosingSpinAutoClaim) {
-        queueStore.updateSpin({
-          id: spin.id,
-          status: SpinStatus.CLAIMING
-        });
-      }
+      // Update status to claiming for all claims - UI will handle silent display for losing spins
+      queueStore.updateSpin({
+        id: spin.id,
+        status: SpinStatus.CLAIMING
+      });
 
       const account = await this.getWalletAccount();
       if (!account) {

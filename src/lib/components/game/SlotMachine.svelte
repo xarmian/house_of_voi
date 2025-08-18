@@ -8,15 +8,15 @@
   import { loadingStates } from '$lib/stores/animations';
   import { SpinStatus } from '$lib/types/queue';
   import { formatVOI } from '$lib/constants/betting';
-  import { WINNING_SYMBOLS, getRandomWinningSymbol } from '$lib/constants/symbols';
+  import { WINNING_SYMBOLS } from '$lib/constants/symbols';
   import type { SlotSymbol } from '$lib/types/symbols';
-  import { Zap, Trophy, Info } from 'lucide-svelte';
   import ReelGrid from './ReelGrid.svelte';
   import PaylineOverlay from './PaylineOverlay.svelte';
   import BettingControls from './BettingControls.svelte';
   import GameQueue from './GameQueue.svelte';
   import WinCelebration from './WinCelebration.svelte';
   import LoadingOverlay from '../ui/LoadingOverlay.svelte';
+  import { PUBLIC_DEBUG_MODE } from '$env/static/public';
   
   export let disabled = false;
   export let compact = false;
@@ -399,16 +399,7 @@
             activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
           />
           
-          <!-- Spinning overlay -->
-          {#if $isSpinning}
-            <div class="absolute inset-0 bg-black/20 rounded-lg flex items-center justify-center pointer-events-none">
-              <div class="text-center">
-                <div class="text-white text-xl font-bold animate-pulse">
-                  SPINNING...
-                </div>
-              </div>
-            </div>
-          {/if}
+          <!-- Spinning overlay removed - symbols now show their own spinning animation -->
         </div>
       </div>
     </div>
@@ -437,16 +428,7 @@
               activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
             />
             
-            <!-- Spinning overlay -->
-            {#if $isSpinning}
-              <div class="absolute inset-0 bg-black/20 rounded-lg flex items-center justify-center pointer-events-none">
-                <div class="text-center">
-                  <div class="text-white text-lg font-bold animate-pulse">
-                    SPINNING...
-                  </div>
-                </div>
-              </div>
-            {/if}
+            <!-- Spinning overlay removed - symbols now show their own spinning animation -->
           </div>
         </div>
       </div>
@@ -483,16 +465,7 @@
                 activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
               />
               
-              <!-- Spinning overlay -->
-              {#if $isSpinning}
-                <div class="absolute inset-0 bg-black/20 rounded-xl flex items-center justify-center pointer-events-none">
-                  <div class="text-center">
-                    <div class="text-white text-xl font-bold animate-pulse">
-                      SPINNING...
-                    </div>
-                  </div>
-                </div>
-              {/if}
+              <!-- Spinning overlay removed - symbols now show their own spinning animation -->
             </div>
           </div>
         </div>
@@ -515,7 +488,7 @@
   />
 
   <!-- Development Test Controls -->
-  {#if true}
+  {#if PUBLIC_DEBUG_MODE === 'true'}
     <div class="fixed bottom-4 right-4 bg-black/80 text-white p-4 rounded-lg text-sm z-50">
       <div class="font-bold mb-2">Test Win Animations</div>
       <div class="flex flex-col gap-2">

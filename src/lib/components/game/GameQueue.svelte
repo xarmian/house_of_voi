@@ -64,6 +64,10 @@
         }
         return 'text-yellow-400';
       case SpinStatus.CLAIMING:
+        // For losing spins being auto-claimed, use neutral blue color
+        if (spin && typeof spin.winnings === 'number' && spin.winnings === 0) {
+          return 'text-blue-400';
+        }
         return 'text-orange-400';
       case SpinStatus.COMPLETED:
         return 'text-green-400';
@@ -91,6 +95,10 @@
         }
         return 'Ready to Claim';
       case SpinStatus.CLAIMING:
+        // For losing spins being auto-claimed, show neutral status to keep it silent
+        if (spin && typeof spin.winnings === 'number' && spin.winnings === 0) {
+          return 'Processing...';
+        }
         return 'Claiming...';
       case SpinStatus.COMPLETED:
         return 'Completed';
@@ -372,8 +380,10 @@
                     Auto-claiming...
                   </div>
                 {:else if spin.status === SpinStatus.CLAIMING && !spin.error}
-                  <div class="text-xs text-orange-400 font-medium" style="margin-top: 0.25rem;">
-                    Claiming...
+                  <div class="text-xs font-medium" style="margin-top: 0.25rem;"
+                       class:text-blue-400={spin.winnings === 0}
+                       class:text-orange-400={spin.winnings !== 0}>
+                    {spin.winnings === 0 ? 'Processing...' : 'Claiming...'}
                   </div>
                 {:else if spin.status === SpinStatus.CLAIMING && spin.error}
                   <button
@@ -575,40 +585,6 @@
     transform: translateX(2px);
   }
 
-  .spin-item-clickable::before {
-    content: '🎮';
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    opacity: 0;
-    transition: opacity 0.2s ease;
-    font-size: 0.875rem;
-    z-index: 1;
-  }
-
-  .spin-item-clickable:hover::before {
-    opacity: 0.8;
-  }
-
-  .spin-item-clickable::after {
-    content: 'Replay';
-    position: absolute;
-    right: 32px;
-    top: 50%;
-    transform: translateY(-50%);
-    opacity: 0;
-    transition: opacity 0.2s ease;
-    font-size: 0.75rem;
-    color: rgba(16, 185, 129, 0.8);
-    font-weight: 500;
-    z-index: 1;
-  }
-
-  .spin-item-clickable:hover::after {
-    opacity: 1;
-  }
-  
   .status-icon {
     @apply flex-shrink-0;
   }

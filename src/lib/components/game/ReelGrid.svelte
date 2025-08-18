@@ -238,6 +238,7 @@
     border-radius: 6px;
   }
   
+  
   .reel-column {
     display: flex;
     flex-direction: column;
@@ -252,14 +253,15 @@
   /* Spinning animation phases */
   .reel-column.spinning {
     transition: none; /* Disable CSS transitions during JS animations */
+    /* No reel-level animation - individual symbols handle their own spinning */
   }
   
   .reel-column.accelerating {
-    animation: reel-accelerate 0.3s ease-out infinite;
+    animation: reel-accelerate 0.15s ease-out infinite;
   }
   
   .reel-column.decelerating {
-    animation: reel-decelerate 0.5s ease-in infinite;
+    animation: reel-decelerate 0.4s ease-in infinite;
   }
   
   .reel-column.settling {
@@ -267,7 +269,7 @@
   }
   
   .reel-column.constant {
-    animation: reel-constant 0.6s linear infinite;
+    /* Individual symbols handle their own spinning animation */
   }
   
   .symbol-position {
@@ -282,6 +284,7 @@
     position: relative;
     overflow: hidden;
   }
+  
   
   .symbol-position:hover {
     border-color: rgba(16, 185, 129, 0.5);
@@ -318,16 +321,28 @@
   }
   
   /* Animation keyframes */
+  @keyframes reel-spin-continuous {
+    0% { transform: translateY(0px); }
+    25% { transform: translateY(-25px); }
+    50% { transform: translateY(-50px); }
+    75% { transform: translateY(-75px); }
+    100% { transform: translateY(-100px); }
+  }
+  
   @keyframes reel-accelerate {
     0% { transform: translateY(0px); }
-    50% { transform: translateY(-4px); }
-    100% { transform: translateY(0px); }
+    25% { transform: translateY(-10px); }
+    50% { transform: translateY(-20px); }
+    75% { transform: translateY(-30px); }
+    100% { transform: translateY(-40px); }
   }
   
   @keyframes reel-decelerate {
     0% { transform: translateY(0px); }
-    50% { transform: translateY(-2px); }
-    100% { transform: translateY(0px); }
+    25% { transform: translateY(-20px); }
+    50% { transform: translateY(-35px); }
+    75% { transform: translateY(-45px); }
+    100% { transform: translateY(-50px); }
   }
   
   @keyframes reel-settle {
@@ -339,10 +354,7 @@
   
   @keyframes reel-constant {
     0% { transform: translateY(0px); }
-    25% { transform: translateY(-3px); }
-    50% { transform: translateY(0px); }
-    75% { transform: translateY(3px); }
-    100% { transform: translateY(0px); }
+    100% { transform: translateY(-80px); }
   }
   
   @keyframes reel-blur-sweep {

@@ -3,8 +3,6 @@ import { env } from '$env/dynamic/public';
 export const NETWORK_CONFIG = {
   nodeUrl: env.PUBLIC_VOI_NODE_URL || '',
   indexerUrl: env.PUBLIC_VOI_INDEXER_URL || '',
-  genesisId: env.PUBLIC_NETWORK_GENESIS_ID || '',
-  genesisHash: env.PUBLIC_NETWORK_GENESIS_HASH || '',
   port: parseInt(env.PUBLIC_VOI_PORT || '443'),
   token: env.PUBLIC_VOI_TOKEN || ''
 } as const;
@@ -14,10 +12,6 @@ if (typeof window !== 'undefined') {
   // Only validate in browser environment
   if (!NETWORK_CONFIG.nodeUrl || !NETWORK_CONFIG.indexerUrl) {
     console.warn('Missing required network configuration. Some blockchain features may not work.');
-  }
-  
-  if (!NETWORK_CONFIG.genesisId) {
-    console.warn('Missing network genesis ID. Check PUBLIC_NETWORK_GENESIS_ID environment variable.');
   }
 }
 
