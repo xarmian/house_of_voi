@@ -50,9 +50,18 @@ interface CachedMultiplier {
   count: number;
 }
 
+interface CachedReelData {
+  reelData: string;
+  reelLength: number;
+  reelCount: number;
+  windowLength: number;
+  timestamp: number;
+}
+
 interface CacheStorage {
   paylines: CachedPaylines | null;
   multipliers: { [key: string]: CachedMultiplier };
+  reelData: CachedReelData | null;
 }
 
 export class ContractDataCache {
@@ -60,7 +69,8 @@ export class ContractDataCache {
   private readonly CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
   private cache: CacheStorage = {
     paylines: null,
-    multipliers: {}
+    multipliers: {},
+    reelData: null
   };
   private client: algosdk.Algodv2;
   private appId: number;
@@ -90,7 +100,7 @@ export class ContractDataCache {
       }
     } catch (error) {
       console.warn('Failed to load contract data cache:', error);
-      this.cache = { paylines: null, multipliers: {} };
+      this.cache = { paylines: null, multipliers: {}, reelData: null };
     }
   }
 
@@ -116,6 +126,11 @@ export class ContractDataCache {
     // Check paylines cache
     if (this.cache.paylines && now - this.cache.paylines.timestamp > this.CACHE_DURATION) {
       this.cache.paylines = null;
+    }
+
+    // Check reel data cache
+    if (this.cache.reelData && now - this.cache.reelData.timestamp > this.CACHE_DURATION) {
+      this.cache.reelData = null;
     }
 
     // Check multipliers cache
@@ -176,6 +191,54 @@ export class ContractDataCache {
     }
 
     return paylines;
+  }
+
+  /**
+   * Fetch reel data directly from contract
+   */
+  private async fetchReelDataFromContract(address: string): Promise<{
+    reelData: string;
+    reelLength: number;
+    reelCount: number;
+    windowLength: number;
+  }> {
+    // Create a read-only account for contract calls
+    const readOnlyAccount = {
+      addr: address,
+      sk: new Uint8Array(0) // Empty private key for read-only
+    };
+
+    // Create Ulujs CONTRACT instance
+    const ci = new CONTRACT(
+      this.appId,
+      this.client,
+      undefined,
+      slotMachineABI,
+      readOnlyAccount
+    );
+
+    ci.setEnableRawBytes(true);
+
+    // Get all reel data in parallel
+    const [reelsResult, reelLengthResult, reelCountResult] = await Promise.all([
+      ci.get_reels(),
+      ci.get_reel_length(), 
+      ci.get_reel_count()
+    ]);
+
+    if (!reelsResult.success || !reelLengthResult.success || !reelCountResult.success) {
+      throw new Error('Failed to fetch reel data from contract');
+    }
+
+    // Convert bytes to string
+    const reelBytes = new Uint8Array(reelsResult.returnValue);
+    const reelData = Array.from(reelBytes).map(byte => String.fromCharCode(byte)).join('');
+    
+    const reelLength = Number(reelLengthResult.returnValue);
+    const reelCount = Number(reelCountResult.returnValue);
+    const windowLength = 3; // Standard window length
+
+    return { reelData, reelLength, reelCount, windowLength };
   }
 
   /**
@@ -244,6 +307,62 @@ export class ContractDataCache {
   }
 
   /**
+   * Get cached reel data or fetch from contract
+   */
+  async getReelData(address: string): Promise<{
+    reelData: string;
+    reelLength: number;
+    reelCount: number;
+    windowLength: number;
+  }> {
+    // Check cache first
+    if (this.cache.reelData && this.isValidCache(this.cache.reelData.timestamp)) {
+      console.log('📦 Using cached reel data');
+      return {
+        reelData: this.cache.reelData.reelData,
+        reelLength: this.cache.reelData.reelLength,
+        reelCount: this.cache.reelData.reelCount,
+        windowLength: this.cache.reelData.windowLength,
+      };
+    }
+
+    // Cache miss - fetch from contract
+    console.log('🔄 Fetching reel data from contract');
+    try {
+      const reelData = await this.fetchReelDataFromContract(address);
+      
+      // Cache the result
+      this.cache.reelData = {
+        ...reelData,
+        timestamp: Date.now()
+      };
+      this.saveToStorage();
+
+      console.log('✅ Fetched and cached reel data:', {
+        reelDataLength: reelData.reelData.length,
+        reelLength: reelData.reelLength,
+        reelCount: reelData.reelCount,
+        windowLength: reelData.windowLength
+      });
+
+      return reelData;
+    } catch (error) {
+      console.error('Failed to fetch reel data from contract:', error);
+      // Return cached data even if expired as fallback
+      if (this.cache.reelData) {
+        console.log('⚠️ Using expired cached reel data as fallback');
+        return {
+          reelData: this.cache.reelData.reelData,
+          reelLength: this.cache.reelData.reelLength,
+          reelCount: this.cache.reelData.reelCount,
+          windowLength: this.cache.reelData.windowLength,
+        };
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Get cached payout multiplier or fetch from contract
    */
   async getPayoutMultiplier(symbol: string, count: number, address: string): Promise<number> {
@@ -302,8 +421,11 @@ export class ContractDataCache {
     console.log('🚀 Pre-loading contract data...');
     
     try {
-      // Pre-load paylines
-      await this.getPaylines(address);
+      // Pre-load paylines and reel data in parallel
+      await Promise.all([
+        this.getPaylines(address),
+        this.getReelData(address)
+      ]);
 
       // Pre-load common payout multipliers in parallel
       const symbols = ['A', 'B', 'C', 'D'];
@@ -332,7 +454,7 @@ export class ContractDataCache {
    * Clear all cached data
    */
   clearCache(): void {
-    this.cache = { paylines: null, multipliers: {} };
+    this.cache = { paylines: null, multipliers: {}, reelData: null };
     if (typeof window !== 'undefined') {
       localStorage.removeItem(this.CACHE_KEY);
     }
@@ -342,9 +464,10 @@ export class ContractDataCache {
   /**
    * Get cache statistics for debugging
    */
-  getCacheStats(): { paylinesCached: boolean; multipliersCached: number; cacheSize: string } {
+  getCacheStats(): { paylinesCached: boolean; reelDataCached: boolean; multipliersCached: number; cacheSize: string } {
     const stats = {
       paylinesCached: this.cache.paylines !== null,
+      reelDataCached: this.cache.reelData !== null,
       multipliersCached: Object.keys(this.cache.multipliers).length,
       cacheSize: typeof window !== 'undefined' 
         ? `${(new Blob([JSON.stringify(this.cache)]).size / 1024).toFixed(2)} KB`

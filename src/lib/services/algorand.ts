@@ -493,74 +493,36 @@ export class AlgorandService {
     }
   }
 
-  /**
-   * Get bet grid from the contract - generates the same grid as the contract would
-   */
-  async getBetGrid(betKey: string): Promise<string> {
-    try {
-      // First get the bet info to get the claim round
-      const betInfo = await this.getBetInfo(betKey);
-      
-      // Get block seed for the claim round
-      const blockSeed = await this.getBlockSeed(betInfo.claimRound);
-      
-      // Generate grid using the same algorithm as the contract
-      // combined = block_seed + bet_key, then sha256, then generate grid
-      const betKeyBytes = this.hexStringToUint8Array(betKey);
-      const combined = new Uint8Array(blockSeed.length + betKeyBytes.length);
-      combined.set(blockSeed);
-      combined.set(betKeyBytes, blockSeed.length);
-      
-      // Hash the combined data
-      const hashedBytes = await crypto.subtle.digest('SHA-256', combined);
-      const seed = new Uint8Array(hashedBytes);
-      
-      // Generate grid from seed (same as contract logic)
-      const grid = this.generateGridFromSeed(seed);
-      
-      console.log('🎲 Generated grid from seed:', grid);
-      return grid;
-
-    } catch (error) {
-      throw this.handleError(error, 'Failed to get bet grid');
-    }
-  }
 
   /**
-   * Generate 5x3 grid from seed (matching contract logic)
+   * Generate 5x3 grid from seed using contract reel data (matching contract logic)
    */
-  private generateGridFromSeed(seed: Uint8Array): string {
-    // Default reel data (matching contract)
-    const reelData = "DDD_C___CD_C__C_C__CBDDBC______DD_____D_D_A_DDC_CCDC_D_____BD_DC_C________C__C_C_____B_D_C______C_D_" +
-                    "_D_D_D___C_____DBC_C_B__D_B_____CAD______D___CDC_CCD__D____CD__C_CCDC___C_C_______C_DBD_D__DC___CD_D" +
-                    "_CC_DBD__DC_C___DD_BDD___CA__D___CC_DC__DCD__CCC_C_____DC_B_CD__C________D___DB____C_DC_D____D______" +
-                    "__DCDBCD_DDD___CC____C__C__CCD_C__C_CBDB__C_DC___C__DD_D________D____CAB____D_C__DDD___C_____C_D____" +
-                    "____DCDCD_D_BBDDC_____CC__D__D__D_______B_CC___D_CD___BCDC__A_______DCD_C__C__D_____D__D___C_C_CDCC_";
-    
-    const reelLength = 100;
-    const reelCount = 5;
-    const windowLength = 3;
+  private async generateGridFromSeed(seed: Uint8Array, address: string): Promise<string> {
+    const { reelData, reelLength, reelCount, windowLength } = await contractDataCache.getReelData(address);
     
     let grid = '';
     
-    console.log('🎲 Generating grid from seed length:', seed.length);
+    console.log('🎲 Generating grid from seed using cached contract reel data');
     
-    // Generate 5 reels - use modular arithmetic to stay within seed bounds
+    // Generate 5 reels using the same algorithm as the contract
     for (let reel = 0; reel < reelCount; reel++) {
-      // Create a unique seed for each reel by hashing seed + reel number
-      const reelSeedInput = new Uint8Array(seed.length + 1);
-      reelSeedInput.set(seed);
-      reelSeedInput[seed.length] = reel + 1;
+      // Use the same hash-based approach as the contract for each reel
+      const reelSeed = seed.slice(); // Copy seed
+      const reelIdBytes = new TextEncoder().encode((reel + 1).toString());
+      const combined = new Uint8Array(seed.length + reelIdBytes.length);
+      combined.set(seed);
+      combined.set(reelIdBytes, seed.length);
       
-      // Use a simpler approach - take bytes from different offsets
-      const offset = (reel * 4) % (seed.length - 4); // Ensure we don't go out of bounds
-      const reelSeedSlice = seed.slice(offset, offset + 4);
-      const seedValue = new DataView(reelSeedSlice.buffer).getUint32(0, false);
+      // Hash to get reel-specific seed
+      const hashedSeed = await crypto.subtle.digest('SHA-256', combined);
+      const reelSeedBytes = new Uint8Array(hashedSeed);
       
-      const maxReelStop = reelLength - windowLength;
-      const position = seedValue % maxReelStop;
+      // Get last 8 bytes and convert to number (matching contract logic)
+      const seedValue = new DataView(reelSeedBytes.buffer, reelSeedBytes.length - 8).getBigUint64(0, false);
+      const maxReelStop = BigInt(reelLength - windowLength);
+      const position = Number(seedValue % maxReelStop);
       
-      // Extract 3 characters from this reel
+      // Extract window from reel data
       const startPos = reel * reelLength + position;
       const reelWindow = reelData.slice(startPos, startPos + windowLength);
       grid += reelWindow;
@@ -571,6 +533,99 @@ export class AlgorandService {
     console.log('🎰 Final grid:', grid);
     return grid;
   }
+
+  /**
+   * Get bet grid using cached reel data and block seed (faster than contract call)
+   */
+  async getBetGrid(betKey: string, address: string): Promise<string> {
+    try {
+      console.log('🎲 Getting bet grid using cached reel data for key:', betKey.slice(0, 16) + '...');
+      
+      // Validate bet key format
+      if (!betKey || betKey.length !== 112) {
+        throw new Error(`Invalid bet key format: expected 112 hex chars, got ${betKey?.length || 0}`);
+      }
+
+      // Validate bet key contains valid hex
+      if (!/^[0-9a-fA-F]+$/.test(betKey)) {
+        throw new Error('Bet key contains non-hex characters');
+      }
+
+      // First get the bet info to get the claim round
+      const betInfo = await this.getBetInfo(betKey);
+      
+      // Get block seed for the claim round (with retry logic for block commitment)
+      const blockSeed = await this.getBlockSeedWithRetry(betInfo.claimRound);
+      
+      // Generate grid using cached reel data and the same algorithm as the contract
+      // combined = block_seed + bet_key, then sha256, then generate grid
+      const betKeyBytes = this.hexStringToUint8Array(betKey);
+      const combined = new Uint8Array(blockSeed.length + betKeyBytes.length);
+      combined.set(blockSeed);
+      combined.set(betKeyBytes, blockSeed.length);
+      
+      // Hash the combined data
+      const hashedBytes = await crypto.subtle.digest('SHA-256', combined);
+      const seed = new Uint8Array(hashedBytes);
+      
+      // Generate grid from seed using contract reel data (much faster than contract call)
+      const grid = await this.generateGridFromSeed(seed, address);
+      
+      console.log('✅ Generated grid using cached reel data:', grid);
+      return grid;
+
+    } catch (error) {
+      throw this.handleError(error, 'Failed to get bet grid using reel data');
+    }
+  }
+
+  /**
+   * Get block seed with retry logic for when block isn't committed yet
+   */
+  private async getBlockSeedWithRetry(round: number): Promise<Uint8Array> {
+    const maxRetries = 5;
+    const retryDelay = 1000; // 1 second
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 Attempt ${attempt}/${maxRetries} to get block seed for round ${round}...`);
+        
+        const block = await this.client.block(round).do();
+        const blockSeed = block.block.seed;
+        
+        console.log(`✅ Got block seed on attempt ${attempt}:`, blockSeed);
+        
+        // Handle block seed correctly - it might be Uint8Array or string
+        if (blockSeed instanceof Uint8Array) {
+          return blockSeed;
+        } else if (typeof blockSeed === 'string') {
+          // If it's a hex string, convert it
+          return this.hexStringToUint8Array(blockSeed);
+        } else if (Array.isArray(blockSeed)) {
+          // If it's an array of numbers, convert to Uint8Array
+          return new Uint8Array(blockSeed);
+        } else {
+          throw new Error(`Unexpected block seed type: ${typeof blockSeed}`);
+        }
+
+      } catch (error: any) {
+        console.log(`❌ Attempt ${attempt}/${maxRetries} to get block seed failed:`, error.message);
+        
+        // If this was the last attempt, throw the error
+        if (attempt === maxRetries) {
+          throw new Error(`Failed to get block seed for round ${round} after ${maxRetries} attempts: ${error.message}`);
+        }
+        
+        // Wait before retrying
+        console.log(`⏱️ Waiting ${retryDelay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
+
+    // This should never be reached, but TypeScript needs it
+    throw new Error(`Failed to get block seed after ${maxRetries} attempts`);
+  }
+
 
   /**
    * Get bet information from the contract
@@ -643,48 +698,6 @@ export class AlgorandService {
   }
 
   /**
-   * Get all paylines from the contract (direct contract call)
-   */
-  private async getPaylinesDirect(address: string): Promise<number[][]> {
-    try {
-      // Create a read-only account for contract calls
-      const readOnlyAccount = {
-        addr: address,
-        sk: new Uint8Array(0) // Empty private key for read-only
-      };
-
-      // Create Ulujs CONTRACT instance (matching spin method pattern)
-      const ci = new CONTRACT(
-        this.appId,
-        this.client,
-        undefined, // Use undefined for indexer like in spin method
-        slotMachineABI,
-        readOnlyAccount
-      );
-
-      // Configure CONTRACT instance 
-      ci.setEnableRawBytes(true);
-      
-      // Call get_paylines method - gets return value without submitting
-      const result = await ci.get_paylines();
-
-      // Convert BigInt array to number array and reshape to paylines
-      const flatPaylines = (result.returnValue as bigint[]).map(x => Number(x));
-      
-      // Convert flat array to 2D array (assuming 20 paylines with 5 positions each)
-      const paylines: number[][] = [];
-      for (let i = 0; i < flatPaylines.length; i += 5) {
-        paylines.push(flatPaylines.slice(i, i + 5));
-      }
-
-      return paylines;
-
-    } catch (error) {
-      throw this.handleError(error, 'Failed to get paylines');
-    }
-  }
-
-  /**
    * Get all paylines from the contract (with caching)
    */
   async getPaylines(address: string): Promise<number[][]> {
@@ -703,10 +716,10 @@ export class AlgorandService {
   /**
    * Get grid outcome for a completed bet
    */
-  async getGridOutcome(betKey: string): Promise<GridOutcome> {
+  async getGridOutcome(betKey: string, address: string): Promise<GridOutcome> {
     try {
       // Get the actual grid from the contract
-      const gridString = await this.getBetGrid(betKey);
+      const gridString = await this.getBetGrid(betKey, address);
       
       // Convert the 15-character string to a 2D array for compatibility
       // String format: "___D__CCCC____D" -> 5 columns x 3 rows
@@ -870,7 +883,18 @@ export class AlgorandService {
   async getBlockSeed(round: number): Promise<string> {
     try {
       const block = await this.client.block(round).do();
-      return block.block.seed;
+      const blockSeed = block.block.seed;
+      
+      // Handle different seed formats and return as hex string
+      if (typeof blockSeed === 'string') {
+        return blockSeed;
+      } else if (blockSeed instanceof Uint8Array || Array.isArray(blockSeed)) {
+        // Convert to hex string
+        const bytes = blockSeed instanceof Uint8Array ? blockSeed : new Uint8Array(blockSeed);
+        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      } else {
+        throw new Error(`Unexpected block seed type: ${typeof blockSeed}`);
+      }
     } catch (error) {
       throw this.handleError(error, `Failed to get block seed for round ${round}`);
     }

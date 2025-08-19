@@ -21,6 +21,7 @@ if (typeof window !== 'undefined') {
 
 export class BlockchainService {
   private processingSpins = new Set<string>();
+  private claimingBets = new Set<string>(); // Track ongoing claims by betKey
 
   /**
    * Submit a spin to the blockchain
@@ -97,6 +98,10 @@ export class BlockchainService {
   async checkBetOutcome(spin: QueuedSpin): Promise<void> {
     if (!spin.betKey || !spin.commitmentRound) return;
 
+    if (!algorandService) {
+      throw new Error('AlgorandService not properly initialized');
+    }
+
     // Validate bet key format before processing
     if (!spin.betKey || spin.betKey.length !== 112 || !/^[0-9a-fA-F]+$/.test(spin.betKey)) {
       console.warn('⚠️ Invalid bet key format in queue, marking as failed:', {
@@ -120,7 +125,7 @@ export class BlockchainService {
       
       if (isReady) {
         // Get the grid outcome
-        const gridOutcome = await algorandService.getGridOutcome(spin.betKey);
+        const gridOutcome = await algorandService.getGridOutcome(spin.betKey, get(walletStore).account?.address || '');
         
         // Calculate winnings using contract payout tables
         const winnings = await this.calculateWinnings(gridOutcome.grid, spin.betPerLine, spin.selectedPaylines);
@@ -201,6 +206,18 @@ export class BlockchainService {
       throw new Error('No bet key available for claim');
     }
 
+    // Check if this bet is already being claimed
+    if (this.claimingBets.has(spin.betKey)) {
+      console.log(`⏳ Bet ${spin.betKey.slice(0, 16)}... is already being claimed, skipping duplicate`);
+      return;
+    }
+
+    // Also check if the spin is already in CLAIMING status
+    if (spin.status === SpinStatus.CLAIMING) {
+      console.log(`⏳ Spin ${spin.id.slice(-8)} is already in CLAIMING status, skipping duplicate`);
+      return;
+    }
+
     console.log(`🎯 Attempting to claim spin ${spin.id.slice(-8)}:`, {
       betKey: spin.betKey.slice(0, 16) + '...',
       betKeyLength: spin.betKey.length,
@@ -209,6 +226,9 @@ export class BlockchainService {
       winnings: spin.winnings || 0
     });
 
+    // Lock this bet to prevent concurrent claims
+    this.claimingBets.add(spin.betKey);
+    
     try {
       // First verify the bet exists in the contract
       console.log('🔍 Verifying bet exists in contract...');
@@ -275,6 +295,9 @@ export class BlockchainService {
           isAutoClaimInProgress: undefined
         }
       });
+    } finally {
+      // Always remove the lock when done (success or failure)
+      this.claimingBets.delete(spin.betKey);
     }
   }
 
