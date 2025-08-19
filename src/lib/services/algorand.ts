@@ -815,8 +815,9 @@ export class AlgorandService {
       );
       
       // Set fee and enable params like in documentation
-      ci.setFee(4000);
+      ci.setFee(5000);
       ci.setEnableParamsLastRoundMod(true);
+      ci.setEnableRawBytes(true);
       
       // Call claim method with bet key as bytes
       const betKeyBytes = this.hexStringToUint8Array(betKey);
