@@ -8,6 +8,7 @@ import { SpinStatus } from '$lib/types/queue';
 import { BLOCKCHAIN_CONFIG } from '$lib/constants/network';
 import type { QueuedSpin } from '$lib/types/queue';
 import type { SpinTransaction, BlockchainError } from '$lib/types/blockchain';
+import { get } from 'svelte/store';
 
 // Add global debug method to clear invalid queue data
 if (typeof window !== 'undefined') {
@@ -27,6 +28,10 @@ export class BlockchainService {
   async submitSpin(spin: QueuedSpin): Promise<void> {
     if (this.processingSpins.has(spin.id)) {
       return; // Already processing
+    }
+
+    if (!algorandService) {
+      throw new Error('AlgorandService not properly initialized');
     }
 
     this.processingSpins.add(spin.id);
@@ -117,8 +122,8 @@ export class BlockchainService {
         // Get the grid outcome
         const gridOutcome = await algorandService.getGridOutcome(spin.betKey);
         
-        // Calculate winnings (this would normally be done by the contract)
-        const winnings = this.calculateWinnings(gridOutcome.grid, spin.betPerLine, spin.selectedPaylines);
+        // Calculate winnings using contract payout tables
+        const winnings = await this.calculateWinnings(gridOutcome.grid, spin.betPerLine, spin.selectedPaylines);
         
         // Log the bet outcome
         const totalBet = spin.betPerLine * spin.selectedPaylines;
@@ -352,63 +357,48 @@ export class BlockchainService {
   /**
    * Calculate winnings based on outcome (simplified version)
    */
-  private calculateWinnings(grid: string[][], betPerLine: number, selectedPaylines: number): number {
-    // This is a simplified calculation - the actual calculation should match the contract logic
-    let totalWinnings = 0;
+  private async calculateWinnings(grid: string[][], betPerLine: number, selectedPaylines: number): Promise<number> {
+    try {
+      if (!algorandService) {
+        throw new Error('AlgorandService not properly initialized');
+      }
 
-    // Standard paylines (simplified)
-    const paylines = [
-      [1, 1, 1, 1, 1], // Middle line
-      [0, 0, 0, 0, 0], // Top line
-      [2, 2, 2, 2, 2], // Bottom line
-      [0, 1, 2, 1, 0], // V shape
-      [2, 1, 0, 1, 2], // Inverted V shape
-      [1, 0, 0, 0, 1], // W shape
-      [1, 2, 2, 2, 1], // Inverted W shape
-      [0, 0, 1, 2, 2], // Rising diagonal
-      [2, 2, 1, 0, 0], // Falling diagonal
-      [1, 2, 1, 0, 1], // Zigzag up
-      [1, 0, 1, 2, 1], // Zigzag down
-      [0, 1, 0, 1, 0], // Alternate top
-      [2, 1, 2, 1, 2], // Alternate bottom
-      [0, 2, 0, 2, 0], // Vertical zigzag
-      [2, 0, 2, 0, 2], // Inverted vertical zigzag
-      [1, 1, 0, 1, 1], // W with dip
-      [1, 1, 2, 1, 1], // W with peak
-      [0, 1, 1, 1, 0], // Dome
-      [2, 1, 1, 1, 2], // Inverted dome
-      [0, 0, 2, 0, 0]  // Deep V
-    ];
+      let totalWinnings = 0;
 
-    const multipliers: Record<string, Record<number, number>> = {
-      'A': { 3: 50, 4: 200, 5: 1000 },
-      'B': { 3: 20, 4: 100, 5: 500 },
-      'C': { 3: 10, 4: 50, 5: 200 },
-      'D': { 3: 5, 4: 20, 5: 100 }
-    };
-
-    for (let line = 0; line < Math.min(selectedPaylines, paylines.length); line++) {
-      const payline = paylines[line];
-      const firstSymbol = grid[0][payline[0]];
+      // Get user address for contract calls
+      const userAddress = get(walletStore).account?.address || '';
       
-      if (!['A', 'B', 'C', 'D'].includes(firstSymbol)) continue;
+      // Get paylines from the contract
+      const paylines = await algorandService.getPaylines(userAddress);
 
-      let consecutiveCount = 1;
-      for (let reel = 1; reel < 5; reel++) {
-        if (grid[reel][payline[reel]] === firstSymbol) {
-          consecutiveCount++;
-        } else {
-          break;
+      for (let line = 0; line < Math.min(selectedPaylines, paylines.length); line++) {
+        const payline = paylines[line];
+        const firstSymbol = grid[0][payline[0]];
+        
+        if (!['A', 'B', 'C', 'D'].includes(firstSymbol)) continue;
+
+        let consecutiveCount = 1;
+        for (let reel = 1; reel < 5; reel++) {
+          if (grid[reel][payline[reel]] === firstSymbol) {
+            consecutiveCount++;
+          } else {
+            break;
+          }
+        }
+
+        if (consecutiveCount >= 3) {
+          // Get multiplier from the contract (now with caching!)
+          const multiplier = await algorandService.getPayoutMultiplier(firstSymbol, consecutiveCount, userAddress);
+          totalWinnings += betPerLine * multiplier;
         }
       }
 
-      if (consecutiveCount >= 3) {
-        const multiplier = multipliers[firstSymbol]?.[consecutiveCount] || 0;
-        totalWinnings += betPerLine * multiplier;
-      }
+      return totalWinnings;
+    } catch (error) {
+      console.error('Failed to calculate winnings from contract:', error);
+      // Fallback to 0 if contract calls fail
+      return 0;
     }
-
-    return totalWinnings;
   }
 
   /**

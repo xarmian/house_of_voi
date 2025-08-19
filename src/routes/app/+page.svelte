@@ -1,13 +1,32 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { walletStore } from '$lib/stores/wallet';
+  import { contractDataCache } from '$lib/services/contractDataCache';
   import WalletDisplay from '$lib/components/wallet/WalletDisplay.svelte';
   import SlotMachine from '$lib/components/game/SlotMachine.svelte';
   import GameQueue from '$lib/components/game/GameQueue.svelte';
   import GameHeader from '$lib/components/game/GameHeader.svelte';
   
+  let hasPreloadedCache = false;
+
   onMount(async () => {
     await walletStore.initialize();
+    
+    // Pre-load contract data after wallet is initialized - but only once per session
+    const unsubscribe = walletStore.subscribe(async (state) => {
+      if (state.account && !state.isLocked && !hasPreloadedCache) {
+        hasPreloadedCache = true; // Prevent multiple preloads
+        try {
+          console.log('🚀 Initializing contract data cache...');
+          await contractDataCache.preloadContractData(state.account.address);
+          console.log('✅ Contract data cache initialized');
+        } catch (error) {
+          console.warn('⚠️ Failed to pre-load contract data:', error);
+          hasPreloadedCache = false; // Allow retry on next wallet connection
+        }
+        unsubscribe(); // Stop listening after successful preload
+      }
+    });
   });
 </script>
 

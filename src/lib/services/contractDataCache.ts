@@ -1,0 +1,368 @@
+// Contract Data Cache Service
+// Caches paylines and multiplier data to avoid repeated contract calls
+
+import { CONTRACT } from 'ulujs';
+import algosdk from 'algosdk';
+import { NETWORK_CONFIG, CONTRACT_CONFIG } from '$lib/constants/network';
+
+// Import the actual ABI from SlotMachineClient like React component does
+import { APP_SPEC as SlotMachineAppSpec } from '../../clients/SlotMachineClient.js';
+
+// Slot Machine ABI for ulujs - use the real ABI like React component
+const slotMachineABI = {
+  name: "Slot Machine",
+  desc: "A simple slot machine game",
+  methods: SlotMachineAppSpec.contract.methods, // Use actual methods from generated client
+  events: [
+    {
+      name: "BetPlaced",
+      args: [
+        { type: "address" },
+        { type: "uint64" },
+        { type: "uint64" },
+        { type: "uint64" },
+        { type: "uint64" }
+      ]
+    },
+    {
+      name: "BetClaimed", 
+      args: [
+        { type: "address" },
+        { type: "uint64" },
+        { type: "uint64" },
+        { type: "uint64" },
+        { type: "uint64" },
+        { type: "uint64" }
+      ]
+    }
+  ]
+};
+
+interface CachedPaylines {
+  data: number[][];
+  timestamp: number;
+}
+
+interface CachedMultiplier {
+  data: number;
+  timestamp: number;
+  symbol: string;
+  count: number;
+}
+
+interface CacheStorage {
+  paylines: CachedPaylines | null;
+  multipliers: { [key: string]: CachedMultiplier };
+}
+
+export class ContractDataCache {
+  private readonly CACHE_KEY = 'voi_contract_data_cache';
+  private readonly CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+  private cache: CacheStorage = {
+    paylines: null,
+    multipliers: {}
+  };
+  private client: algosdk.Algodv2;
+  private appId: number;
+  private isPreloading = false; // Prevent concurrent preload operations
+
+  constructor() {
+    this.client = new algosdk.Algodv2(
+      NETWORK_CONFIG.token || '',
+      NETWORK_CONFIG.nodeUrl || '',
+      NETWORK_CONFIG.port
+    );
+    this.appId = CONTRACT_CONFIG.slotMachineAppId;
+    this.loadFromStorage();
+  }
+
+  /**
+   * Load cached data from localStorage
+   */
+  private loadFromStorage(): void {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const cached = localStorage.getItem(this.CACHE_KEY);
+      if (cached) {
+        this.cache = JSON.parse(cached);
+        this.cleanupExpired();
+      }
+    } catch (error) {
+      console.warn('Failed to load contract data cache:', error);
+      this.cache = { paylines: null, multipliers: {} };
+    }
+  }
+
+  /**
+   * Save cache to localStorage
+   */
+  private saveToStorage(): void {
+    if (typeof window === 'undefined') return;
+
+    try {
+      localStorage.setItem(this.CACHE_KEY, JSON.stringify(this.cache));
+    } catch (error) {
+      console.warn('Failed to save contract data cache:', error);
+    }
+  }
+
+  /**
+   * Remove expired cache entries
+   */
+  private cleanupExpired(): void {
+    const now = Date.now();
+
+    // Check paylines cache
+    if (this.cache.paylines && now - this.cache.paylines.timestamp > this.CACHE_DURATION) {
+      this.cache.paylines = null;
+    }
+
+    // Check multipliers cache
+    Object.keys(this.cache.multipliers).forEach(key => {
+      const multiplier = this.cache.multipliers[key];
+      if (now - multiplier.timestamp > this.CACHE_DURATION) {
+        delete this.cache.multipliers[key];
+      }
+    });
+  }
+
+  /**
+   * Generate cache key for multiplier
+   */
+  private getMultiplierKey(symbol: string, count: number): string {
+    return `${symbol}_${count}`;
+  }
+
+  /**
+   * Check if cached data is valid
+   */
+  private isValidCache(timestamp: number): boolean {
+    return Date.now() - timestamp < this.CACHE_DURATION;
+  }
+
+  /**
+   * Fetch paylines directly from contract
+   */
+  private async fetchPaylinesFromContract(address: string): Promise<number[][]> {
+    // Create a read-only account for contract calls
+    const readOnlyAccount = {
+      addr: address,
+      sk: new Uint8Array(0) // Empty private key for read-only
+    };
+
+    // Create Ulujs CONTRACT instance
+    const ci = new CONTRACT(
+      this.appId,
+      this.client,
+      undefined, // Use undefined for indexer
+      slotMachineABI,
+      readOnlyAccount
+    );
+
+    // Configure CONTRACT instance 
+    ci.setEnableRawBytes(true);
+    
+    // Call get_paylines method - gets return value without submitting
+    const result = await ci.get_paylines();
+
+    // Convert BigInt array to number array and reshape to paylines
+    const flatPaylines = (result.returnValue as bigint[]).map(x => Number(x));
+    
+    // Convert flat array to 2D array (assuming 20 paylines with 5 positions each)
+    const paylines: number[][] = [];
+    for (let i = 0; i < flatPaylines.length; i += 5) {
+      paylines.push(flatPaylines.slice(i, i + 5));
+    }
+
+    return paylines;
+  }
+
+  /**
+   * Fetch payout multiplier directly from contract
+   */
+  private async fetchMultiplierFromContract(symbol: string, count: number, address: string): Promise<number> {
+    // Create a read-only account for contract calls
+    const readOnlyAccount = {
+      addr: address,
+      sk: new Uint8Array(0) // Empty private key for read-only
+    };
+
+    // Create Ulujs CONTRACT instance
+    const ci = new CONTRACT(
+      this.appId,
+      this.client,
+      undefined, // Use undefined for indexer
+      slotMachineABI,
+      readOnlyAccount
+    );
+
+    // Configure CONTRACT instance 
+    ci.setEnableRawBytes(true);
+    
+    // Convert symbol to byte
+    const symbolByte = new TextEncoder().encode(symbol)[0];
+
+    // Call get_payout_multiplier method - gets return value without submitting
+    const result = await ci.get_payout_multiplier(symbolByte, BigInt(count));
+
+    return Number(result.returnValue);
+  }
+
+  /**
+   * Get cached paylines or fetch from contract
+   */
+  async getPaylines(address: string): Promise<number[][]> {
+    // Check cache first
+    if (this.cache.paylines && this.isValidCache(this.cache.paylines.timestamp)) {
+      console.log('📦 Using cached paylines data');
+      return this.cache.paylines.data;
+    }
+
+    // Cache miss - fetch from contract
+    console.log('🔄 Fetching paylines from contract');
+    try {
+      const paylines = await this.fetchPaylinesFromContract(address);
+      
+      // Cache the result
+      this.cache.paylines = {
+        data: paylines,
+        timestamp: Date.now()
+      };
+      this.saveToStorage();
+
+      return paylines;
+    } catch (error) {
+      console.error('Failed to fetch paylines from contract:', error);
+      // Return cached data even if expired as fallback
+      if (this.cache.paylines) {
+        console.log('⚠️ Using expired cached paylines as fallback');
+        return this.cache.paylines.data;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Get cached payout multiplier or fetch from contract
+   */
+  async getPayoutMultiplier(symbol: string, count: number, address: string): Promise<number> {
+    const cacheKey = this.getMultiplierKey(symbol, count);
+
+    // Check cache first
+    if (this.cache.multipliers[cacheKey] && 
+        this.isValidCache(this.cache.multipliers[cacheKey].timestamp)) {
+      console.log(`📦 Using cached multiplier for ${symbol}x${count}`);
+      return this.cache.multipliers[cacheKey].data;
+    }
+
+    // Cache miss - fetch from contract
+    console.log(`🔄 Fetching multiplier for ${symbol}x${count} from contract`);
+    try {
+      const multiplier = await this.fetchMultiplierFromContract(symbol, count, address);
+      
+      // Cache the result
+      this.cache.multipliers[cacheKey] = {
+        data: multiplier,
+        timestamp: Date.now(),
+        symbol: symbol,
+        count: count
+      };
+      this.saveToStorage();
+
+      return multiplier;
+    } catch (error) {
+      console.error(`Failed to fetch multiplier for ${symbol}x${count} from contract:`, error);
+      // Return cached data even if expired as fallback
+      if (this.cache.multipliers[cacheKey]) {
+        console.log(`⚠️ Using expired cached multiplier for ${symbol}x${count} as fallback`);
+        return this.cache.multipliers[cacheKey].data;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Pre-load common contract data for faster gameplay
+   */
+  async preloadContractData(address: string): Promise<void> {
+    // Prevent concurrent preload operations
+    if (this.isPreloading) {
+      console.log('⏳ Contract data preload already in progress, skipping...');
+      return;
+    }
+
+    // Check if we already have recent cached data
+    if (this.cache.paylines && this.isValidCache(this.cache.paylines.timestamp)) {
+      console.log('📦 Contract data already cached and valid, skipping preload');
+      return;
+    }
+
+    this.isPreloading = true;
+    console.log('🚀 Pre-loading contract data...');
+    
+    try {
+      // Pre-load paylines
+      await this.getPaylines(address);
+
+      // Pre-load common payout multipliers in parallel
+      const symbols = ['A', 'B', 'C', 'D'];
+      const counts = [3, 4, 5];
+      
+      const multiplierPromises: Promise<number>[] = [];
+      
+      symbols.forEach(symbol => {
+        counts.forEach(count => {
+          multiplierPromises.push(this.getPayoutMultiplier(symbol, count, address));
+        });
+      });
+
+      await Promise.all(multiplierPromises);
+      
+      console.log('✅ Contract data pre-loading completed');
+    } catch (error) {
+      console.error('❌ Contract data pre-loading failed:', error);
+      // Don't throw - pre-loading failure shouldn't block the app
+    } finally {
+      this.isPreloading = false;
+    }
+  }
+
+  /**
+   * Clear all cached data
+   */
+  clearCache(): void {
+    this.cache = { paylines: null, multipliers: {} };
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(this.CACHE_KEY);
+    }
+    console.log('🧹 Contract data cache cleared');
+  }
+
+  /**
+   * Get cache statistics for debugging
+   */
+  getCacheStats(): { paylinesCached: boolean; multipliersCached: number; cacheSize: string } {
+    const stats = {
+      paylinesCached: this.cache.paylines !== null,
+      multipliersCached: Object.keys(this.cache.multipliers).length,
+      cacheSize: typeof window !== 'undefined' 
+        ? `${(new Blob([JSON.stringify(this.cache)]).size / 1024).toFixed(2)} KB`
+        : '0 KB'
+    };
+    
+    return stats;
+  }
+}
+
+// Create and export singleton instance
+export const contractDataCache = new ContractDataCache();
+
+// Add debug methods to window for development
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  (window as any).contractCache = {
+    stats: () => contractDataCache.getCacheStats(),
+    clear: () => contractDataCache.clearCache(),
+    preload: (address: string) => contractDataCache.preloadContractData(address)
+  };
+}

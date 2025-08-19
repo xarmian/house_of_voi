@@ -14,6 +14,7 @@ import type {
   TransactionStatus,
   BlockchainError 
 } from '$lib/types/blockchain';
+import { contractDataCache } from './contractDataCache';
 
 // Import the actual ABI from SlotMachineClient like React component does
 import { APP_SPEC as SlotMachineAppSpec } from '../../clients/SlotMachineClient.js';
@@ -642,24 +643,33 @@ export class AlgorandService {
   }
 
   /**
-   * Get all paylines from the contract
+   * Get all paylines from the contract (direct contract call)
    */
-  async getPaylines(): Promise<number[][]> {
+  private async getPaylinesDirect(address: string): Promise<number[][]> {
     try {
       // Create a read-only account for contract calls
       const readOnlyAccount = {
-        addr: '7ZUECA7HFLZTXENRV24SHLU4AVPUTMTTDUFUBNBD64C73F3UHRTHBVN2WI',
-        sk: new Uint8Array(64) // Empty private key for read-only
+        addr: address,
+        sk: new Uint8Array(0) // Empty private key for read-only
       };
 
-      // Create client instance for read-only calls
-      const appClient = this.createSlotMachineClient(readOnlyAccount);
+      // Create Ulujs CONTRACT instance (matching spin method pattern)
+      const ci = new CONTRACT(
+        this.appId,
+        this.client,
+        undefined, // Use undefined for indexer like in spin method
+        slotMachineABI,
+        readOnlyAccount
+      );
+
+      // Configure CONTRACT instance 
+      ci.setEnableRawBytes(true);
       
-      // Call get_paylines method
-      const paylinesResult = await appClient.getPaylines({});
+      // Call get_paylines method - gets return value without submitting
+      const result = await ci.get_paylines();
 
       // Convert BigInt array to number array and reshape to paylines
-      const flatPaylines = (paylinesResult.return as bigint[]).map(x => Number(x));
+      const flatPaylines = (result.returnValue as bigint[]).map(x => Number(x));
       
       // Convert flat array to 2D array (assuming 20 paylines with 5 positions each)
       const paylines: number[][] = [];
@@ -675,63 +685,19 @@ export class AlgorandService {
   }
 
   /**
-   * Match a grid against a specific payline
+   * Get all paylines from the contract (with caching)
    */
-  async matchPayline(gridString: string, paylineIndex: number): Promise<{ count: number; initialSymbol: number }> {
-    try {
-      // Create a read-only account for contract calls
-      const readOnlyAccount = {
-        addr: '7ZUECA7HFLZTXENRV24SHLU4AVPUTMTTDUFUBNBD64C73F3UHRTHBVN2WI',
-        sk: new Uint8Array(64) // Empty private key for read-only
-      };
-
-      // Create client instance for read-only calls
-      const appClient = this.createSlotMachineClient(readOnlyAccount);
-      
-      // Convert grid string to Uint8Array
-      const gridBytes = new TextEncoder().encode(gridString);
-
-      // Call match_payline method
-      const matchResult = await appClient.matchPayline({
-        grid: gridBytes,
-        paylineIndex: BigInt(paylineIndex)
-      });
-
-      return {
-        count: Number(matchResult.return.count),
-        initialSymbol: matchResult.return.initialSymbol
-      };
-
-    } catch (error) {
-      throw this.handleError(error, 'Failed to match payline');
-    }
+  async getPaylines(address: string): Promise<number[][]> {
+    // Use cache service to handle caching logic
+    return contractDataCache.getPaylines(address);
   }
 
   /**
-   * Evaluate all paylines for a given grid and return winning ones
+   * Get payout multiplier for a specific symbol and count from the contract (with caching)
    */
-  async evaluatePaylines(gridString: string, maxPaylineIndex: number): Promise<Array<{ paylineIndex: number; count: number; initialSymbol: number; isWin: boolean }>> {
-    try {
-      const results: Array<{ paylineIndex: number; count: number; initialSymbol: number; isWin: boolean }> = [];
-
-      // Check paylines sequentially from 0 to maxPaylineIndex
-      for (let i = 0; i <= maxPaylineIndex; i++) {
-        const match = await this.matchPayline(gridString, i);
-        const isWin = match.count >= 3; // According to docs, count >= 3 is a winning combination
-        
-        results.push({
-          paylineIndex: i,
-          count: match.count,
-          initialSymbol: match.initialSymbol,
-          isWin
-        });
-      }
-
-      return results;
-
-    } catch (error) {
-      throw this.handleError(error, 'Failed to evaluate paylines');
-    }
+  async getPayoutMultiplier(symbol: string, count: number, address: string): Promise<number> {
+    // Use cache service to handle caching logic
+    return contractDataCache.getPayoutMultiplier(symbol, count, address);
   }
 
   /**
@@ -1036,8 +1002,7 @@ try {
     isBetReadyToClaim: async () => { throw new Error('AlgorandService not properly initialized'); },
     getGridOutcome: async () => { throw new Error('AlgorandService not properly initialized'); },
     getPaylines: async () => { throw new Error('AlgorandService not properly initialized'); },
-    matchPayline: async () => { throw new Error('AlgorandService not properly initialized'); },
-    evaluatePaylines: async () => { throw new Error('AlgorandService not properly initialized'); },
+    getPayoutMultiplier: async () => { throw new Error('AlgorandService not properly initialized'); },
     submitClaim: async () => { throw new Error('AlgorandService not properly initialized'); },
     waitForConfirmation: async () => { throw new Error('AlgorandService not properly initialized'); },
     waitForRound: async () => { throw new Error('AlgorandService not properly initialized'); },
