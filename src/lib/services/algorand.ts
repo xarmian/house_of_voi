@@ -401,7 +401,7 @@ export class AlgorandService {
       // Call spin with parameters matching successful transaction and TEAL contract
       // TEAL expects: spin(bet_amount, provider_id, index)
       const spinR = await ci.spin(
-        BigInt(spinTx.betAmount),        // bet_amount (directly from spinTx, no conversion)
+        BigInt(spinTx.betAmount / (spinTx.maxPaylineIndex + 1)),        // bet_amount (directly from spinTx, no conversion)
         BigInt(spinTx.maxPaylineIndex),  // provider_id (second parameter in successful tx)
         BigInt(spinTx.index)             // index (third parameter in successful tx)
       );
