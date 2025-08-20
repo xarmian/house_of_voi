@@ -3,12 +3,14 @@
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
+  import { soundService } from '$lib/services/soundService';
+  import SoundToggleButton from '$lib/components/ui/SoundToggleButton.svelte';
   
   $: isGameRoute = $page.route.id?.startsWith('/app');
   
   let mounted = false;
   
-  onMount(() => {
+  onMount(async () => {
     mounted = true;
   });
 </script>
@@ -22,9 +24,14 @@
 
 {#if mounted}
   <div 
-    class="min-h-screen bg-slate-900"
+    class="min-h-screen bg-slate-900 relative"
     in:fade={{ duration: 300 }}
   >
+    <!-- Sound Toggle - Desktop: full button top-right, Mobile: handled in app page -->
+    <div class="hidden lg:block fixed top-4 right-4 z-50">
+      <SoundToggleButton showSettings />
+    </div>
+    
     <slot />
   </div>
 {:else}

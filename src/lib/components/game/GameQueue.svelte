@@ -6,6 +6,7 @@
   import { formatVOI } from '$lib/constants/betting';
   import { SpinStatus } from '$lib/types/queue';
   import type { QueuedSpin } from '$lib/types/queue';
+  import { playButtonClick } from '$lib/services/soundService';
   
   export let maxHeight = '400px';
   
@@ -123,11 +124,21 @@
   }
   
   function handleRetrySpin(spin: QueuedSpin) {
+    // Play button click sound for retry
+    playButtonClick().catch(() => {
+      // Ignore sound errors
+    });
+    
     queueStore.retrySpin(spin.id);
   }
   
   async function handleClaimSpin(spin: QueuedSpin) {
     console.log('🎯 Manual claim triggered for spin:', spin.id);
+    
+    // Play button click sound for claim
+    playButtonClick().catch(() => {
+      // Ignore sound errors
+    });
     
     // Update status to claiming
     queueStore.updateSpin({
@@ -155,6 +166,11 @@
   async function handleRetryClaim(spin: QueuedSpin) {
     console.log('🔄 Retrying claim for spin:', spin.id);
     
+    // Play button click sound for retry claim
+    playButtonClick().catch(() => {
+      // Ignore sound errors
+    });
+    
     // Clear the error and reset claim retry state, then immediately claim again
     queueStore.updateSpin({
       id: spin.id,
@@ -174,6 +190,11 @@
 
   function handleReplaySpin(spin: QueuedSpin) {
     console.log('🎮 Replaying spin:', spin.id);
+    
+    // Play button click sound for replay
+    playButtonClick().catch(() => {
+      // Ignore sound errors
+    });
     
     // Dispatch custom event to parent component with replay data
     const event = new CustomEvent('replay-spin', {

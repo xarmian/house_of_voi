@@ -10,6 +10,7 @@
     winAnimations 
   } from '$lib/stores/animations';
   import { triggerWinCelebration } from '$lib/utils/animations';
+  import { playWinSound } from '$lib/services/soundService';
 
   export let isVisible = false;
   export let winAmount = 0;
@@ -123,6 +124,11 @@
 
   function startCelebration() {
     if (!celebrationContainer) return;
+
+    // Play win sound immediately when celebration starts
+    playWinSound(winLevel).catch(() => {
+      // Ignore sound errors
+    });
 
     // Show win text with delay
     setTimeout(() => {

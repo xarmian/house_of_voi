@@ -13,6 +13,7 @@
   } from '$lib/stores/animations';
   import { triggerTouchFeedback } from '$lib/utils/animations';
   import { isSlotMachineOperational } from '$lib/stores/houseBalance';
+  import { playButtonClick } from '$lib/services/soundService';
   
   const dispatch = createEventDispatcher<{
     spin: { betPerLine: number; selectedPaylines: number; totalBet: number }
@@ -62,6 +63,11 @@
       return;
     }
     
+    // Play button click sound for successful spin
+    playButtonClick().catch(() => {
+      // Ignore sound errors
+    });
+    
     // Provide success feedback for valid spin
     if (spinButtonElement && preferences.hapticEnabled && !reduceMotion) {
       triggerTouchFeedback(spinButtonElement, {
@@ -94,6 +100,11 @@
   }
   
   function setQuickBet(amount: number, buttonElement?: HTMLElement) {
+    // Play button click sound
+    playButtonClick().catch(() => {
+      // Ignore sound errors
+    });
+    
     bettingStore.setQuickBet(amount);
     
     // Provide visual and haptic feedback
@@ -115,6 +126,11 @@
   }
   
   function handleControlButton(action: () => void, buttonElement?: HTMLElement) {
+    // Play button click sound
+    playButtonClick().catch(() => {
+      // Ignore sound errors
+    });
+    
     action();
     
     // Provide touch feedback

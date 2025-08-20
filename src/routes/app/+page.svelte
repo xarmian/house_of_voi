@@ -6,6 +6,7 @@
   import SlotMachine from '$lib/components/game/SlotMachine.svelte';
   import GameQueue from '$lib/components/game/GameQueue.svelte';
   import GameHeader from '$lib/components/game/GameHeader.svelte';
+  import SoundSettingsIcon from '$lib/components/ui/SoundSettingsIcon.svelte';
   
   // Import odds test utility for development
   import '$lib/utils/testOddsWithRealData';
@@ -63,9 +64,16 @@
     
     <!-- Mobile Layout: Fixed viewport optimized -->
     <div class="lg:hidden min-h-screen flex flex-col safe-area-top safe-area-bottom">
-      <!-- Fixed header with compact wallet -->
-      <div class="flex-shrink-0 px-2 py-1 safe-area-left safe-area-right">
-        <WalletDisplay compact={true} />
+      <!-- Fixed header with compact wallet and sound settings -->
+      <div class="flex-shrink-0 px-2 py-1 safe-area-left safe-area-right mb-2">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex-1">
+            <WalletDisplay compact={true} />
+          </div>
+          <div class="flex-shrink-0">
+            <SoundSettingsIcon />
+          </div>
+        </div>
       </div>
       
       <!-- Main game area - allows natural scrolling -->

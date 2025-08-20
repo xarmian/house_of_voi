@@ -22,6 +22,7 @@
   import GameQueue from './GameQueue.svelte';
   import WinCelebration from './WinCelebration.svelte';
   import LoadingOverlay from '../ui/LoadingOverlay.svelte';
+  import { soundService, playSpinStart, playReelStop, playWinSound, playLoss } from '$lib/services/soundService';
   
   // References to ReelGrid components for direct function calls
   let desktopReelGrid: ReelGrid;
@@ -68,6 +69,9 @@
   
   // Track if we're in replay mode to prevent queue auto-start
   let isReplayMode = false;
+  
+  // GLOBAL deduplication to prevent multiple SlotMachine instances from processing same replay
+  const GLOBAL_PROCESSED_REPLAYS = globalThis.GLOBAL_PROCESSED_REPLAYS || (globalThis.GLOBAL_PROCESSED_REPLAYS = new Set<string>());
 
   // Maintenance overlay state - don't show until after initial balance check
   let showMaintenanceOverlay = true;
@@ -123,6 +127,11 @@
     // Clear all replay timeouts
     replayTimeouts.forEach(timeout => clearTimeout(timeout));
     replayTimeouts = [];
+    
+    // Stop any spinning sounds
+    soundService.stopLoopingSound('spin-loop', { fadeOut: 0.1 }).catch(() => {
+      // Ignore sound errors
+    });
   });
   
   function handleSpin(event: CustomEvent) {
@@ -130,6 +139,11 @@
     
     // Mark that user has initiated a spin this session
     userSessionStarted = true;
+    
+    // Play spin start sound
+    playSpinStart().catch(() => {
+      // Ignore sound errors
+    });
     
     // Add spin to queue (this will handle the blockchain processing in background)
     const spinId = queueStore.addSpin(betPerLine, selectedPaylines, totalBet);
@@ -151,6 +165,14 @@
       clearInterval(spinningInterval);
       spinningInterval = null;
     }
+    
+    // Start looping spin sound
+    soundService.playLoopingSound('spin-loop', {
+      fadeIn: 0.2,
+      volume: 0.6
+    }).catch(() => {
+      // Ignore sound errors
+    });
     
     // Start the initial spin animation in game store
     gameStore.startSpin(spinId);
@@ -270,6 +292,18 @@
       spinningInterval = null;
     }
     
+    // Stop the spinning loop sound with fade out
+    soundService.stopLoopingSound('spin-loop', { fadeOut: 0.3 }).catch(() => {
+      // Ignore sound errors
+    });
+    
+    // Play reel stop sound (only once, not from each ReelGrid)
+    setTimeout(() => {
+      playReelStop().catch(() => {
+        // Ignore sound errors
+      });
+    }, 100);
+    
     // DIRECTLY stop ReelGrid physics animation and set final positions
     callAllReelGrids('setFinalPositions', spin.outcome, spin.id);
     
@@ -280,16 +314,29 @@
     if (!isInitialMount && lastCelebratedSpinId !== spin.id) {
       // Check if we have actual winnings from blockchain first
       if (spin.winnings > 0) {
+        // Determine win level and play appropriate sound
+        const winLevel = spin.winnings >= 100000000 ? 'jackpot' : 
+                         spin.winnings >= 50000000 ? 'large' : 
+                         spin.winnings >= 20000000 ? 'medium' : 'small';
+        
+        // Play win sound
+        playWinSound(winLevel).catch(() => {
+          // Ignore sound errors
+        });
+        
         // Use actual winnings from blockchain
         triggerWinCelebration({
           amount: spin.winnings,
-          level: spin.winnings >= 100000000 ? 'jackpot' : 
-                 spin.winnings >= 50000000 ? 'large' : 
-                 spin.winnings >= 20000000 ? 'medium' : 'small'
+          level: winLevel
         }, spin.id);
       } else {
         // Show loss feedback immediately (but only once per spin and not on initial mount)
         if (lastLossFeedbackSpinId !== spin.id && !isInitialMount) {
+          // Play loss sound (subtle, non-abrasive)
+          playLoss().catch(() => {
+            // Ignore sound errors
+          });
+          
           triggerLossFeedback(spin);
         }
       }
@@ -405,17 +452,36 @@
     }, 2000);
   }
 
-  function handleReplaySpin(replayData: { spin: any; outcome: string[][]; winnings: number; betAmount: number }) {
+  async function handleReplaySpin(replayData: { spin: any; outcome: string[][]; winnings: number; betAmount: number }) {
+    const replayId = replayData.spin.id;
+    
+    // CRITICAL: Prevent duplicate processing of the same replay (GLOBAL across all SlotMachine instances)
+    if (GLOBAL_PROCESSED_REPLAYS.has(replayId)) {
+      console.warn(`Duplicate replay event ignored for spin: ${replayId} (GLOBAL deduplication)`);
+      return;
+    }
+    
+    // Prevent overlapping replays
+    if (isReplayMode) {
+      console.warn('Replay already in progress, ignoring new replay request');
+      return;
+    }
+    
+    // Mark this replay as processed GLOBALLY
+    GLOBAL_PROCESSED_REPLAYS.add(replayId);
+    
     // Mark that user has initiated a replay (allows animations)
     userSessionStarted = true;
     isReplayMode = true; // Prevent queue auto-start during replay
+    
+    console.log(`=== REPLAY: Starting replay sequence for ${replayId} ===`);
     
     // Cancel any existing replay timeouts to prevent conflicts
     replayTimeouts.forEach(timeout => clearTimeout(timeout));
     replayTimeouts = [];
     
-    // Generate a unique replay ID
-    const replayId = `replay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Generate a unique replay animation ID
+    const replayAnimationId = `replay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Stop any existing animations and clear state
     if (spinningInterval) {
@@ -423,24 +489,64 @@
       spinningInterval = null;
     }
     
+    // Use new force stop with verification for replays
+    console.log('=== REPLAY: Starting sound cleanup ===');
+    const soundStopped = await soundService.forceStopWithVerification('spin-loop', 3);
+    
+    if (!soundStopped) {
+      console.error('Failed to stop spin-loop sound, proceeding with replay anyway');
+    }
+    
     // Force stop any physics animations and reset game state
     callAllReelGrids('stopSpin');
     callAllReelGrids('setFinalPositions', [['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_']], 'force-stop');
     gameStore.reset();
     
+    // Additional wait to ensure all cleanup is complete
+    await new Promise(resolve => setTimeout(resolve, 300));
+    console.log('=== REPLAY: Sound cleanup completed ===');
+    
     // Use setTimeout to break out of any reactive update cycle
-    const startTimeout = setTimeout(() => {
+    const startTimeout = setTimeout(async () => {
+      console.log('=== REPLAY: Starting new spin sound ===');
+      
+      // Double-check that spin-loop is stopped before starting new one
+      if (!soundService.verifySoundStopped('spin-loop')) {
+        console.warn('spin-loop still active, attempting one more cleanup');
+        await soundService.forceStopWithVerification('spin-loop', 1);
+      }
+      
+      // Start looping spin sound for replay
+      soundService.playLoopingSound('spin-loop', {
+        fadeIn: 0.1,
+        volume: 0.6
+      }).catch(() => {
+        // Ignore sound errors
+      });
+      
       // Start spin using the same pattern as regular spins
-      gameStore.startSpin(replayId);
+      gameStore.startSpin(replayAnimationId);
       
       // CRITICAL: Start physics animation just like regular spins
-      callAllReelGrids('startSpin', replayId);
+      callAllReelGrids('startSpin', replayAnimationId);
       
       // After spinning duration, display the outcome
       const outcomeTimeout = setTimeout(() => {
+        // Stop the spinning loop sound with fade out
+        soundService.stopLoopingSound('spin-loop', { fadeOut: 0.3 }).catch(() => {
+          // Ignore sound errors
+        });
+        
+        // Play reel stop sound for replay
+        setTimeout(() => {
+          playReelStop().catch(() => {
+            // Ignore sound errors
+          });
+        }, 100);
+        
         // CRITICAL: Stop physics and set final positions just like regular spins
-        callAllReelGrids('setFinalPositions', replayData.outcome, replayId);
-        gameStore.completeSpin(replayId, replayData.outcome);
+        callAllReelGrids('setFinalPositions', replayData.outcome, replayAnimationId);
+        gameStore.completeSpin(replayAnimationId, replayData.outcome);
         
         // Trigger win/loss animation after a small delay
         const celebrationTimeout = setTimeout(() => {
@@ -452,10 +558,10 @@
             triggerWinCelebration({
               amount: replayData.winnings,
               level: winLevel
-            }, replayId);
+            }, replayAnimationId);
           } else {
             triggerLossFeedback({
-              id: replayId,
+              id: replayAnimationId,
               totalBet: replayData.betAmount
             });
           }
@@ -472,8 +578,13 @@
           // Clear replay mode flag to allow normal operation
           isReplayMode = false;
           
+          // Remove this replay from GLOBAL processed set (allow future replays of same spin)
+          GLOBAL_PROCESSED_REPLAYS.delete(replayId);
+          
           // Remove completed timeouts from tracking
           replayTimeouts = replayTimeouts.filter(t => t !== startTimeout && t !== outcomeTimeout && t !== celebrationTimeout && t !== cleanupTimeout);
+          
+          console.log(`=== REPLAY: Cleanup completed for ${replayId} ===`);
         }, 3000); // Clear the replay after 3 seconds
         replayTimeouts.push(cleanupTimeout);
       }, 2500); // Show spinning for 2.5 seconds
@@ -715,6 +826,7 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+    position: relative;
   }
 
   /* Enhanced Slot Machine Frame Styling */
