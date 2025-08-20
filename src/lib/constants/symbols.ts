@@ -143,6 +143,21 @@ export function getRandomWinningSymbol(): SlotSymbol {
   return WINNING_SYMBOLS[randomId];
 }
 
+// Get deterministic symbol based on position (modulo approach) - uses ALL symbols
+export function getDeterministicSymbol(position: number): SlotSymbol {
+  const allSymbolIds = Object.keys(SLOT_SYMBOLS);
+  const symbolId = allSymbolIds[position % allSymbolIds.length];
+  return SLOT_SYMBOLS[symbolId];
+}
+
+// Get deterministic symbol for reel initialization (combines reel and position) - uses ALL symbols
+export function getDeterministicReelSymbol(reelIndex: number, symbolIndex: number): SlotSymbol {
+  // Create a unique position by combining reel and symbol indices
+  // This ensures different reels have different patterns but includes winning symbols
+  const position = (reelIndex * 17 + symbolIndex) % Object.keys(SLOT_SYMBOLS).length;
+  return getDeterministicSymbol(position);
+}
+
 // Check if a symbol is a winning symbol
 export function isWinningSymbol(symbolId: string): boolean {
   return symbolId in WINNING_SYMBOLS;

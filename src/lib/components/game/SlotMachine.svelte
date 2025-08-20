@@ -13,7 +13,8 @@
   import { 
     isSlotMachineOperational, 
     operationalStatusMessage, 
-    houseBalanceActions 
+    houseBalanceActions,
+    isLoadingHouseBalance
   } from '$lib/stores/houseBalance';
   import ReelGrid from './ReelGrid.svelte';
   import PaylineOverlay from './PaylineOverlay.svelte';
@@ -21,6 +22,19 @@
   import GameQueue from './GameQueue.svelte';
   import WinCelebration from './WinCelebration.svelte';
   import LoadingOverlay from '../ui/LoadingOverlay.svelte';
+  
+  // References to ReelGrid components for direct function calls
+  let desktopReelGrid: ReelGrid;
+  let mobileReelGrid1: ReelGrid;
+  let mobileReelGrid2: ReelGrid;
+  
+  function callAllReelGrids(methodName: string, ...args: any[]) {
+    [desktopReelGrid, mobileReelGrid1, mobileReelGrid2].forEach(component => {
+      if (component && typeof component[methodName] === 'function') {
+        component[methodName](...args);
+      }
+    });
+  }
   import { PUBLIC_DEBUG_MODE } from '$env/static/public';
   
   export let disabled = false;
@@ -44,21 +58,37 @@
   let lastCelebratedSpinId: string | null = null;
   let lossFeedbackTimeout: NodeJS.Timeout | null = null;
   let lastLossFeedbackSpinId: string | null = null;
+  let lastProcessedOutcomeSpinId: string | null = null;
+  
+  // Track whether user has started any spins this session
+  let userSessionStarted = false;
+  
+  // Track replay timeouts to prevent overlapping replays
+  let replayTimeouts: NodeJS.Timeout[] = [];
+  
+  // Track if we're in replay mode to prevent queue auto-start
+  let isReplayMode = false;
 
-  // Maintenance overlay state
+  // Maintenance overlay state - don't show until after initial balance check
   let showMaintenanceOverlay = true;
+  let hasInitialBalanceCheckCompleted = false;
   
   // Loading state
   $: currentLoadingState = $loadingStates[0]; // Get the first loading state
   $: isLoading = $loadingStates.length > 0;
   
   onMount(() => {
-    // Reset game state to ensure clean start
-    gameStore.reset();
-    gameStore.initializeGrid();
+    // Use setTimeout to avoid reactive update conflicts
+    setTimeout(() => {
+      // Reset game state to ensure clean start
+      gameStore.reset();
+      gameStore.initializeGrid();
+    }, 0);
     
     // Initialize house balance monitoring
-    houseBalanceActions.initialize();
+    houseBalanceActions.initialize().finally(() => {
+      hasInitialBalanceCheckCompleted = true;
+    });
     
     // DO NOT auto-clear queue - keep for testing
     
@@ -90,19 +120,21 @@
     if (spinningInterval) clearInterval(spinningInterval);
     if (celebrationTimeout) clearTimeout(celebrationTimeout);
     if (lossFeedbackTimeout) clearTimeout(lossFeedbackTimeout);
+    // Clear all replay timeouts
+    replayTimeouts.forEach(timeout => clearTimeout(timeout));
+    replayTimeouts = [];
   });
   
   function handleSpin(event: CustomEvent) {
     const { betPerLine, selectedPaylines, totalBet } = event.detail;
     
+    // Mark that user has initiated a spin this session
+    userSessionStarted = true;
+    
     // Add spin to queue (this will handle the blockchain processing in background)
     const spinId = queueStore.addSpin(betPerLine, selectedPaylines, totalBet);
-    console.log('Added spin to queue:', spinId);
     
     // New spin takes over display immediately
-    if ($isSpinning && $currentSpinId) {
-      console.log(`New spin ${spinId} taking over from ${$currentSpinId}`);
-    }
     
     // Start visual spin animation immediately with continuous spinning
     startContinuousSpinning(spinId);
@@ -111,7 +143,6 @@
   function startContinuousSpinning(spinId: string) {
     // ANIMATION GUARD: Don't start if another spin is already active
     if ($currentSpinId && $currentSpinId !== spinId && $isSpinning) {
-      console.log(`Cannot start spin ${spinId} - another spin ${$currentSpinId} is active`);
       return;
     }
 
@@ -121,23 +152,11 @@
       spinningInterval = null;
     }
     
-    // Start the initial spin animation
+    // Start the initial spin animation in game store
     gameStore.startSpin(spinId);
     
-    // Set up continuous spinning until outcome is ready with enhanced guards
-    spinningInterval = setInterval(() => {
-      // Only continue if we're waiting for outcome for this specific spin
-      if ($currentSpinId === spinId && $waitingForOutcome) {
-        gameStore.continueSpinning(spinId);
-      } else {
-        // Clean up interval if conditions no longer met
-        if (spinningInterval) {
-          clearInterval(spinningInterval);
-          spinningInterval = null;
-        }
-        console.log(`Stopped continuous spinning for ${spinId} - currentSpinId: ${$currentSpinId}, waitingForOutcome: ${$waitingForOutcome}`);
-      }
-    }, 2000); // Continue spinning every 2 seconds
+    // DIRECTLY call ReelGrid to start physics animation - NO REACTIVE DEPENDENCIES
+    callAllReelGrids('startSpin', spinId);
   }
 
   function handleQueueUpdate(queueState: any) {
@@ -174,7 +193,8 @@
       
       // CRITICAL FIX: Only display outcome if this spin is currently being displayed
       // This prevents PROCESSING spins from triggering animations for unrelated spins
-      if (!isTooOld && $currentSpinId === mostRecentSpin.id) {
+      // ALSO: Only display outcomes if user has started a session (prevents auto-animation)
+      if (!isTooOld && $currentSpinId === mostRecentSpin.id && userSessionStarted) {
         displayOutcome(mostRecentSpin);
       }
     }
@@ -202,7 +222,7 @@
     );
     
     // If we have a current spin that's PROCESSING but got an outcome, display it
-    if ($currentSpinId) {
+    if ($currentSpinId && userSessionStarted) {
       const currentSpin = queueState.spins.find((spin: any) => spin.id === $currentSpinId);
       if (currentSpin && currentSpin.status === SpinStatus.PROCESSING && currentSpin.outcome) {
         // This PROCESSING spin has an outcome and it's our current spin - display it
@@ -211,9 +231,11 @@
       }
     }
     
-    if (pendingSpins.length > 0 && !$currentSpinId) {
-      // Start spinning for the most recent pending spin (excluding PROCESSING)
+    if (pendingSpins.length > 0 && !$currentSpinId && userSessionStarted && !isReplayMode) {
       const mostRecentPending = pendingSpins[pendingSpins.length - 1];
+      
+      // Only animate if user has started a spin this session AND we're not in replay mode
+      // This prevents auto-animation for restored spins and after replays
       startContinuousSpinning(mostRecentPending.id);
     } else if (pendingSpins.length === 0 && processingSpins.length === 0 && $currentSpinId) {
       // No pending or processing spins but we still have a current spin ID - check if it should be cleared
@@ -232,9 +254,14 @@
   function displayOutcome(spin: any) {
     // CRITICAL STATE COORDINATION CHECK: Only display if this spin is current
     if (!spin.outcome || $currentSpinId !== spin.id) {
-      console.log(`Skipping outcome display - currentSpinId: ${$currentSpinId}, spin.id: ${spin.id}, hasOutcome: ${!!spin.outcome}`);
       return;
     }
+
+    // DUPLICATE PROTECTION: Prevent processing same outcome multiple times
+    if (lastProcessedOutcomeSpinId === spin.id) {
+      return;
+    }
+    lastProcessedOutcomeSpinId = spin.id;
 
     // ANIMATION GUARD: Prevent overlapping animations
     if ($isSpinning && spinningInterval) {
@@ -242,6 +269,9 @@
       clearInterval(spinningInterval);
       spinningInterval = null;
     }
+    
+    // DIRECTLY stop ReelGrid physics animation and set final positions
+    callAllReelGrids('setFinalPositions', spin.outcome, spin.id);
     
     // Complete the spin with actual outcome
     gameStore.completeSpin(spin.id, spin.outcome);
@@ -376,8 +406,14 @@
   }
 
   function handleReplaySpin(replayData: { spin: any; outcome: string[][]; winnings: number; betAmount: number }) {
-    console.log('🎮 Starting replay animation for spin:', replayData.spin.id);
-
+    // Mark that user has initiated a replay (allows animations)
+    userSessionStarted = true;
+    isReplayMode = true; // Prevent queue auto-start during replay
+    
+    // Cancel any existing replay timeouts to prevent conflicts
+    replayTimeouts.forEach(timeout => clearTimeout(timeout));
+    replayTimeouts = [];
+    
     // Generate a unique replay ID
     const replayId = `replay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -386,42 +422,64 @@
       clearInterval(spinningInterval);
       spinningInterval = null;
     }
+    
+    // Force stop any physics animations and reset game state
+    callAllReelGrids('stopSpin');
+    callAllReelGrids('setFinalPositions', [['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_']], 'force-stop');
     gameStore.reset();
     
-    // Start spin animation with the replay outcome
-    gameStore.startSpin(replayId, replayData.outcome);
-    
-    // After a brief spinning period, complete with the actual outcome
-    setTimeout(() => {
-      gameStore.completeSpin(replayId, replayData.outcome);
+    // Use setTimeout to break out of any reactive update cycle
+    const startTimeout = setTimeout(() => {
+      // Start spin using the same pattern as regular spins
+      gameStore.startSpin(replayId);
       
-      // Trigger appropriate outcome animation
-      setTimeout(() => {
-        if (replayData.winnings > 0) {
-          // Trigger win celebration for wins
-          const winLevel = replayData.winnings >= 100000000 ? 'jackpot' : 
-                          replayData.winnings >= 50000000 ? 'large' : 
-                          replayData.winnings >= 20000000 ? 'medium' : 'small';
+      // CRITICAL: Start physics animation just like regular spins
+      callAllReelGrids('startSpin', replayId);
+      
+      // After spinning duration, display the outcome
+      const outcomeTimeout = setTimeout(() => {
+        // CRITICAL: Stop physics and set final positions just like regular spins
+        callAllReelGrids('setFinalPositions', replayData.outcome, replayId);
+        gameStore.completeSpin(replayId, replayData.outcome);
+        
+        // Trigger win/loss animation after a small delay
+        const celebrationTimeout = setTimeout(() => {
+          if (replayData.winnings > 0) {
+            const winLevel = replayData.winnings >= 100000000 ? 'jackpot' : 
+                            replayData.winnings >= 50000000 ? 'large' : 
+                            replayData.winnings >= 20000000 ? 'medium' : 'small';
+            
+            triggerWinCelebration({
+              amount: replayData.winnings,
+              level: winLevel
+            }, replayId);
+          } else {
+            triggerLossFeedback({
+              id: replayId,
+              totalBet: replayData.betAmount
+            });
+          }
+        }, 500); // Small delay after outcome is shown
+        replayTimeouts.push(celebrationTimeout);
+        
+        // Cleanup after replay completes
+        const cleanupTimeout = setTimeout(() => {
+          // Ensure complete cleanup
+          gameStore.reset();
+          callAllReelGrids('stopSpin');
+          callAllReelGrids('setFinalPositions', [['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_']], 'cleanup');
           
-          triggerWinCelebration({
-            amount: replayData.winnings,
-            level: winLevel
-          }, replayId);
-        } else {
-          // Trigger loss feedback for losses
-          triggerLossFeedback({
-            id: replayId,
-            totalBet: replayData.betAmount
-          });
-        }
-      }, 500); // Small delay after outcome is shown
-      
-      // Ensure animation cleanup after replay completes
-      setTimeout(() => {
-        console.log('🧹 Cleaning up replay animation for:', replayId);
-        gameStore.reset();
-      }, 3000); // Clear the replay after 3 seconds
-    }, 2500); // Show spinning for 2.5 seconds
+          // Clear replay mode flag to allow normal operation
+          isReplayMode = false;
+          
+          // Remove completed timeouts from tracking
+          replayTimeouts = replayTimeouts.filter(t => t !== startTimeout && t !== outcomeTimeout && t !== celebrationTimeout && t !== cleanupTimeout);
+        }, 3000); // Clear the replay after 3 seconds
+        replayTimeouts.push(cleanupTimeout);
+      }, 2500); // Show spinning for 2.5 seconds
+      replayTimeouts.push(outcomeTimeout);
+    }, 0);
+    replayTimeouts.push(startTimeout);
   }
 </script>
 
@@ -444,7 +502,7 @@
             <!-- Main game grid -->
             <div class="game-grid">
               <!-- Reel Grid -->
-              <ReelGrid grid={$currentGrid} isSpinning={$isSpinning} />
+              <ReelGrid bind:this={desktopReelGrid} grid={$currentGrid} isSpinning={$isSpinning} />
               
               <!-- Payline Overlay -->
               <PaylineOverlay 
@@ -480,7 +538,7 @@
               <!-- Main game grid -->
               <div class="game-grid">
                 <!-- Reel Grid -->
-                <ReelGrid grid={$currentGrid} isSpinning={$isSpinning} />
+                <ReelGrid bind:this={mobileReelGrid1} grid={$currentGrid} isSpinning={$isSpinning} />
                 
                 <!-- Payline Overlay -->
                 <PaylineOverlay 
@@ -524,7 +582,7 @@
                 <!-- Main game grid -->
                 <div class="game-grid">
                   <!-- Reel Grid -->
-                  <ReelGrid grid={$currentGrid} isSpinning={$isSpinning} />
+                  <ReelGrid bind:this={mobileReelGrid2} grid={$currentGrid} isSpinning={$isSpinning} />
                   
                   <!-- Payline Overlay -->
                   <PaylineOverlay 
@@ -614,8 +672,8 @@
     />
   {/if}
   
-  <!-- Maintenance Overlay -->
-  {#if !$isSlotMachineOperational && showMaintenanceOverlay}
+  <!-- Maintenance Overlay - only show after initial balance check completes -->
+  {#if !$isSlotMachineOperational && showMaintenanceOverlay && hasInitialBalanceCheckCompleted && !$isLoadingHouseBalance}
     <div class="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-xl">
       <div class="bg-gradient-to-br from-orange-900/90 to-red-900/90 border border-orange-600 rounded-lg p-8 max-w-md mx-4 shadow-2xl">
         <div class="text-center">

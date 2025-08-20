@@ -9,25 +9,19 @@
   
   export let maxHeight = '400px';
   
-  let autoRefreshInterval: NodeJS.Timeout;
+  // Removed unused auto refresh interval
   let showCompleted = true;
   let selectedTab: 'recent' | 'stats' = 'recent';
   let showSpinDetailsModal = false;
   let selectedSpin: QueuedSpin | null = null;
   
   onMount(() => {
-    // Auto-refresh every 5 seconds
-    autoRefreshInterval = setInterval(() => {
-      // In real implementation, this would check blockchain status
-      // For now, just update timestamps
-      queueStore.setProcessing(false);
-    }, 5000);
+    // Auto-refresh disabled - the queue processor handles all updates
+    // Removed empty interval that was wasting CPU cycles
   });
   
   onDestroy(() => {
-    if (autoRefreshInterval) {
-      clearInterval(autoRefreshInterval);
-    }
+    // Cleanup not needed anymore
   });
   
   function getStatusIcon(status: SpinStatus) {

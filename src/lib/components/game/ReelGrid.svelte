@@ -10,11 +10,13 @@
     startPerformanceOptimization,
     cleanupAnimations
   } from '$lib/stores/animations';
+  import { currentSpinId } from '$lib/stores/game';
   import { 
-    ReelSpinAnimation, 
-    easingFunctions, 
-    initializeAnimations
-  } from '$lib/utils/animations';
+    ReelPhysicsEngine,
+    DEFAULT_REEL_PHYSICS,
+    calculateSymbolPositions
+  } from '$lib/utils/reelPhysics';
+  import { initializeAnimations } from '$lib/utils/animations';
   import SymbolComponent from './Symbol.svelte';
   
   export let grid: SlotSymbol[][];
@@ -22,190 +24,298 @@
   
   let reelElements: HTMLElement[] = [];
   let reelContainers: HTMLElement[] = [];
-  let activeAnimations: ReelSpinAnimation[] = [];
   let symbolGrid: HTMLElement[][] = [];
   let isMounted = false;
+  let physicsEngine: ReelPhysicsEngine | null = null;
   
-  // Subscribe to animation stores
-  $: reelStates = $reelAnimations;
+  // Extended reel data for seamless scrolling
+  let extendedReels: SlotSymbol[][] = [];
+  const VISIBLE_SYMBOLS = 3;
+  const EXTENDED_SYMBOLS = 30; // More symbols for smooth scrolling (increased buffer)
+  
+  // Subscribe to animation stores (removed reactive reelStates to prevent conflicts with physics)
   $: preferences = $animationPreferences;
   $: reduceMotion = $shouldReduceAnimations;
   
-  // Handle main spinning state changes
-  $: if (isMounted && isSpinning) {
-    startSpinning();
-  } else if (isMounted && !isSpinning) {
-    // Ensure complete cleanup when spinning stops
-    stopAllSpinAnimations();
-  }
-  
-  // Update individual reel animations based on store state
-  $: {
-    if (reelElements && reelElements.length === 5) {
-      reelStates.forEach((state, index) => {
-        updateReelVisuals(index, state);
-      });
-    }
-  }
-  
-  function startSpinning() {
-    // Start all 5 reels spinning
-    for (let i = 0; i < 5; i++) {
-      reelAnimations.startReelSpin(i, {
-        spinSpeed: 40,
-        blur: 2,
-        easingPhase: 'constant'
-      });
-    }
-  }
-  
-  
-  function updateReelVisuals(reelIndex: number, state: ReelAnimationState) {
-    const reelElement = reelElements[reelIndex];
-    if (!reelElement) return;
-    
-    // Apply blur based on spin speed
-    const blurAmount = state.isSpinning ? 
-      Math.min(state.blur, preferences.batteryOptimized ? 2 : 4) : 0;
-    reelElement.style.filter = `blur(${blurAmount}px)`;
-    
-    // Apply transform based on offset
-    if (state.offset !== 0) {
-      reelElement.style.transform = `translateY(${state.offset}px)`;
-    } else {
-      reelElement.style.transform = '';
-    }
-    
-    // Apply appropriate animation class
-    reelElement.className = reelElement.className.replace(/reel-\w+/g, '');
-    if (state.isSpinning) {
-      reelElement.classList.add(`reel-${state.easingPhase}`);
-    }
-    
-    // GPU optimization
-    if (state.isSpinning) {
-      reelElement.style.willChange = 'transform, filter';
-    } else {
-      reelElement.style.willChange = 'auto';
-    }
-  }
-  
-  function stopAllSpinAnimations() {
-    console.log('🛑 Stopping all spin animations');
-    
-    // Stop all active animations
-    activeAnimations.forEach((animation, index) => {
-      if (animation) {
-        animation.stop();
-        activeAnimations[index] = null;
+  // Initialize extended reels only when grid changes (prevent recreation during spinning)
+  $: if (!currentlySpinning) {
+    extendedReels = grid.map(reel => {
+      // Ensure we have a valid reel with symbols
+      if (!reel || reel.length === 0) {
+        console.warn('Empty or invalid reel detected, using fallback');
+        return [];
       }
+      
+      // Create extended reel with buffer symbols for seamless wrapping
+      const extended: SlotSymbol[] = [];
+      
+      // Add buffer at the start (last few symbols from original reel)
+      const bufferStart = 5;
+      for (let i = 0; i < bufferStart; i++) {
+        const symbol = reel[reel.length - bufferStart + i];
+        if (symbol) {
+          extended.push(symbol);
+        }
+      }
+      
+      // Add main symbols (repeat the original reel multiple times)
+      for (let i = 0; i < EXTENDED_SYMBOLS - bufferStart * 2; i++) {
+        const symbol = reel[i % reel.length];
+        if (symbol) {
+          extended.push(symbol);
+        }
+      }
+      
+      // Add buffer at the end (first few symbols from original reel)
+      const bufferEnd = 5;
+      for (let i = 0; i < bufferEnd; i++) {
+        const symbol = reel[i % reel.length];
+        if (symbol) {
+          extended.push(symbol);
+        }
+      }
+      
+      return extended;
     });
+  }
+  
+  // Track spinning state to avoid multiple triggers
+  let currentlySpinning = false;
+  let processingSpinId: string | null = null;
+  
+  // COMPLETELY REMOVE REACTIVE STATEMENTS - Use direct function calls instead
+  let lastProcessedSpinId: string | null = null;
+  let lastProcessedOutcomeSpinId: string | null = null;
+  
+  // Direct function that gets called from parent component
+  export function startSpin(spinId: string) {
+    if (!isMounted || !physicsEngine || !reelElements.length || 
+        spinId === lastProcessedSpinId || currentlySpinning) {
+      return;
+    }
+    lastProcessedSpinId = spinId;
+    currentlySpinning = true;
     
-    // Clear animation store
-    reelAnimations.stopAllReels();
+    // Calculate target positions within safe zone (avoiding buffer areas)
+    const bufferSymbols = 5;
+    const safeZoneSymbols = EXTENDED_SYMBOLS - bufferSymbols * 2;
+    const targetPositions = Array(5).fill(0).map(() => 
+      (bufferSymbols + Math.floor(Math.random() * safeZoneSymbols)) * 100
+    );
     
-    // Clean up visual states more thoroughly
+    physicsEngine.startSpin(targetPositions);
+  }
+  
+  export function stopSpin() {
+    if (!physicsEngine || !currentlySpinning) return;
+    
+    currentlySpinning = false;
+    processingSpinId = null;
+    physicsEngine.stopAllReels();
+    
+    // Clear any blur effects and reset transforms to clean final state
     reelElements.forEach((element, index) => {
-      if (element) {
-        element.style.filter = '';
-        element.style.transform = '';
-        element.style.willChange = 'auto';
-        element.style.animationName = 'none';
-        element.style.animationDuration = '';
-        element.style.animationTimingFunction = '';
-        element.style.animationIterationCount = '';
-        element.className = element.className.replace(/reel-\w+/g, '');
+      if (element && reelContainers[index]) {
+        reelContainers[index].style.filter = ''; // Remove blur
+        reelContainers[index].style.perspective = ''; // Remove 3D effects
+      }
+    });
+  }
+  
+  export function setFinalPositions(finalGrid: string[][], spinId?: string) {
+    if (!physicsEngine || !reelElements.length) return;
+    
+    // DUPLICATE PROTECTION: Prevent repeated calls for same outcome
+    if (spinId && lastProcessedOutcomeSpinId === spinId) {
+      return;
+    }
+    lastProcessedOutcomeSpinId = spinId || null;
+    
+    // COMPLETELY stop physics animation and any callbacks
+    physicsEngine.stopAllReels();
+    currentlySpinning = false;
+    
+    // Clear any visual effects and reset to default position
+    reelElements.forEach((element, reelIndex) => {
+      if (element && reelContainers[reelIndex]) {
+        // Reset to default position (0px) - let Svelte handle the symbol display
+        const transform = `translate3d(0, 0px, 0)`;
+        element.style.transform = transform;
         
-        // Force reflow to ensure styles are applied
-        element.offsetHeight;
+        // Clear all visual effects
+        reelContainers[reelIndex].style.filter = '';
+        reelContainers[reelIndex].style.perspective = '';
+        reelContainers[reelIndex].style.boxShadow = '';
+        
+        // Disable GPU optimization to prevent further updates
+        element.style.willChange = '';
+        reelContainers[reelIndex].style.willChange = '';
       }
     });
     
-    // Also clean up any animation classes on containers
-    reelContainers.forEach((container, index) => {
-      if (container) {
-        container.className = container.className.replace(/reel-\w+/g, '');
+    // The grid prop should now contain the correct symbols from the game store
+    // Svelte will automatically re-render the correct symbols
+  }
+  
+  // Removed complex visual update system - physics engine handles everything
+  
+  // Simplified visual update management
+  function startVisualUpdates() {
+    // Physics engine handles all updates directly
+  }
+  
+  function stopVisualUpdates() {
+    // Physics engine handles cleanup
+  }
+  
+  // Removed old unified spin functions - now using exported functions called directly from parent
+  
+  // Removed complex updateReelVisuals - now handled directly in handlePhysicsUpdate
+  
+  function handlePhysicsUpdate(states: ReelAnimationState[]) {
+    // GUARD: Don't update if not currently spinning - prevents background updates
+    if (!currentlySpinning) {
+      return;
+    }
+    
+    // Direct DOM updates only during active spinning
+    states.forEach((state, index) => {
+      if (reelElements[index] && state.isSpinning) {
+        const translateY = -state.currentPosition;
+        const transform = `translate3d(0, ${translateY}px, 0)`;
+        
+        reelElements[index].style.transform = transform;
+        
+        // Apply visual effects only during spinning
+        if (reelContainers[index]) {
+          reelContainers[index].style.filter = `blur(${Math.min(Math.abs(state.velocity) / 500, 2)}px)`;
+        }
       }
     });
-    
-    console.log('✅ All spin animations stopped and cleaned up');
   }
   
   onMount(() => {
     // Initialize animations system
     initializeAnimations();
-    startPerformanceOptimization();
+    // Don't start performance monitoring by default - it runs at 60fps continuously!
+    // Only enable during actual performance debugging
+    // startPerformanceOptimization();
+    
+    // Initialize unified physics-based animation system
+    physicsEngine = new ReelPhysicsEngine(
+      {
+        ...DEFAULT_REEL_PHYSICS,
+        spinPattern: 'alternating'
+      },
+      handlePhysicsUpdate
+    );
+    
+    // Initialize reel states (no store conflicts)
+    physicsEngine.initializeReels();
     
     // Initialize reel references
     const updateReelRefs = () => {
-      reelElements = Array.from(document.querySelectorAll('.reel-column'));
-      reelContainers = Array.from(document.querySelectorAll('.reel-container'));
+      // Use more specific selectors to get exactly 5 reels
+      const gridElement = document.querySelector('.reel-grid');
+      if (gridElement) {
+        reelElements = Array.from(gridElement.querySelectorAll('.reel-strip'));
+        reelContainers = Array.from(gridElement.querySelectorAll('.reel-viewport'));
+      } else {
+        reelElements = [];
+        reelContainers = [];
+      }
       
       // Initialize symbol grid references
       symbolGrid = Array(5).fill(null).map((_, reelIndex) => 
         Array.from(document.querySelectorAll(`[data-reel="${reelIndex}"] .symbol-element`))
       );
+      
+      // Elements initialized
     };
     
     // Use timeout to ensure DOM is ready
     setTimeout(() => {
       updateReelRefs();
-      isMounted = true; // Set mounted flag after DOM is ready
+      isMounted = true;
+      // Start visual update loop
+      startVisualUpdates();
     }, 100);
     
     // Also update on any changes
     const observer = new MutationObserver(updateReelRefs);
-    observer.observe(document.querySelector('.reel-grid'), {
-      childList: true,
-      subtree: true
-    });
+    const gridElement = document.querySelector('.reel-grid');
+    if (gridElement) {
+      observer.observe(gridElement, {
+        childList: true,
+        subtree: true
+      });
+    }
     
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      stopVisualUpdates();
+    };
   });
   
   onDestroy(() => {
-    stopAllSpinAnimations();
+    stopVisualUpdates();
+    if (physicsEngine) {
+      physicsEngine.stopAllReels();
+    }
     cleanupAnimations();
   });
 </script>
 
 <div class="reel-grid" role="application" aria-label="Slot machine reels">
-  {#each grid as reel, reelIndex}
+  {#each extendedReels as extendedReel, reelIndex}
     <div 
       class="reel-container"
       data-reel={reelIndex}
       aria-label="Reel {reelIndex + 1}"
     >
+      <!-- Viewport that shows only visible symbols -->
       <div 
-        class="reel-column"
-        class:spinning={reelStates[reelIndex]?.isSpinning}
-        class:accelerating={reelStates[reelIndex]?.easingPhase === 'acceleration'}
-        class:decelerating={reelStates[reelIndex]?.easingPhase === 'deceleration'}
-        class:settling={reelStates[reelIndex]?.easingPhase === 'settling'}
-        data-reel={reelIndex}
+        class="reel-viewport"
+        class:spinning={currentlySpinning}
       >
-        {#each reel as symbol, rowIndex}
-          <div 
-            class="symbol-position"
-            class:symbol-element={true}
-            data-position="{reelIndex}-{rowIndex}"
-            data-reel={reelIndex}
-            data-row={rowIndex}
-          >
-            <SymbolComponent 
-              {symbol} 
-              size="medium"
-              isSpinning={reelStates[reelIndex]?.isSpinning || false}
-              position={{ reel: reelIndex, row: rowIndex, symbol }}
-              animationDelay={rowIndex * 150}
-            />
-          </div>
-        {/each}
+        <!-- Extended reel strip for seamless scrolling -->
+        <div 
+          class="reel-strip"
+          data-reel={reelIndex}
+        >
+          {#each extendedReel as symbol, symbolIndex}
+            {#if symbol}
+              <div 
+                class="symbol-position"
+                class:symbol-element={true}
+                data-position="{reelIndex}-{symbolIndex}"
+                data-reel={reelIndex}
+                data-row={symbolIndex}
+              >
+                <SymbolComponent 
+                  {symbol} 
+                  size="medium"
+                  isSpinning={false}
+                  position={{ reel: reelIndex, row: symbolIndex, symbol }}
+                  animationDelay={0}
+                />
+              </div>
+            {/if}
+          {/each}
+        </div>
+        
+        <!-- Gradient overlays for depth effect -->
+        {#if currentlySpinning}
+          <div class="reel-gradient-top" aria-hidden="true"></div>
+          <div class="reel-gradient-bottom" aria-hidden="true"></div>
+        {/if}
       </div>
       
-      <!-- Reel performance overlay (development only) -->
-      {#if reelStates[reelIndex]?.isSpinning && !preferences.batteryOptimized}
-        <div class="reel-blur-overlay" aria-hidden="true"></div>
+      <!-- Physics debug info (development only) -->
+      {#if false && preferences.highPerformance && currentlySpinning}
+        <div class="physics-debug" aria-hidden="true">
+          <span>Reel {reelIndex + 1} Spinning</span>
+        </div>
       {/if}
     </div>
   {/each}
@@ -233,79 +343,115 @@
   
   .reel-container {
     position: relative;
-    height: 100%;
+    height: 320px; /* Fixed height for 3 visible symbols + padding */
     overflow: hidden;
     border-radius: 6px;
+    background: rgba(15, 23, 42, 0.9);
   }
   
+  .reel-viewport {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    transform-style: preserve-3d;
+    transition: perspective 0.3s ease;
+  }
   
-  .reel-column {
+  .reel-viewport.spinning {
+    perspective-origin: 50% 50%;
+  }
+  
+  .reel-strip {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
     display: flex;
     flex-direction: column;
     gap: 2px;
-    height: 100%;
-    position: relative;
     transform-origin: center top;
     backface-visibility: hidden;
-    /* GPU acceleration will be set via JS when needed */
+    transform-style: preserve-3d;
+    transition: none; /* No CSS transitions - physics handles animation */
+    /* CRITICAL: Disable all CSS animations that could conflict with physics */
+    animation: none !important;
+    /* GPU optimization for smooth animation */
+    will-change: transform;
   }
   
-  /* Spinning animation phases */
-  .reel-column.spinning {
-    transition: none; /* Disable CSS transitions during JS animations */
-    /* No reel-level animation - individual symbols handle their own spinning */
+  /* Gradient overlays for depth effect */
+  .reel-gradient-top,
+  .reel-gradient-bottom {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 40px;
+    pointer-events: none;
+    z-index: 10;
+    transition: opacity 0.3s ease;
   }
   
-  .reel-column.accelerating {
-    animation: reel-accelerate 0.15s ease-out infinite;
+  .reel-gradient-top {
+    top: 0;
+    background: linear-gradient(to bottom, 
+      rgba(15, 23, 42, 0.9) 0%, 
+      rgba(15, 23, 42, 0.6) 50%,
+      transparent 100%
+    );
   }
   
-  .reel-column.decelerating {
-    animation: reel-decelerate 0.4s ease-in infinite;
+  .reel-gradient-bottom {
+    bottom: 0;
+    background: linear-gradient(to top, 
+      rgba(15, 23, 42, 0.9) 0%, 
+      rgba(15, 23, 42, 0.6) 50%,
+      transparent 100%
+    );
   }
   
-  .reel-column.settling {
-    animation: reel-settle 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  /* Direction-specific effects */
+  .reel-viewport.spin-up .reel-gradient-top {
+    opacity: 0.7;
   }
   
-  .reel-column.constant {
-    /* Individual symbols handle their own spinning animation */
+  .reel-viewport.spin-down .reel-gradient-bottom {
+    opacity: 0.7;
   }
   
   .symbol-position {
-    aspect-ratio: 1;
+    width: 100%;
+    height: 100px; /* Fixed height for consistent spacing */
     display: flex;
     align-items: center;
     justify-content: center;
     background: rgba(30, 41, 59, 0.5);
     border-radius: 8px;
     border: 1px solid rgba(51, 65, 85, 0.5);
-    transition: all 0.3s ease;
     position: relative;
     overflow: hidden;
   }
-  
   
   .symbol-position:hover {
     border-color: rgba(16, 185, 129, 0.5);
     box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
   }
   
-  /* Performance overlay for spinning reels */
-  .reel-blur-overlay {
+  /* Physics debug info */
+  .physics-debug {
     position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      0deg,
-      transparent 0%,
-      rgba(255, 255, 255, 0.1) 30%,
-      rgba(255, 255, 255, 0.2) 50%,
-      rgba(255, 255, 255, 0.1) 70%,
-      transparent 100%
-    );
-    animation: reel-blur-sweep 0.8s ease-in-out infinite;
+    bottom: 4px;
+    left: 4px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.7);
+    background: rgba(0, 0, 0, 0.7);
+    padding: 2px 4px;
+    border-radius: 3px;
     pointer-events: none;
-    z-index: 10;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
   
   /* Performance indicator (hidden by default) */
@@ -318,49 +464,6 @@
     pointer-events: none;
     z-index: 1000;
     display: none; /* Only shown in development */
-  }
-  
-  /* Animation keyframes */
-  @keyframes reel-spin-continuous {
-    0% { transform: translateY(0px); }
-    25% { transform: translateY(-25px); }
-    50% { transform: translateY(-50px); }
-    75% { transform: translateY(-75px); }
-    100% { transform: translateY(-100px); }
-  }
-  
-  @keyframes reel-accelerate {
-    0% { transform: translateY(0px); }
-    25% { transform: translateY(-10px); }
-    50% { transform: translateY(-20px); }
-    75% { transform: translateY(-30px); }
-    100% { transform: translateY(-40px); }
-  }
-  
-  @keyframes reel-decelerate {
-    0% { transform: translateY(0px); }
-    25% { transform: translateY(-20px); }
-    50% { transform: translateY(-35px); }
-    75% { transform: translateY(-45px); }
-    100% { transform: translateY(-50px); }
-  }
-  
-  @keyframes reel-settle {
-    0% { transform: translateY(0px) scaleY(1); }
-    30% { transform: translateY(-1px) scaleY(1.02); }
-    60% { transform: translateY(1px) scaleY(0.98); }
-    100% { transform: translateY(0px) scaleY(1); }
-  }
-  
-  @keyframes reel-constant {
-    0% { transform: translateY(0px); }
-    100% { transform: translateY(-80px); }
-  }
-  
-  @keyframes reel-blur-sweep {
-    0% { transform: translateY(-100%); opacity: 0; }
-    50% { opacity: 1; }
-    100% { transform: translateY(100%); opacity: 0; }
   }
   
   /* Symbol reveal animation (applied via JS) */
@@ -384,18 +487,17 @@
   
   /* Reduced motion support */
   @media (prefers-reduced-motion: reduce) {
-    .reel-column,
-    .symbol-position,
-    .reel-blur-overlay {
-      animation: none !important;
-      transition: opacity 0.3s ease !important;
+    .reel-strip {
+      transition: transform 0.3s ease !important;
     }
     
-    .reel-column.spinning {
-      opacity: 0.7;
+    .reel-viewport {
+      filter: none !important;
+      box-shadow: none !important;
     }
     
-    .reel-blur-overlay {
+    .reel-gradient-top,
+    .reel-gradient-bottom {
       display: none;
     }
   }
@@ -407,18 +509,20 @@
       background: rgba(0, 0, 0, 0.8);
     }
     
-    .reel-blur-overlay {
+    .reel-gradient-top,
+    .reel-gradient-bottom {
       display: none;
     }
   }
   
-  /* Battery optimization via CSS custom properties - applied via JS */
-  .reel-grid[data-battery-optimized="true"] .reel-column.spinning {
-    animation-duration: calc(var(--animation-duration, 0.3s) * 1.5);
-    animation-timing-function: linear;
+  /* Battery optimization */
+  .reel-grid[data-battery-optimized="true"] .reel-viewport {
+    filter: none !important;
+    box-shadow: none !important;
   }
   
-  .reel-grid[data-battery-optimized="true"] .reel-blur-overlay {
+  .reel-grid[data-battery-optimized="true"] .reel-gradient-top,
+  .reel-grid[data-battery-optimized="true"] .reel-gradient-bottom {
     display: none;
   }
   

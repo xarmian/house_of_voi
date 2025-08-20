@@ -5,6 +5,13 @@ export interface ReelAnimationState {
   blur: number;
   offset: number;
   easingPhase: 'acceleration' | 'constant' | 'deceleration' | 'settling';
+  // Physics properties for realistic spinning
+  velocity: number;
+  acceleration: number;
+  targetPosition: number;
+  currentPosition: number;
+  maxVelocity: number;
+  friction: number;
 }
 
 export interface SpinSequence {
@@ -18,7 +25,20 @@ export interface SpinSequence {
     maxSpeed: number;
     deceleration: number;
     settleBounciness: number;
+    settleStiffness: number;
+    settleDamping: number;
   };
+}
+
+export interface ReelPhysicsConfig {
+  acceleration: number;
+  maxVelocity: number | number[]; // Single value or array for individual reel speeds
+  deceleration: number;
+  friction: number;
+  bounceAmplitude: number;
+  bounceFrequency: number;
+  bounceDamping: number;
+  spinPattern: 'alternating' | 'same' | 'random';
 }
 
 export interface CelebrationEffect {

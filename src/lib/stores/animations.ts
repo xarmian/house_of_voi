@@ -55,13 +55,20 @@ function createAnimationPreferences() {
 
 // Reel animation states for each of the 5 reels
 function createReelAnimationStore() {
-  const initialState: ReelAnimationState[] = Array(5).fill(null).map(() => ({
+  const initialState: ReelAnimationState[] = Array(5).fill(null).map((_, index) => ({
     isSpinning: false,
     spinSpeed: 0,
-    spinDirection: 'down' as const,
+    spinDirection: index % 2 === 0 ? 'down' : 'up', // Alternating directions
     blur: 0,
     offset: 0,
-    easingPhase: 'constant' as const  // Changed from 'acceleration' to 'constant' to prevent initial animation
+    easingPhase: 'constant' as const,
+    // Physics properties
+    velocity: 0,
+    acceleration: 0,
+    targetPosition: 0,
+    currentPosition: 0,
+    maxVelocity: 3000,
+    friction: 0.95
   }));
 
   const { subscribe, set, update } = writable(initialState);
@@ -79,6 +86,7 @@ function createReelAnimationStore() {
           spinSpeed: 100,
           blur: 3,
           easingPhase: 'acceleration',
+          acceleration: 2500, // Default acceleration
           ...config
         };
         return newReels;
@@ -94,6 +102,11 @@ function createReelAnimationStore() {
       });
     },
 
+    // Update all reels at once (for physics engine)
+    updateAllReels: (newStates: ReelAnimationState[]) => {
+      set(newStates);
+    },
+
     // Stop spinning a specific reel
     stopReelSpin: (reelIndex: number) => {
       update(reels => {
@@ -104,7 +117,9 @@ function createReelAnimationStore() {
           spinSpeed: 0,
           blur: 0,
           offset: 0,
-          easingPhase: 'acceleration'
+          velocity: 0,
+          acceleration: 0,
+          easingPhase: 'constant'
         };
         return newReels;
       });
@@ -112,7 +127,11 @@ function createReelAnimationStore() {
 
     // Stop all reels
     stopAllReels: () => {
-      set(initialState);
+      update(reels => reels.map((reel, index) => ({
+        ...initialState[index],
+        currentPosition: reel.currentPosition, // Preserve position
+        targetPosition: reel.targetPosition
+      })));
     },
 
     // Start sequence with staggered timing
@@ -125,6 +144,8 @@ function createReelAnimationStore() {
               ...newReels[sequence.reelIndex],
               isSpinning: true,
               spinSpeed: sequence.physics.maxSpeed,
+              maxVelocity: sequence.physics.maxSpeed,
+              acceleration: sequence.physics.acceleration,
               blur: 3,
               easingPhase: 'acceleration'
             };
@@ -132,6 +153,16 @@ function createReelAnimationStore() {
           });
         }, sequence.startDelay);
       });
+    },
+
+    // Get current state snapshot
+    getSnapshot: () => {
+      let currentState: ReelAnimationState[] = [];
+      const unsubscribe = subscribe(state => {
+        currentState = [...state];
+      });
+      unsubscribe();
+      return currentState;
     }
   };
 }

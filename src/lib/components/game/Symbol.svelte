@@ -36,12 +36,12 @@
     large: 'w-16 h-16'
   }[size];
   
-  $: rarityGlow = {
+  $: rarityGlow = symbol?.rarity ? {
     common: '',
     uncommon: 'shadow-green-500/20',
     rare: 'shadow-blue-500/30',
     legendary: 'shadow-purple-500/40'
-  }[symbol.rarity];
+  }[symbol.rarity] : '';
   
   // Determine win effect level based on multiplier
   $: if (winMultiplier) {
@@ -131,32 +131,37 @@
   on:keydown={(e) => e.key === 'Enter' && handleClick()}
   role="button"
   tabindex={position ? 0 : -1}
-  style="--symbol-color: {symbol.color}; --glow-color: {symbol.glowColor}; --animation-delay: {animationDelay}ms;"
-  aria-label="{symbol.displayName}{isWinning ? ' - Winning symbol!' : ''}"
+  style="--symbol-color: {symbol?.color || '#6b7280'}; --glow-color: {symbol?.glowColor || '#9ca3af'}; --animation-delay: {animationDelay}ms;"
+  aria-label="{symbol?.displayName || 'Symbol'}{isWinning ? ' - Winning symbol!' : ''}"
 >
   <!-- Symbol image -->
   <div class="symbol-image-wrapper">
-    {#if isRevealing && !reduceMotion && !isSpinning}
-      <img
-        src={symbol.image}
-        alt={symbol.displayName}
-        class="symbol-image {rarityGlow}"
-        class:spinning-symbol={isSpinning}
-        in:fly={{ y: 20, duration: 400, delay: animationDelay, easing: backOut }}
-        out:scale={{ duration: 200, start: 1.1 }}
-      />
+    {#if symbol?.image}
+      {#if isRevealing && !reduceMotion && !isSpinning}
+        <img
+          src={symbol.image}
+          alt={symbol.displayName || 'Symbol'}
+          class="symbol-image {rarityGlow}"
+          in:fly={{ y: 20, duration: 400, delay: animationDelay, easing: backOut }}
+          out:scale={{ duration: 200, start: 1.1 }}
+        />
+      {:else}
+        <img
+          src={symbol.image}
+          alt={symbol.displayName || 'Symbol'}
+          class="symbol-image {rarityGlow}"
+        />
+      {/if}
     {:else}
-      <img
-        src={symbol.image}
-        alt={symbol.displayName}
-        class="symbol-image {rarityGlow}"
-        class:spinning-symbol={isSpinning}
-      />
+      <!-- Fallback for missing symbol -->
+      <div class="symbol-placeholder">
+        <div class="placeholder-content"></div>
+      </div>
     {/if}
   </div>
   
   <!-- Rarity indicator -->
-  {#if symbol.rarity !== 'common' && !isSpinning}
+  {#if symbol?.rarity && symbol.rarity !== 'common' && !isSpinning}
     <div 
       class="rarity-indicator rarity-{symbol.rarity}"
       in:scale={{ duration: 300, delay: animationDelay + 200, start: 0 }}
@@ -175,7 +180,7 @@
   {/if}
   
   <!-- Standard multiplier display -->
-  {#if showMultiplier && symbol.multipliers[3] && !isSpinning && !showWinEffect}
+  {#if showMultiplier && symbol?.multipliers?.[3] && !isSpinning && !showWinEffect}
     <div class="multiplier-badge" in:fade={{ duration: 300 }}>
       {symbol.multipliers[3]}x
     </div>
@@ -243,11 +248,10 @@
     /* Container stays stable, individual symbols handle their own spinning effects */
   }
   
-  .spinning-symbol {
-    animation: symbol-rotate-spin 0.2s linear infinite;
-    animation-delay: var(--animation-delay, 0ms);
-    transform-origin: center center;
-    backface-visibility: hidden;
+  /* Removed individual symbol spinning - now handled by parent reel physics */
+  .symbol-container.spinning .symbol-image {
+    /* Symbol stays stable while parent reel moves */
+    transform: none;
   }
   
   .symbol-container.highlighted {
@@ -493,23 +497,7 @@
     100% { transform: translateX(100%); }
   }
   
-  @keyframes symbol-rotate-spin {
-    0% { 
-      transform: rotateY(0deg) rotateX(0deg);
-    }
-    25% { 
-      transform: rotateY(90deg) rotateX(15deg);
-    }
-    50% { 
-      transform: rotateY(180deg) rotateX(0deg);
-    }
-    75% { 
-      transform: rotateY(270deg) rotateX(-15deg);
-    }
-    100% { 
-      transform: rotateY(360deg) rotateX(0deg);
-    }
-  }
+  /* Removed symbol-rotate-spin animation - symbols no longer spin individually */
   
   @keyframes win-small {
     0% { transform: scale(1); }

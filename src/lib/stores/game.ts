@@ -1,6 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import type { SlotSymbol, GameGrid, SpinAnimation, PaylineHighlight } from '$lib/types/symbols';
-import { getSymbol, getRandomSymbol } from '$lib/constants/symbols';
+import { getSymbol, getDeterministicReelSymbol } from '$lib/constants/symbols';
 
 interface GameState {
   grid: GameGrid;
@@ -16,13 +16,13 @@ interface GameState {
 }
 
 function createGameStore() {
-  // Initialize with empty grid
+  // Initialize with deterministic grid using modulo approach
   const initialGrid: GameGrid = {
-    reels: Array(5).fill(null).map(() => 
-      Array(100).fill(null).map(() => getRandomSymbol())
+    reels: Array(5).fill(null).map((_, reelIndex) => 
+      Array(100).fill(null).map((_, symbolIndex) => getDeterministicReelSymbol(reelIndex, symbolIndex))
     ),
-    visibleGrid: Array(5).fill(null).map(() => 
-      Array(3).fill(null).map(() => getRandomSymbol())
+    visibleGrid: Array(5).fill(null).map((_, reelIndex) => 
+      Array(3).fill(null).map((_, symbolIndex) => getDeterministicReelSymbol(reelIndex, symbolIndex))
     )
   };
 
@@ -42,16 +42,16 @@ function createGameStore() {
   return {
     subscribe,
     
-    // Initialize game with random symbols
+    // Initialize game with deterministic symbols using modulo approach
     initializeGrid() {
       update(state => ({
         ...state,
         grid: {
-          reels: Array(5).fill(null).map(() => 
-            Array(100).fill(null).map(() => getRandomSymbol())
+          reels: Array(5).fill(null).map((_, reelIndex) => 
+            Array(100).fill(null).map((_, symbolIndex) => getDeterministicReelSymbol(reelIndex, symbolIndex))
           ),
-          visibleGrid: Array(5).fill(null).map(() => 
-            Array(3).fill(null).map(() => getRandomSymbol())
+          visibleGrid: Array(5).fill(null).map((_, reelIndex) => 
+            Array(3).fill(null).map((_, symbolIndex) => getDeterministicReelSymbol(reelIndex, symbolIndex))
           )
         }
       }));
@@ -65,21 +65,18 @@ function createGameStore() {
           return state;
         }
 
-        // Generate final symbols if not provided
-        const finalGrid = finalSymbols 
-          ? finalSymbols.map(reel => reel.map(symbolId => getSymbol(symbolId)))
-          : Array(5).fill(null).map(() => 
-              Array(3).fill(null).map(() => getRandomSymbol())
-            );
+        // Don't generate random symbols - physics engine handles animation
+        // Only create animations if final symbols are provided
+        const animations: SpinAnimation[] = finalSymbols 
+          ? finalSymbols.map((reel, index) => ({
+              reelIndex: index,
+              duration: 1000 + (index * 200), // Staggered timing
+              delay: index * 100,
+              finalSymbols: reel.map(symbolId => getSymbol(symbolId))
+            }))
+          : []; // No animations during physics spinning
 
-        // Create staggered spin animations
-        const animations: SpinAnimation[] = Array(5).fill(null).map((_, index) => ({
-          reelIndex: index,
-          duration: 1000 + (index * 200), // Staggered timing
-          delay: index * 100,
-          finalSymbols: finalGrid[index]
-        }));
-
+        // Starting spin animation
         return {
           ...state,
           isSpinning: true,
@@ -103,6 +100,7 @@ function createGameStore() {
           reel.map(symbolId => getSymbol(symbolId))
         );
 
+        // Completing spin animation
         return {
           ...state,
           isSpinning: false,
@@ -111,39 +109,6 @@ function createGameStore() {
           grid: {
             ...state.grid,
             visibleGrid: newVisibleGrid
-          }
-        };
-      });
-    },
-
-    // Continue spinning animation (for continuous spin effect)
-    continueSpinning(spinId: string) {
-      update(state => {
-        // Only continue if this is the current spin and we're waiting for outcome
-        if (state.currentSpinId !== spinId || !state.waitingForOutcome) {
-          return state;
-        }
-
-        // Generate new random symbols for continuous spinning
-        const randomGrid = Array(5).fill(null).map(() => 
-          Array(3).fill(null).map(() => getRandomSymbol())
-        );
-
-        // Restart spin animations
-        const animations: SpinAnimation[] = Array(5).fill(null).map((_, index) => ({
-          reelIndex: index,
-          duration: 1000 + (index * 200),
-          delay: index * 100,
-          finalSymbols: randomGrid[index]
-        }));
-
-        return {
-          ...state,
-          isSpinning: true,
-          spinAnimations: animations,
-          grid: {
-            ...state.grid,
-            visibleGrid: randomGrid
           }
         };
       });

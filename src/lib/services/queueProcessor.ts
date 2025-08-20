@@ -35,6 +35,15 @@ export class QueueProcessor {
       currentSpins = state.spins;
     });
     unsubscribe();
+    
+    // Skip processing if queue is empty or only has completed/failed spins
+    const activeSpins = currentSpins.filter(spin => 
+      ![SpinStatus.COMPLETED, SpinStatus.FAILED, SpinStatus.EXPIRED].includes(spin.status)
+    );
+    
+    if (activeSpins.length === 0) {
+      return; // Nothing to process
+    }
 
     // Process each spin based on its status (skip completed/failed spins)
     for (const spin of currentSpins) {
