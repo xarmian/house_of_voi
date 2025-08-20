@@ -121,6 +121,39 @@ export class BlockchainService {
     }
 
     try {
+      // First check if the bet still exists
+      let betExists = true;
+      try {
+        await algorandService.getBetInfo(spin.betKey);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('Bet not found') || 
+            errorMessage.includes('box not found') ||
+            errorMessage.includes('status 404')) {
+          betExists = false;
+        } else {
+          throw error; // Re-throw if it's a different error
+        }
+      }
+      
+      if (!betExists) {
+        console.log('📦 Bet no longer exists - treating as already completed');
+        
+        queueStore.updateSpin({
+          id: spin.id,
+          status: SpinStatus.COMPLETED,
+          data: {
+            claimTxId: 'bet-not-found',
+            totalPayout: 0,
+            note: 'Bet box not found - likely already processed by background service'
+          }
+        });
+        
+        // Refresh wallet balance
+        walletStore.refreshBalance();
+        return;
+      }
+      
       const isReady = await algorandService.isBetReadyToClaim(spin.betKey);
       
       if (isReady) {
@@ -134,13 +167,14 @@ export class BlockchainService {
         const totalBet = spin.betPerLine * spin.selectedPaylines;
         const profit = winnings - totalBet;
         
-        console.log('🎰 SPIN OUTCOME:');
+        console.log('🎰 SPIN OUTCOME DETECTED - UPDATING UI IMMEDIATELY:');
         console.log(`💰 Bet: ${totalBet.toLocaleString()} microVOI (${(totalBet / 1000000).toFixed(6)} VOI)`);
         console.log(`🎊 Won: ${winnings.toLocaleString()} microVOI (${(winnings / 1000000).toFixed(6)} VOI)`);
         console.log(`📊 Profit: ${profit >= 0 ? '+' : ''}${profit.toLocaleString()} microVOI (${(profit / 1000000).toFixed(6)} VOI)`);
         console.log(`🎲 Grid: "${gridOutcome.gridString || 'N/A'}"`);
         console.log(`📋 Bet Key: ${spin.betKey?.slice(0, 16)}...`);
         console.log(`🔄 Paylines: ${spin.selectedPaylines}`);
+        console.log(`⏰ Status: Moving to READY_TO_CLAIM with winnings visible immediately`);
         
         if (profit > 0) {
           console.log('🎉 WINNER! 🎉');
@@ -283,6 +317,33 @@ export class BlockchainService {
     } catch (error) {
       console.error('Error submitting claim:', error);
       
+      // Check if this is a "box not found" error (404) - this means the box was already claimed by another process
+      const errorMessage = this.formatError(error);
+      const isBoxNotFound = errorMessage.includes('box not found') || 
+                           errorMessage.includes('status 404') ||
+                           (error as any)?.message?.includes('box not found');
+      
+      if (isBoxNotFound) {
+        console.log('📦 Box not found - treating as already claimed');
+        
+        // Update spin as completed since the box doesn't exist (already claimed)
+        queueStore.updateSpin({
+          id: spin.id,
+          status: SpinStatus.COMPLETED,
+          data: {
+            claimTxId: 'already-claimed',
+            totalPayout: 0,
+            isAutoClaimInProgress: undefined,
+            note: 'Box not found - likely already claimed by background process'
+          }
+        });
+        
+        // Refresh wallet balance in case the claim was processed elsewhere
+        walletStore.refreshBalance();
+        
+        return; // Early return to avoid the error handling below
+      }
+      
       // If this was a manual retry (claimRetryCount was reset), don't revert to READY_TO_CLAIM
       // Instead, keep as CLAIMING with error so user can retry again
       const isManualRetry = (spin.claimRetryCount || 0) === 0;
@@ -291,7 +352,7 @@ export class BlockchainService {
         id: spin.id,
         status: isManualRetry ? SpinStatus.CLAIMING : SpinStatus.READY_TO_CLAIM,
         data: {
-          error: this.formatError(error),
+          error: errorMessage,
           isAutoClaimInProgress: undefined
         }
       });
@@ -304,13 +365,22 @@ export class BlockchainService {
   /**
    * Check transaction status
    */
-  async checkTransactionStatus(txId: string): Promise<boolean> {
+  async checkTransactionStatus(txId: string): Promise<{confirmed: boolean, failed: boolean, pending: boolean}> {
     try {
       const status = await algorandService.getTransactionStatus(txId);
-      return status.confirmed;
+      return {
+        confirmed: status.confirmed,
+        failed: status.failed || false,
+        pending: !status.confirmed && !status.failed
+      };
     } catch (error) {
       console.error('Error checking transaction status:', error);
-      return false;
+      // If we can't check the status, assume it failed for retry purposes
+      return {
+        confirmed: false,
+        failed: true,
+        pending: false
+      };
     }
   }
 
@@ -393,16 +463,28 @@ export class BlockchainService {
       
       // Get paylines from the contract
       const paylines = await algorandService.getPaylines(userAddress);
+      
+      // Convert 2D grid to 1D string for column-major processing
+      // grid[col][row] -> position col*3 + row in column-major format
+      let gridString = '';
+      for (let col = 0; col < 5; col++) {
+        for (let row = 0; row < 3; row++) {
+          gridString += grid[col][row];
+        }
+      }
 
       for (let line = 0; line < Math.min(selectedPaylines, paylines.length); line++) {
         const payline = paylines[line];
-        const firstSymbol = grid[0][payline[0]];
+        // Column-major positioning: first symbol at column 0, row payline[0]
+        const firstPos = 0 * 3 + payline[0];
+        const firstSymbol = gridString[firstPos];
         
         if (!['A', 'B', 'C', 'D'].includes(firstSymbol)) continue;
 
         let consecutiveCount = 1;
-        for (let reel = 1; reel < 5; reel++) {
-          if (grid[reel][payline[reel]] === firstSymbol) {
+        for (let col = 1; col < 5; col++) {
+          const pos = col * 3 + payline[col]; // Column-major: column * 3 + row
+          if (gridString[pos] === firstSymbol) {
             consecutiveCount++;
           } else {
             break;

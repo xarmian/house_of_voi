@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { fly, fade } from 'svelte/transition';
-  import { Clock, RefreshCw, TrendingUp, TrendingDown, X, Check, AlertCircle, Loader } from 'lucide-svelte';
+  import { Clock, RefreshCw, TrendingUp, TrendingDown, X, Check, AlertCircle, Loader, Info } from 'lucide-svelte';
   import { queueStore, queueStats, pendingSpins, readyToClaim, recentSpins } from '$lib/stores/queue';
   import { formatVOI } from '$lib/constants/betting';
   import { SpinStatus } from '$lib/types/queue';
@@ -12,6 +12,8 @@
   let autoRefreshInterval: NodeJS.Timeout;
   let showCompleted = true;
   let selectedTab: 'recent' | 'stats' = 'recent';
+  let showSpinDetailsModal = false;
+  let selectedSpin: QueuedSpin | null = null;
   
   onMount(() => {
     // Auto-refresh every 5 seconds
@@ -92,6 +94,10 @@
       case SpinStatus.READY_TO_CLAIM:
         if (spin && (spin.claimRetryCount || 0) >= 3) {
           return 'Manual Claim Required';
+        }
+        // For losing spins, show "Processing..." instead of "Ready to Claim"
+        if (spin && typeof spin.winnings === 'number' && spin.winnings === 0) {
+          return 'Processing...';
         }
         return 'Ready to Claim';
       case SpinStatus.CLAIMING:
@@ -192,6 +198,24 @@
   function clearCompleted() {
     queueStore.clearOldSpins(0); // Clear all completed spins
   }
+
+  function openSpinDetails(spin: QueuedSpin) {
+    selectedSpin = spin;
+    showSpinDetailsModal = true;
+  }
+
+  function closeSpinDetails() {
+    selectedSpin = null;
+    showSpinDetailsModal = false;
+  }
+
+  function getExplorerUrl(txId: string): string {
+    return `https://block.voi.network/explorer/transaction/${txId}`;
+  }
+
+  function formatTxId(txId: string): string {
+    return txId.length > 16 ? `${txId.slice(0, 8)}...${txId.slice(-8)}` : txId;
+  }
   
   $: allRecentSpins = (() => {
     // Create a Map to deduplicate by ID, ensuring each spin appears only once
@@ -216,6 +240,11 @@
   $: largestWin = Math.max(0, ...$queueStats.totalSpins > 0 ? allRecentSpins.filter(s => s.winnings).map(s => s.winnings!) : [0]);
   $: totalWins = allRecentSpins.filter(s => s.winnings && s.winnings > 0).length;
   $: winRate = $queueStats.totalSpins > 0 ? (totalWins / $queueStats.totalSpins) * 100 : 0;
+  
+  // Filter ready to claim spins to only include winning spins (winnings > 0)
+  $: readyToClaimWinners = $readyToClaim.filter(spin => 
+    typeof spin.winnings === 'number' && spin.winnings > 0
+  );
 </script>
 
 <div class="game-queue card">
@@ -286,20 +315,20 @@
     </button>
   </div>
   
-  <!-- Ready to Claim Banner -->
-  {#if $readyToClaim.length > 0}
+  <!-- Ready to Claim Banner - Only show for winning spins -->
+  {#if readyToClaimWinners.length > 0}
     <div class="claim-banner" in:fly={{ y: -20, duration: 300 }}>
       <div class="flex items-center gap-2">
         <AlertCircle class="w-4 h-4 text-yellow-400" />
         <span class="text-sm font-medium text-white">
-          {$readyToClaim.length} spin{$readyToClaim.length > 1 ? 's' : ''} ready to claim
+          {readyToClaimWinners.length} winning spin{readyToClaimWinners.length > 1 ? 's' : ''} ready to claim
         </span>
       </div>
       <button
-        on:click={() => $readyToClaim.forEach(spin => handleClaimSpin(spin))}
+        on:click={() => readyToClaimWinners.forEach(spin => handleClaimSpin(spin))}
         class="claim-all-button"
       >
-        Claim All
+        Claim Winnings
       </button>
     </div>
   {/if}
@@ -329,6 +358,17 @@
               <svelte:component this={getStatusIcon(spin.status)} class="w-4 h-4" />
             {/if}
           </div>
+
+          <!-- Info Button -->
+          {#if spin.txId || spin.claimTxId || spin.commitmentRound || spin.outcomeRound}
+            <button 
+              class="info-button"
+              on:click|stopPropagation={() => openSpinDetails(spin)}
+              title="View spin details"
+            >
+              <Info class="w-3 h-3" />
+            </button>
+          {/if}
           
           <!-- Spin Details -->
           <div class="spin-details">
@@ -351,10 +391,17 @@
           
           <!-- Result / Actions -->
           <div class="spin-result">
-            {#if spin.status === SpinStatus.COMPLETED && spin.winnings}
-              <div class="win-amount text-green-400">
-                +{formatVOI(spin.winnings)} VOI
-              </div>
+            {#if spin.status === SpinStatus.COMPLETED && typeof spin.winnings === 'number'}
+              <!-- Show final winnings for completed spins -->
+              {#if spin.winnings > 0}
+                <div class="win-amount text-green-400">
+                  +{formatVOI(spin.winnings)} VOI
+                </div>
+              {:else}
+                <div class="loss-amount text-red-400">
+                  Loss
+                </div>
+              {/if}
             {:else if (spin.status === SpinStatus.READY_TO_CLAIM || spin.status === SpinStatus.CLAIMING) && typeof spin.winnings === 'number'}
               <!-- Show win/loss amount immediately when outcome is known -->
               <div class="result-display">
@@ -364,10 +411,11 @@
                   </div>
                 {:else}
                   <div class="loss-amount text-red-400">
-                    {formatVOI(spin.winnings)} VOI
+                    Loss
                   </div>
                 {/if}
-                {#if spin.status === SpinStatus.READY_TO_CLAIM && !spin.isAutoClaimInProgress}
+                {#if spin.status === SpinStatus.READY_TO_CLAIM && !spin.isAutoClaimInProgress && spin.winnings > 0}
+                  <!-- Only show claim button for winning spins -->
                   <button
                     on:click={() => handleClaimSpin(spin)}
                     class="claim-button"
@@ -375,17 +423,21 @@
                   >
                     Claim
                   </button>
-                {:else if spin.status === SpinStatus.READY_TO_CLAIM && spin.isAutoClaimInProgress}
+                {:else if spin.status === SpinStatus.READY_TO_CLAIM && spin.isAutoClaimInProgress && spin.winnings > 0}
                   <div class="text-xs text-blue-400 font-medium" style="margin-top: 0.25rem;">
                     Auto-claiming...
+                  </div>
+                {:else if spin.status === SpinStatus.READY_TO_CLAIM && spin.winnings === 0}
+                  <!-- For losing spins, show processing status -->
+                  <div class="text-xs text-blue-400 font-medium" style="margin-top: 0.25rem;">
                   </div>
                 {:else if spin.status === SpinStatus.CLAIMING && !spin.error}
                   <div class="text-xs font-medium" style="margin-top: 0.25rem;"
                        class:text-blue-400={spin.winnings === 0}
                        class:text-orange-400={spin.winnings !== 0}>
-                    {spin.winnings === 0 ? 'Processing...' : 'Claiming...'}
                   </div>
-                {:else if spin.status === SpinStatus.CLAIMING && spin.error}
+                {:else if spin.status === SpinStatus.CLAIMING && spin.error && spin.winnings > 0}
+                  <!-- Only show retry button for winning spins with errors -->
                   <button
                     on:click={() => handleRetryClaim(spin)}
                     class="retry-button"
@@ -396,23 +448,32 @@
                 {/if}
               </div>
             {:else if spin.status === SpinStatus.READY_TO_CLAIM && !spin.isAutoClaimInProgress}
-              <button
-                on:click={() => handleClaimSpin(spin)}
-                class="claim-button"
-              >
-                Claim
-              </button>
+              <!-- Only show claim button if we don't know the winnings yet, or if it's a winning spin -->
+              {#if typeof spin.winnings !== 'number' || spin.winnings > 0}
+                <button
+                  on:click={() => handleClaimSpin(spin)}
+                  class="claim-button"
+                >
+                  Claim
+                </button>
+              {:else}
+                <div class="text-xs text-blue-400 font-medium">
+                </div>
+              {/if}
             {:else if spin.status === SpinStatus.READY_TO_CLAIM && spin.isAutoClaimInProgress}
               <div class="text-xs text-blue-400 font-medium">
                 Auto-claiming...
               </div>
             {:else if spin.status === SpinStatus.CLAIMING && spin.error}
-              <button
-                on:click={() => handleRetryClaim(spin)}
-                class="retry-button"
-              >
-                Retry Claim
-              </button>
+              <!-- Only show retry for winning spins -->
+              {#if typeof spin.winnings !== 'number' || spin.winnings > 0}
+                <button
+                  on:click={() => handleRetryClaim(spin)}
+                  class="retry-button"
+                >
+                  Retry Claim
+                </button>
+              {/if}
             {:else if spin.status === SpinStatus.FAILED && spin.retryCount < 3}
               <button
                 on:click={() => handleRetrySpin(spin)}
@@ -420,7 +481,14 @@
               >
                 Retry
               </button>
-            {:else if [SpinStatus.COMPLETED, SpinStatus.FAILED].includes(spin.status)}
+            {:else if [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(spin.status)}
+              <!-- Show processing indicator for active spins -->
+              <div class="processing-indicator">
+                <div class="text-xs text-gray-400">
+                  Bet: {formatVOI(spin.totalBet)} VOI
+                </div>
+              </div>
+            {:else if [SpinStatus.FAILED, SpinStatus.EXPIRED].includes(spin.status)}
               <div class="loss-amount text-red-400">
                 -{formatVOI(spin.totalBet)} VOI
               </div>
@@ -510,6 +578,120 @@
     </div>
   {/if}
 </div>
+
+<!-- Spin Details Modal -->
+{#if showSpinDetailsModal && selectedSpin}
+  <div class="modal-backdrop" on:click={closeSpinDetails} transition:fade={{ duration: 200 }}>
+    <div class="modal-content" on:click|stopPropagation transition:fly={{ y: 20, duration: 300 }}>
+      <!-- Modal Header -->
+      <div class="modal-header">
+        <h3 class="modal-title">Spin Details</h3>
+        <button class="modal-close" on:click={closeSpinDetails}>
+          <X class="w-4 h-4" />
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="modal-body">
+        <!-- Basic Spin Info -->
+        <div class="detail-section">
+          <h4 class="detail-section-title">Spin Information</h4>
+          <div class="detail-grid">
+            <div class="detail-item">
+              <span class="detail-label">Bet Amount:</span>
+              <span class="detail-value">{formatVOI(selectedSpin.totalBet)} VOI</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Paylines:</span>
+              <span class="detail-value">{selectedSpin.selectedPaylines} lines</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Status:</span>
+              <span class="detail-value {getStatusColor(selectedSpin.status)}">{getStatusText(selectedSpin.status, selectedSpin)}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Timestamp:</span>
+              <span class="detail-value">{new Date(selectedSpin.timestamp).toLocaleString()}</span>
+            </div>
+            {#if typeof selectedSpin.winnings === 'number'}
+              <div class="detail-item">
+                <span class="detail-label">Winnings:</span>
+                <span class="detail-value" class:text-green-400={selectedSpin.winnings > 0} class:text-red-400={selectedSpin.winnings <= 0}>
+                  {selectedSpin.winnings > 0 ? '+' : ''}{formatVOI(selectedSpin.winnings)} VOI
+                </span>
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Blockchain Details -->
+        {#if selectedSpin.txId || selectedSpin.claimTxId || selectedSpin.commitmentRound || selectedSpin.outcomeRound}
+          <div class="detail-section">
+            <h4 class="detail-section-title">Blockchain Details</h4>
+            <div class="detail-grid">
+              {#if selectedSpin.commitmentRound}
+                <div class="detail-item">
+                  <span class="detail-label">Block Number (Commitment):</span>
+                  <span class="detail-value font-mono">{selectedSpin.commitmentRound}</span>
+                </div>
+              {/if}
+              {#if selectedSpin.outcomeRound}
+                <div class="detail-item">
+                  <span class="detail-label">Block Number (Outcome):</span>
+                  <span class="detail-value font-mono">{selectedSpin.outcomeRound}</span>
+                </div>
+              {/if}
+              {#if selectedSpin.txId}
+                <div class="detail-item full-width">
+                  <span class="detail-label">Transaction ID:</span>
+                  <div class="tx-link-container">
+                    <span class="detail-value font-mono tx-id">{formatTxId(selectedSpin.txId)}</span>
+                    <a 
+                      href={getExplorerUrl(selectedSpin.txId)} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      class="explorer-link"
+                      title="View on block explorer"
+                    >
+                      View on Explorer
+                    </a>
+                  </div>
+                </div>
+              {/if}
+              {#if selectedSpin.claimTxId}
+                <div class="detail-item full-width">
+                  <span class="detail-label">Claim Transaction ID:</span>
+                  <div class="tx-link-container">
+                    <span class="detail-value font-mono tx-id">{formatTxId(selectedSpin.claimTxId)}</span>
+                    <a 
+                      href={getExplorerUrl(selectedSpin.claimTxId)} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      class="explorer-link"
+                      title="View on block explorer"
+                    >
+                      View on Explorer
+                    </a>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Error Information -->
+        {#if selectedSpin.error}
+          <div class="detail-section">
+            <h4 class="detail-section-title text-red-400">Error Details</h4>
+            <div class="error-message">
+              {selectedSpin.error}
+            </div>
+          </div>
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .game-queue {
@@ -637,6 +819,10 @@
     @apply bg-gray-600 hover:bg-gray-700 text-white text-xs font-semibold px-3 py-1 rounded-md transition-colors;
   }
   
+  .processing-indicator {
+    @apply flex flex-col items-end gap-1 text-right;
+  }
+  
   .empty-state {
     @apply text-center py-12 px-4;
   }
@@ -713,5 +899,97 @@
     .stat-card.wide {
       @apply col-span-1;
     }
+  }
+
+  /* Info Button */
+  .info-button {
+    @apply flex-shrink-0 p-1 rounded-full bg-gray-600/50 hover:bg-gray-500/70 text-gray-300 hover:text-white transition-all duration-200 opacity-60 hover:opacity-100;
+  }
+
+  /* Modal Styles */
+  .modal-backdrop {
+    @apply fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4;
+  }
+
+  .modal-content {
+    @apply bg-slate-800 border border-slate-600 rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden;
+  }
+
+  .modal-header {
+    @apply flex items-center justify-between p-4 border-b border-slate-600;
+  }
+
+  .modal-title {
+    @apply text-lg font-semibold text-white;
+  }
+
+  .modal-close {
+    @apply p-1 rounded-lg hover:bg-slate-700 text-gray-400 hover:text-white transition-colors;
+  }
+
+  .modal-body {
+    @apply p-4 max-h-[calc(90vh-80px)] overflow-y-auto;
+  }
+
+  .detail-section {
+    @apply mb-6 last:mb-0;
+  }
+
+  .detail-section-title {
+    @apply text-sm font-semibold text-gray-300 mb-3;
+  }
+
+  .detail-grid {
+    @apply grid grid-cols-1 sm:grid-cols-2 gap-3;
+  }
+
+  .detail-item {
+    @apply flex flex-col gap-1;
+  }
+
+  .detail-item.full-width {
+    @apply sm:col-span-2;
+  }
+
+  .detail-label {
+    @apply text-xs text-gray-400 font-medium;
+  }
+
+  .detail-value {
+    @apply text-sm text-white font-medium;
+  }
+
+  .tx-link-container {
+    @apply flex items-center justify-between gap-3 bg-slate-700/50 rounded-md p-2;
+  }
+
+  .tx-id {
+    @apply text-xs text-gray-300;
+  }
+
+  .explorer-link {
+    @apply text-xs bg-voi-600 hover:bg-voi-700 text-white px-3 py-1 rounded-md transition-colors font-medium;
+  }
+
+  .error-message {
+    @apply bg-red-900/20 border border-red-800/50 rounded-md p-3 text-sm text-red-300;
+  }
+
+  /* Custom scrollbar for modal */
+  .modal-body::-webkit-scrollbar {
+    width: 4px;
+  }
+  
+  .modal-body::-webkit-scrollbar-track {
+    background: rgba(51, 65, 85, 0.3);
+  }
+  
+  .modal-body::-webkit-scrollbar-thumb {
+    background: rgba(16, 185, 129, 0.5);
+    border-radius: 2px;
+  }
+  
+  .modal-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(16, 185, 129, 0.7);
   }
 </style>

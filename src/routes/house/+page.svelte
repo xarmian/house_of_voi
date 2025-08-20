@@ -2,8 +2,10 @@
   import { onMount } from 'svelte';
   import { Web3Wallet, selectedWallet, connectedWallets } from 'avm-wallet-svelte';
   import { ybtStore } from '$lib/stores/ybt';
+  import { walletStore } from '$lib/stores/wallet';
   import { NETWORK_CONFIG } from '$lib/constants/network';
   import YBTDashboard from '$lib/components/house/YBTDashboard.svelte';
+  import OddsAnalysis from '$lib/components/analytics/OddsAnalysis.svelte';
   import LoadingOverlay from '$lib/components/ui/LoadingOverlay.svelte';
   import algosdk from 'algosdk';
 
@@ -21,8 +23,9 @@
   const availableWallets = ['Kibisis', 'LuteWallet'];
 
   onMount(async () => {
-    // Initialize YBT store - wallet connection will be handled by avm-wallet-svelte
-    await ybtStore.initialize();
+    // Initialize both wallet systems
+    await walletStore.initialize(); // Initialize in-browser wallet for analytics
+    await ybtStore.initialize();    // Initialize YBT store - wallet connection will be handled by avm-wallet-svelte
     isLoaded = true;
   });
   
@@ -90,18 +93,90 @@
 
       <!-- YBT Dashboard -->
       {#if isWalletConnected}
-        <YBTDashboard />
-      {:else}
-        <div class="card p-8 text-center">
-          <div class="text-slate-400 mb-4">
-            <svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
-            </svg>
+        <div class="space-y-8">
+          <YBTDashboard />
+          
+          <!-- Game Analytics Section -->
+          <div class="card p-6 hidden">
+            <div class="flex items-center gap-3 mb-6">
+              <svg class="w-6 h-6 text-voi-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+              </svg>
+              <h2 class="text-2xl font-bold text-white">Game Analytics & Transparency</h2>
+            </div>
+            
+            <div class="text-slate-300 mb-6">
+              <p class="mb-2">
+                As a YBT holder, you have access to detailed game analytics and performance metrics. 
+                This transparency ensures you can make informed decisions about your investment.
+              </p>
+              <p class="text-sm text-slate-400">
+                All calculations are performed using real-time blockchain data from the slot machine contract.
+              </p>
+            </div>
+            
+            <OddsAnalysis compact={false} showHouseMetrics={true} isModal={false} />
           </div>
-          <h3 class="text-xl font-semibold text-white mb-2">Connect Your Wallet</h3>
-          <p class="text-slate-400">
-            Connect your wallet above to view and manage your YBT shares.
-          </p>
+        </div>
+      {:else}
+        <div class="space-y-8">
+          <!-- Connect Wallet Message -->
+          <div class="card p-8 text-center">
+            <div class="text-slate-400 mb-4">
+              <svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+              </svg>
+            </div>
+            <h3 class="text-xl font-semibold text-white mb-2">Connect Your Wallet</h3>
+            <p class="text-slate-400">
+              Connect your wallet above to view and manage your YBT shares and access detailed game analytics.
+            </p>
+          </div>
+          
+          <!-- Public Game Analytics (limited view) -->
+          <div class="card p-6">
+            <div class="flex items-center gap-3 mb-6">
+              <svg class="w-6 h-6 text-voi-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+              </svg>
+              <h2 class="text-2xl font-bold text-white">Game Transparency</h2>
+            </div>
+            
+            <div class="text-slate-300 mb-6">
+              <p class="mb-2">
+                Our slot machine operates with full transparency. All game mechanics, odds, and payouts 
+                are calculated from verifiable blockchain data.
+              </p>
+              <p class="text-sm text-slate-400">
+                Connect your wallet above to access detailed analytics and house performance metrics.
+              </p>
+            </div>
+            
+            <!-- Placeholder for public view -->
+            <div class="bg-slate-700/30 rounded-lg p-8 text-center">
+              <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              <h3 class="text-lg font-semibold text-white mb-2">Provably Fair Gaming</h3>
+              <p class="text-slate-400 mb-4">
+                All odds calculations are performed using real contract data. No hidden mechanics or server-side randomness.
+              </p>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                <div class="bg-slate-800/50 rounded-lg p-4">
+                  <div class="text-2xl font-bold text-voi-400 mb-1">100%</div>
+                  <div class="text-sm text-gray-400">Transparent</div>
+                </div>
+                <div class="bg-slate-800/50 rounded-lg p-4">
+                  <div class="text-2xl font-bold text-blue-400 mb-1">20</div>
+                  <div class="text-sm text-gray-400">Paylines</div>
+                </div>
+                <div class="bg-slate-800/50 rounded-lg p-4">
+                  <div class="text-2xl font-bold text-yellow-400 mb-1">1000x</div>
+                  <div class="text-sm text-gray-400">Max Multiplier</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       {/if}
     </div>

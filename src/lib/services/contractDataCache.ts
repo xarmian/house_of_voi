@@ -4,6 +4,7 @@
 import { CONTRACT } from 'ulujs';
 import algosdk from 'algosdk';
 import { NETWORK_CONFIG, CONTRACT_CONFIG } from '$lib/constants/network';
+import { oddsCalculator, type OddsCalculationResult } from './oddsCalculator';
 
 // Import the actual ABI from SlotMachineClient like React component does
 import { APP_SPEC as SlotMachineAppSpec } from '../../clients/SlotMachineClient.js';
@@ -62,6 +63,7 @@ interface CacheStorage {
   paylines: CachedPaylines | null;
   multipliers: { [key: string]: CachedMultiplier };
   reelData: CachedReelData | null;
+  odds: OddsCalculationResult | null;
 }
 
 export class ContractDataCache {
@@ -70,7 +72,8 @@ export class ContractDataCache {
   private cache: CacheStorage = {
     paylines: null,
     multipliers: {},
-    reelData: null
+    reelData: null,
+    odds: null
   };
   private client: algosdk.Algodv2;
   private appId: number;
@@ -100,7 +103,7 @@ export class ContractDataCache {
       }
     } catch (error) {
       console.warn('Failed to load contract data cache:', error);
-      this.cache = { paylines: null, multipliers: {}, reelData: null };
+      this.cache = { paylines: null, multipliers: {}, reelData: null, odds: null };
     }
   }
 
@@ -131,6 +134,11 @@ export class ContractDataCache {
     // Check reel data cache
     if (this.cache.reelData && now - this.cache.reelData.timestamp > this.CACHE_DURATION) {
       this.cache.reelData = null;
+    }
+
+    // Check odds cache
+    if (this.cache.odds && now - this.cache.odds.calculatedAt > this.CACHE_DURATION) {
+      this.cache.odds = null;
     }
 
     // Check multipliers cache
@@ -451,10 +459,104 @@ export class ContractDataCache {
   }
 
   /**
+   * Get cached win odds or calculate them from current data
+   */
+  async getWinOdds(address: string): Promise<OddsCalculationResult | null> {
+    // Check cache first
+    if (this.cache.odds && this.isValidCache(this.cache.odds.calculatedAt)) {
+      console.log('📦 Using cached odds data');
+      return this.cache.odds;
+    }
+
+    // Need fresh data to calculate odds
+    try {
+      console.log('🔄 Calculating new odds from current data');
+      
+      // Get all required data in parallel
+      const [paylines, reelData] = await Promise.all([
+        this.getPaylines(address),
+        this.getReelData(address)
+      ]);
+
+      // Ensure we have all multipliers
+      const symbols = ['A', 'B', 'C', 'D'];
+      const counts = [3, 4, 5];
+      
+      const multiplierPromises: Promise<number>[] = [];
+      
+      symbols.forEach(symbol => {
+        counts.forEach(count => {
+          multiplierPromises.push(this.getPayoutMultiplier(symbol, count, address));
+        });
+      });
+
+      await Promise.all(multiplierPromises);
+
+      // Calculate odds
+      const odds = oddsCalculator.calculateOdds(reelData, this.cache.multipliers, paylines);
+      
+      // Cache the result
+      this.cache.odds = odds;
+      this.saveToStorage();
+
+      return odds;
+    } catch (error) {
+      console.error('Failed to calculate odds:', error);
+      // Return cached data even if expired as fallback
+      if (this.cache.odds) {
+        console.log('⚠️ Using expired cached odds as fallback');
+        return this.cache.odds;
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Force recalculation of odds (clears cache)
+   */
+  async recalculateOdds(address: string): Promise<OddsCalculationResult | null> {
+    this.cache.odds = null;
+    return this.getWinOdds(address);
+  }
+
+  /**
+   * Get a quick odds summary for display
+   */
+  async getOddsSummary(address: string): Promise<{
+    rtpPercentage: string;
+    hitFrequency: string;
+    mostLikelyWin: string;
+    bestPayout: string;
+  } | null> {
+    const odds = await this.getWinOdds(address);
+    if (!odds) return null;
+    
+    return oddsCalculator.getOddsSummary(odds);
+  }
+
+  /**
+   * Calculate odds for a specific bet
+   */
+  async calculateBetOdds(
+    address: string,
+    betPerLine: number,
+    selectedPaylines: number
+  ): Promise<{
+    expectedReturn: number;
+    expectedLoss: number;
+    breakEvenProbability: number;
+  } | null> {
+    const odds = await this.getWinOdds(address);
+    if (!odds) return null;
+    
+    return oddsCalculator.calculateBetOdds(odds, betPerLine, selectedPaylines);
+  }
+
+  /**
    * Clear all cached data
    */
   clearCache(): void {
-    this.cache = { paylines: null, multipliers: {}, reelData: null };
+    this.cache = { paylines: null, multipliers: {}, reelData: null, odds: null };
     if (typeof window !== 'undefined') {
       localStorage.removeItem(this.CACHE_KEY);
     }
@@ -464,11 +566,18 @@ export class ContractDataCache {
   /**
    * Get cache statistics for debugging
    */
-  getCacheStats(): { paylinesCached: boolean; reelDataCached: boolean; multipliersCached: number; cacheSize: string } {
+  getCacheStats(): { 
+    paylinesCached: boolean; 
+    reelDataCached: boolean; 
+    multipliersCached: number; 
+    oddsCached: boolean;
+    cacheSize: string;
+  } {
     const stats = {
       paylinesCached: this.cache.paylines !== null,
       reelDataCached: this.cache.reelData !== null,
       multipliersCached: Object.keys(this.cache.multipliers).length,
+      oddsCached: this.cache.odds !== null,
       cacheSize: typeof window !== 'undefined' 
         ? `${(new Blob([JSON.stringify(this.cache)]).size / 1024).toFixed(2)} KB`
         : '0 KB'
@@ -486,6 +595,10 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   (window as any).contractCache = {
     stats: () => contractDataCache.getCacheStats(),
     clear: () => contractDataCache.clearCache(),
-    preload: (address: string) => contractDataCache.preloadContractData(address)
+    preload: (address: string) => contractDataCache.preloadContractData(address),
+    odds: (address: string) => contractDataCache.getWinOdds(address),
+    summary: (address: string) => contractDataCache.getOddsSummary(address),
+    betOdds: (address: string, betPerLine: number, selectedPaylines: number) => 
+      contractDataCache.calculateBetOdds(address, betPerLine, selectedPaylines)
   };
 }

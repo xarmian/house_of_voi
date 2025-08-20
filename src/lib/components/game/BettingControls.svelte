@@ -1,16 +1,18 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
-  import { Plus, Minus, Zap, DollarSign, Info } from 'lucide-svelte';
+  import { Plus, Minus, Zap, DollarSign, BarChart3 } from 'lucide-svelte';
   import { bettingStore, betPerLineVOI, totalBetVOI, canAffordBet } from '$lib/stores/betting';
   import { walletBalance, isWalletConnected, walletAddress } from '$lib/stores/wallet';
   import { isSpinning } from '$lib/stores/game';
   import AddFundsModal from '$lib/components/wallet/AddFundsModal.svelte';
+  import OddsAnalysis from '$lib/components/analytics/OddsAnalysis.svelte';
   import { BETTING_CONSTANTS, formatVOI } from '$lib/constants/betting';
   import { 
     animationPreferences, 
     shouldReduceAnimations 
   } from '$lib/stores/animations';
   import { triggerTouchFeedback } from '$lib/utils/animations';
+  import { isSlotMachineOperational } from '$lib/stores/houseBalance';
   
   const dispatch = createEventDispatcher<{
     spin: { betPerLine: number; selectedPaylines: number; totalBet: number }
@@ -22,7 +24,7 @@
   let betInputValue = $betPerLineVOI;
   let spinButtonElement: HTMLElement;
   let showAddFundsModal = false;
-  let showPaytable = false;
+  let showOddsAnalysis = false;
 
   // Subscribe to animation preferences
   $: preferences = $animationPreferences;
@@ -42,12 +44,12 @@
     }
   }
 
-  function togglePaytable() {
-    showPaytable = !showPaytable;
+  function toggleOddsAnalysis() {
+    // showOddsAnalysis = !showOddsAnalysis;
   }
   
   function handleSpin() {
-    if (!$canAffordBet || !$isWalletConnected || !$bettingStore.isValidBet || disabled) {
+    if (!$canAffordBet || !$isWalletConnected || !$bettingStore.isValidBet || disabled || !$isSlotMachineOperational) {
       // Provide feedback for invalid spin attempts
       if (spinButtonElement && preferences.hapticEnabled) {
         triggerTouchFeedback(spinButtonElement, {
@@ -133,9 +135,10 @@
     }
   }
   
-  $: spinButtonDisabled = disabled || !$canAffordBet || !$isWalletConnected || !$bettingStore.isValidBet;
+  $: spinButtonDisabled = disabled || !$canAffordBet || !$isWalletConnected || !$bettingStore.isValidBet || !$isSlotMachineOperational;
   $: spinButtonText = $isSpinning ? 'Queue Spin' : 
                      !$isWalletConnected ? 'Wallet Loading...' :
+                     !$isSlotMachineOperational ? 'Under Maintenance' :
                      !$canAffordBet ? 'Insufficient Balance' :
                      !$bettingStore.isValidBet ? 'Invalid Bet' :
                      'Spin';
@@ -150,12 +153,12 @@
       <h3 class="font-bold text-lg">Betting Controls</h3>
     </div>
     <button
-      on:click={togglePaytable}
+      on:click={toggleOddsAnalysis}
       class="flex items-center gap-2 text-gray-400 hover:text-white transition-colors px-3 py-1 rounded-md hover:bg-slate-700"
-      title="Show paytable"
+      title="Show win odds and analysis"
     >
-      <Info class="w-4 h-4" />
-      <span class="text-sm">Paytable</span>
+      <BarChart3 class="w-4 h-4" />
+      <span class="text-sm">Win Odds</span>
     </button>
   </div>
   {/if}
@@ -421,82 +424,29 @@
   />
 {/if}
 
-  <!-- Paytable Modal -->
-  {#if showPaytable}
-    <div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div class="card max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-        <div class="p-6">
-          <div class="flex items-center justify-between mb-6">
-            <h3 class="text-xl font-semibold text-white">Paytable</h3>
-            <button
-              on:click={() => showPaytable = false}
-              class="text-gray-400 hover:text-white"
-            >
-              ×
-            </button>
+<!-- Odds Analysis Modal -->
+{#if showOddsAnalysis}
+  <div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div class="card max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-6">
+          <div class="flex items-center gap-3">
+            <BarChart3 class="w-6 h-6 text-voi-400" />
+            <h3 class="text-xl font-semibold text-white">Win Odds & Analysis</h3>
           </div>
-          
-          <div class="space-y-4">
-            <div class="grid grid-cols-2 gap-4">
-              <!-- Symbol A -->
-              <div class="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
-                <div class="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <span class="text-white font-bold">A</span>
-                </div>
-                <div>
-                  <p class="text-white font-medium">Diamond</p>
-                  <p class="text-sm text-gray-400">3: 50x | 4: 200x | 5: 1000x</p>
-                </div>
-              </div>
-              
-              <!-- Symbol B -->
-              <div class="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
-                <div class="w-12 h-12 bg-yellow-600 rounded-lg flex items-center justify-center">
-                  <span class="text-white font-bold">B</span>
-                </div>
-                <div>
-                  <p class="text-white font-medium">Gold</p>
-                  <p class="text-sm text-gray-400">3: 20x | 4: 100x | 5: 500x</p>
-                </div>
-              </div>
-              
-              <!-- Symbol C -->
-              <div class="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
-                <div class="w-12 h-12 bg-gray-600 rounded-lg flex items-center justify-center">
-                  <span class="text-white font-bold">C</span>
-                </div>
-                <div>
-                  <p class="text-white font-medium">Silver</p>
-                  <p class="text-sm text-gray-400">3: 10x | 4: 50x | 5: 200x</p>
-                </div>
-              </div>
-              
-              <!-- Symbol D -->
-              <div class="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
-                <div class="w-12 h-12 bg-orange-800 rounded-lg flex items-center justify-center">
-                  <span class="text-white font-bold">D</span>
-                </div>
-                <div>
-                  <p class="text-white font-medium">Bronze</p>
-                  <p class="text-sm text-gray-400">3: 5x | 4: 20x | 5: 100x</p>
-                </div>
-              </div>
-            </div>
-            
-            <div class="border-t border-slate-700 pt-4">
-              <h4 class="text-white font-medium mb-2">How to Win</h4>
-              <ul class="text-sm text-gray-400 space-y-1">
-                <li>• Match 3 or more identical symbols on a payline</li>
-                <li>• Symbols must be consecutive from left to right</li>
-                <li>• Higher value symbols pay more</li>
-                <li>• Activate more paylines for more chances to win</li>
-              </ul>
-            </div>
-          </div>
+          <button
+            on:click={() => showOddsAnalysis = false}
+            class="text-gray-400 hover:text-white text-2xl leading-none"
+          >
+            ×
+          </button>
         </div>
+        
+        <OddsAnalysis {compact} isModal={true} />
       </div>
     </div>
-  {/if}
+  </div>
+{/if}
 
 <style>
   .betting-controls {

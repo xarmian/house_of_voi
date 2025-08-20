@@ -10,6 +10,11 @@
   import { formatVOI } from '$lib/constants/betting';
   import { WINNING_SYMBOLS } from '$lib/constants/symbols';
   import type { SlotSymbol } from '$lib/types/symbols';
+  import { 
+    isSlotMachineOperational, 
+    operationalStatusMessage, 
+    houseBalanceActions 
+  } from '$lib/stores/houseBalance';
   import ReelGrid from './ReelGrid.svelte';
   import PaylineOverlay from './PaylineOverlay.svelte';
   import BettingControls from './BettingControls.svelte';
@@ -39,6 +44,9 @@
   let lastCelebratedSpinId: string | null = null;
   let lossFeedbackTimeout: NodeJS.Timeout | null = null;
   let lastLossFeedbackSpinId: string | null = null;
+
+  // Maintenance overlay state
+  let showMaintenanceOverlay = true;
   
   // Loading state
   $: currentLoadingState = $loadingStates[0]; // Get the first loading state
@@ -48,6 +56,9 @@
     // Reset game state to ensure clean start
     gameStore.reset();
     gameStore.initializeGrid();
+    
+    // Initialize house balance monitoring
+    houseBalanceActions.initialize();
     
     // DO NOT auto-clear queue - keep for testing
     
@@ -74,6 +85,7 @@
   
   onDestroy(() => {
     queueProcessor.stop(); // Stop queue processing
+    houseBalanceActions.reset(); // Stop house balance monitoring
     if (queueUnsubscribe) queueUnsubscribe();
     if (spinningInterval) clearInterval(spinningInterval);
     if (celebrationTimeout) clearTimeout(celebrationTimeout);
@@ -97,22 +109,33 @@
   }
 
   function startContinuousSpinning(spinId: string) {
+    // ANIMATION GUARD: Don't start if another spin is already active
+    if ($currentSpinId && $currentSpinId !== spinId && $isSpinning) {
+      console.log(`Cannot start spin ${spinId} - another spin ${$currentSpinId} is active`);
+      return;
+    }
+
+    // CLEANUP: Clear any existing animation interval
+    if (spinningInterval) {
+      clearInterval(spinningInterval);
+      spinningInterval = null;
+    }
+    
     // Start the initial spin animation
     gameStore.startSpin(spinId);
     
-    // Set up continuous spinning until outcome is ready
-    if (spinningInterval) clearInterval(spinningInterval);
-    
+    // Set up continuous spinning until outcome is ready with enhanced guards
     spinningInterval = setInterval(() => {
-      // Only continue if we're waiting for outcome for this spin
+      // Only continue if we're waiting for outcome for this specific spin
       if ($currentSpinId === spinId && $waitingForOutcome) {
         gameStore.continueSpinning(spinId);
       } else {
-        // Clean up interval if no longer needed
+        // Clean up interval if conditions no longer met
         if (spinningInterval) {
           clearInterval(spinningInterval);
           spinningInterval = null;
         }
+        console.log(`Stopped continuous spinning for ${spinId} - currentSpinId: ${$currentSpinId}, waitingForOutcome: ${$waitingForOutcome}`);
       }
     }, 2000); // Continue spinning every 2 seconds
   }
@@ -149,8 +172,9 @@
       const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
       const isTooOld = isInitialMount && mostRecentSpin.timestamp < fiveMinutesAgo;
       
-      // If this spin is currently displayed or can take over, show its outcome
-      if (!isTooOld && ($currentSpinId === mostRecentSpin.id || gameStore.canTakeOverDisplay(mostRecentSpin.id))) {
+      // CRITICAL FIX: Only display outcome if this spin is currently being displayed
+      // This prevents PROCESSING spins from triggering animations for unrelated spins
+      if (!isTooOld && $currentSpinId === mostRecentSpin.id) {
         displayOutcome(mostRecentSpin);
       }
     }
@@ -166,16 +190,33 @@
     }
     
     // Check if we need to start spinning for a new pending spin
+    // IMPORTANT FIX: Exclude PROCESSING spins from auto-starting new animations
+    // PROCESSING spins should only affect animations if they're the current spin
     const pendingSpins = queueState.spins.filter((spin: any) => 
-      [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(spin.status)
+      [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING].includes(spin.status)
     );
     
+    // Check for PROCESSING spins separately - only manage them if they're current
+    const processingSpins = queueState.spins.filter((spin: any) => 
+      spin.status === SpinStatus.PROCESSING
+    );
+    
+    // If we have a current spin that's PROCESSING but got an outcome, display it
+    if ($currentSpinId) {
+      const currentSpin = queueState.spins.find((spin: any) => spin.id === $currentSpinId);
+      if (currentSpin && currentSpin.status === SpinStatus.PROCESSING && currentSpin.outcome) {
+        // This PROCESSING spin has an outcome and it's our current spin - display it
+        displayOutcome(currentSpin);
+        return; // Don't continue with other logic
+      }
+    }
+    
     if (pendingSpins.length > 0 && !$currentSpinId) {
-      // Start spinning for the most recent pending spin
+      // Start spinning for the most recent pending spin (excluding PROCESSING)
       const mostRecentPending = pendingSpins[pendingSpins.length - 1];
       startContinuousSpinning(mostRecentPending.id);
-    } else if (pendingSpins.length === 0 && $currentSpinId) {
-      // No pending spins but we still have a current spin ID - check if it should be cleared
+    } else if (pendingSpins.length === 0 && processingSpins.length === 0 && $currentSpinId) {
+      // No pending or processing spins but we still have a current spin ID - check if it should be cleared
       const currentSpin = queueState.spins.find((spin: any) => spin.id === $currentSpinId);
       if (!currentSpin || [SpinStatus.COMPLETED, SpinStatus.FAILED, SpinStatus.EXPIRED].includes(currentSpin.status)) {
         // Current spin is done, reset the display
@@ -189,32 +230,37 @@
   }
 
   function displayOutcome(spin: any) {
-    if (spin.outcome) {
-      // Stop continuous spinning
-      if (spinningInterval) {
-        clearInterval(spinningInterval);
-        spinningInterval = null;
-      }
-      
-      // Complete the spin with actual outcome
-      gameStore.completeSpin(spin.id, spin.outcome);
-      
-      // Only trigger celebrations if this is not the initial mount and we haven't already celebrated this spin
-      if (!isInitialMount && lastCelebratedSpinId !== spin.id) {
-        // Check if we have actual winnings from blockchain first
-        if (spin.winnings > 0) {
-          // Use actual winnings from blockchain
-          triggerWinCelebration({
-            amount: spin.winnings,
-            level: spin.winnings >= 100000000 ? 'jackpot' : 
-                   spin.winnings >= 50000000 ? 'large' : 
-                   spin.winnings >= 20000000 ? 'medium' : 'small'
-          }, spin.id);
-        } else {
-          // Show loss feedback immediately (but only once per spin and not on initial mount)
-          if (lastLossFeedbackSpinId !== spin.id && !isInitialMount) {
-            triggerLossFeedback(spin);
-          }
+    // CRITICAL STATE COORDINATION CHECK: Only display if this spin is current
+    if (!spin.outcome || $currentSpinId !== spin.id) {
+      console.log(`Skipping outcome display - currentSpinId: ${$currentSpinId}, spin.id: ${spin.id}, hasOutcome: ${!!spin.outcome}`);
+      return;
+    }
+
+    // ANIMATION GUARD: Prevent overlapping animations
+    if ($isSpinning && spinningInterval) {
+      // Stop any existing animation cleanly before starting new one
+      clearInterval(spinningInterval);
+      spinningInterval = null;
+    }
+    
+    // Complete the spin with actual outcome
+    gameStore.completeSpin(spin.id, spin.outcome);
+    
+    // Only trigger celebrations if this is not the initial mount and we haven't already celebrated this spin
+    if (!isInitialMount && lastCelebratedSpinId !== spin.id) {
+      // Check if we have actual winnings from blockchain first
+      if (spin.winnings > 0) {
+        // Use actual winnings from blockchain
+        triggerWinCelebration({
+          amount: spin.winnings,
+          level: spin.winnings >= 100000000 ? 'jackpot' : 
+                 spin.winnings >= 50000000 ? 'large' : 
+                 spin.winnings >= 20000000 ? 'medium' : 'small'
+        }, spin.id);
+      } else {
+        // Show loss feedback immediately (but only once per spin and not on initial mount)
+        if (lastLossFeedbackSpinId !== spin.id && !isInitialMount) {
+          triggerLossFeedback(spin);
         }
       }
     }
@@ -383,23 +429,30 @@
   <!-- Desktop: Vertical Layout -->
   <div class="hidden lg:block">
     <!-- Slot Machine Frame -->
-    <div class="relative bg-gradient-to-b from-slate-800 to-slate-900 rounded-xl p-3 shadow-2xl border border-slate-700 mb-4">
-      <div class="relative">
-        <!-- Decorative frame -->
-        <div class="absolute -inset-1 bg-gradient-to-r from-voi-600/20 to-blue-600/20 rounded-xl blur-sm"></div>
-        
-        <!-- Main game grid -->
-        <div class="relative bg-slate-900 rounded-lg p-2 border-2 border-slate-600">
-          <!-- Reel Grid -->
-          <ReelGrid grid={$currentGrid} isSpinning={$isSpinning} />
-          
-          <!-- Payline Overlay -->
-          <PaylineOverlay 
-            showPaylines={$bettingStore.selectedPaylines > 1}
-            activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
-          />
-          
-          <!-- Spinning overlay removed - symbols now show their own spinning animation -->
+    <div class="slot-machine-frame mb-4">
+      <!-- Outer decorative border with casino lights -->
+      <div class="casino-border">
+        <div class="casino-lights"></div>
+      </div>
+      
+      <!-- Machine body with metallic finish -->
+      <div class="machine-body">
+        <!-- Chrome accent frame -->
+        <div class="chrome-frame">
+          <!-- Inner shadow frame -->
+          <div class="inner-frame">
+            <!-- Main game grid -->
+            <div class="game-grid">
+              <!-- Reel Grid -->
+              <ReelGrid grid={$currentGrid} isSpinning={$isSpinning} />
+              
+              <!-- Payline Overlay -->
+              <PaylineOverlay 
+                showPaylines={$bettingStore.selectedPaylines > 1}
+                activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -412,23 +465,30 @@
   <div class="lg:hidden h-full flex flex-col">
     {#if compact}
       <!-- Slot Machine Frame - Fixed size -->
-      <div class="flex-shrink-0 relative bg-gradient-to-b from-slate-800 to-slate-900 rounded-xl p-3 shadow-2xl border border-slate-700 mb-3">
-        <div class="relative">
-          <!-- Decorative frame -->
-          <div class="absolute -inset-1 bg-gradient-to-r from-voi-600/20 to-blue-600/20 rounded-xl blur-sm"></div>
-          
-          <!-- Main game grid -->
-          <div class="relative bg-slate-900 rounded-lg p-2 border-2 border-slate-600">
-            <!-- Reel Grid -->
-            <ReelGrid grid={$currentGrid} isSpinning={$isSpinning} />
-            
-            <!-- Payline Overlay -->
-            <PaylineOverlay 
-              showPaylines={$bettingStore.selectedPaylines > 1}
-              activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
-            />
-            
-            <!-- Spinning overlay removed - symbols now show their own spinning animation -->
+      <div class="flex-shrink-0 slot-machine-frame mb-3">
+        <!-- Outer decorative border with casino lights -->
+        <div class="casino-border">
+          <div class="casino-lights"></div>
+        </div>
+        
+        <!-- Machine body with metallic finish -->
+        <div class="machine-body">
+          <!-- Chrome accent frame -->
+          <div class="chrome-frame">
+            <!-- Inner shadow frame -->
+            <div class="inner-frame">
+              <!-- Main game grid -->
+              <div class="game-grid">
+                <!-- Reel Grid -->
+                <ReelGrid grid={$currentGrid} isSpinning={$isSpinning} />
+                
+                <!-- Payline Overlay -->
+                <PaylineOverlay 
+                  showPaylines={$bettingStore.selectedPaylines > 1}
+                  activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -449,23 +509,30 @@
       <!-- Original mobile layout for non-compact -->
       <div class="space-y-4">
         <!-- Slot Machine Frame -->
-        <div class="relative bg-gradient-to-b from-slate-800 to-slate-900 rounded-2xl p-4 shadow-2xl border border-slate-700">
-          <div class="relative">
-            <!-- Decorative frame -->
-            <div class="absolute -inset-2 bg-gradient-to-r from-voi-600/20 to-blue-600/20 rounded-2xl blur-sm"></div>
-            
-            <!-- Main game grid -->
-            <div class="relative bg-slate-900 rounded-xl p-3 border-2 border-slate-600">
-              <!-- Reel Grid -->
-              <ReelGrid grid={$currentGrid} isSpinning={$isSpinning} />
-              
-              <!-- Payline Overlay -->
-              <PaylineOverlay 
-                showPaylines={$bettingStore.selectedPaylines > 1}
-                activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
-              />
-              
-              <!-- Spinning overlay removed - symbols now show their own spinning animation -->
+        <div class="slot-machine-frame">
+          <!-- Outer decorative border with casino lights -->
+          <div class="casino-border">
+            <div class="casino-lights"></div>
+          </div>
+          
+          <!-- Machine body with metallic finish -->
+          <div class="machine-body">
+            <!-- Chrome accent frame -->
+            <div class="chrome-frame">
+              <!-- Inner shadow frame -->
+              <div class="inner-frame">
+                <!-- Main game grid -->
+                <div class="game-grid">
+                  <!-- Reel Grid -->
+                  <ReelGrid grid={$currentGrid} isSpinning={$isSpinning} />
+                  
+                  <!-- Payline Overlay -->
+                  <PaylineOverlay 
+                    showPaylines={$bettingStore.selectedPaylines > 1}
+                    activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -547,6 +614,41 @@
     />
   {/if}
   
+  <!-- Maintenance Overlay -->
+  {#if !$isSlotMachineOperational && showMaintenanceOverlay}
+    <div class="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-xl">
+      <div class="bg-gradient-to-br from-orange-900/90 to-red-900/90 border border-orange-600 rounded-lg p-8 max-w-md mx-4 shadow-2xl">
+        <div class="text-center">
+          <!-- Maintenance Icon -->
+          <div class="mb-4">
+            <svg class="w-16 h-16 mx-auto text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+          </div>
+          
+          <!-- Title -->
+          <h3 class="text-orange-300 text-2xl font-bold mb-4">
+            Under Maintenance
+          </h3>
+          
+          <!-- Message -->
+          <p class="text-orange-200 text-lg leading-relaxed mb-6">
+            {$operationalStatusMessage}
+          </p>
+          
+          <!-- Close Button -->
+          <button 
+            class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 shadow-lg"
+            on:click={() => showMaintenanceOverlay = false}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+  
 
 </div>
 
@@ -555,5 +657,116 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+  }
+
+  /* Enhanced Slot Machine Frame Styling */
+  .slot-machine-frame {
+    @apply relative;
+    filter: drop-shadow(0 25px 50px rgba(0, 0, 0, 0.4));
+  }
+
+  .casino-border {
+    @apply absolute -inset-4 rounded-2xl;
+    background: linear-gradient(45deg, 
+      #7c3aed 0%, #a855f7 25%, #7c3aed 50%, #a855f7 75%, #7c3aed 100%);
+    background-size: 200% 200%;
+    animation: shimmer 3s ease-in-out infinite;
+    padding: 3px;
+    border-radius: 20px;
+  }
+
+  .casino-lights {
+    @apply absolute inset-0 rounded-2xl;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      rgba(168, 85, 247, 0.3) 2px,
+      transparent 4px,
+      transparent 20px
+    );
+    animation: casino-pulse 2s ease-in-out infinite alternate;
+  }
+
+  .machine-body {
+    @apply relative rounded-xl p-3;
+    background: linear-gradient(145deg, 
+      #1e293b 0%, 
+      #334155 25%, 
+      #475569 50%, 
+      #334155 75%, 
+      #1e293b 100%);
+    border: 2px solid #475569;
+    box-shadow: 
+      inset 0 2px 4px rgba(255, 255, 255, 0.1),
+      inset 0 -2px 4px rgba(0, 0, 0, 0.3),
+      0 0 20px rgba(16, 185, 129, 0.1);
+  }
+
+  .chrome-frame {
+    @apply relative rounded-lg p-2;
+    background: linear-gradient(135deg, 
+      #e5e7eb 0%, 
+      #9ca3af 25%, 
+      #6b7280 50%, 
+      #9ca3af 75%, 
+      #e5e7eb 100%);
+    border: 1px solid #9ca3af;
+    box-shadow: 
+      inset 0 1px 2px rgba(255, 255, 255, 0.8),
+      inset 0 -1px 2px rgba(0, 0, 0, 0.2);
+  }
+
+  .inner-frame {
+    @apply rounded-md p-2;
+    background: radial-gradient(ellipse at center, #0f172a 0%, #1e293b 100%);
+    border: 2px inset #374151;
+    box-shadow: 
+      inset 0 0 10px rgba(0, 0, 0, 0.8),
+      0 0 5px rgba(16, 185, 129, 0.3);
+  }
+
+  .game-grid {
+    @apply relative rounded border-2;
+    background: linear-gradient(180deg, #000000 0%, #1a1a1a 100%);
+    border-color: #4b5563;
+    box-shadow: 
+      inset 0 2px 4px rgba(0, 0, 0, 0.6),
+      0 0 10px rgba(16, 185, 129, 0.2);
+  }
+
+  /* Animations */
+  @keyframes shimmer {
+    0%, 100% {
+      background-position: 0% 0%;
+    }
+    50% {
+      background-position: 100% 100%;
+    }
+  }
+
+  @keyframes casino-pulse {
+    0% {
+      opacity: 0.4;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0.8;
+      transform: scale(1.02);
+    }
+  }
+
+  /* Responsive adjustments for mobile */
+  @media (max-width: 1024px) {
+    .casino-border {
+      @apply -inset-2;
+    }
+    
+    .machine-body {
+      @apply p-2;
+    }
+    
+    .chrome-frame {
+      @apply p-1;
+    }
   }
 </style>

@@ -7,6 +7,9 @@
   import GameQueue from '$lib/components/game/GameQueue.svelte';
   import GameHeader from '$lib/components/game/GameHeader.svelte';
   
+  // Import odds test utility for development
+  import '$lib/utils/testOddsWithRealData';
+  
   let hasPreloadedCache = false;
 
   onMount(async () => {
