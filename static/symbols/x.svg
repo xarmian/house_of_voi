@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Black border/shadow lines -->
+  <line x1="16.8" y1="7.6" x2="7.6" y2="16.8" stroke="#2a1f17" stroke-width="4"></line>
+  <line x1="7.6" y1="7.6" x2="16.8" y2="16.8" stroke="#2a1f17" stroke-width="4"></line>
+  <!-- Main X lines -->
+  <line x1="16.4" y1="7.2" x2="7.2" y2="16.4" stroke="#5d4e3a" stroke-width="3"></line>
+  <line x1="7.2" y1="7.2" x2="16.4" y2="16.4" stroke="#5d4e3a" stroke-width="3"></line>
+</svg>

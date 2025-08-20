@@ -37,7 +37,7 @@ export const WINNING_SYMBOLS: Record<string, SlotSymbol> = {
     name: 'bronze',
     displayName: 'Bronze',
     image: '/symbols/bronze.svg',
-    rarity: 'common',
+    rarity: 'uncommon',
     multipliers: { 3: 5, 4: 20, 5: 100 },
     color: '#92400e',
     glowColor: '#d97706'
@@ -46,7 +46,37 @@ export const WINNING_SYMBOLS: Record<string, SlotSymbol> = {
 
 // Decorative symbols (these are non-winning symbols for visual variety)
 export const DECORATIVE_SYMBOLS: Record<string, SlotSymbol> = {
-  boat: {
+  x: {
+    id: 'x',
+    name: 'x',
+    displayName: 'X',
+    image: '/symbols/x.svg',
+    rarity: 'common',
+    multipliers: {},
+    color: '#6b7280',
+    glowColor: '#9ca3af'
+  },
+  y: {
+    id: 'y',
+    name: 'y',
+    displayName: 'Y',
+    image: '/symbols/x.svg',
+    rarity: 'common',
+    multipliers: {},
+    color: '#6b7280',
+    glowColor: '#9ca3af'
+  },
+  z: {
+    id: 'z',
+    name: 'z',
+    displayName: 'Z',
+    image: '/symbols/x.svg',
+    rarity: 'common',
+    multipliers: {},
+    color: '#6b7280',
+    glowColor: '#9ca3af'
+  },
+  /*boat: {
     id: 'boat',
     name: 'boat',
     displayName: 'Boat',
@@ -105,7 +135,7 @@ export const DECORATIVE_SYMBOLS: Record<string, SlotSymbol> = {
     multipliers: {},
     color: '#6b7280',
     glowColor: '#9ca3af'
-  }
+  }*/
 };
 
 // All symbols combined
