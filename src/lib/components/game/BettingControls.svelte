@@ -7,7 +7,7 @@
   import { isSpinning } from '$lib/stores/game';
   import AddFundsModal from '$lib/components/wallet/AddFundsModal.svelte';
   import BalanceBreakdown from '$lib/components/wallet/BalanceBreakdown.svelte';
-  import OddsAnalysis from '$lib/components/analytics/OddsAnalysis.svelte';
+  import PaylinePayoutModal from '$lib/components/game/PaylinePayoutModal.svelte';
   import { BETTING_CONSTANTS, formatVOI } from '$lib/constants/betting';
   import { 
     animationPreferences, 
@@ -28,7 +28,7 @@
   let betInputValue = $betPerLineVOI;
   let spinButtonElement: HTMLElement;
   let showAddFundsModal = false;
-  let showOddsAnalysis = false;
+  let showPaylinePayouts = false;
 
   // Password overlay state for locked wallets
   let password = '';
@@ -47,17 +47,12 @@
   // Update input when store changes
   $: betInputValue = $betPerLineVOI;
   
-  // Trigger enhanced validation when wallet connects or betting values change
-  let validationTimeout: number;
-  $: if ($isWalletConnected && $walletAddress && ($bettingStore.betPerLine || $bettingStore.selectedPaylines)) {
-    // Clear previous timeout
-    if (validationTimeout) clearTimeout(validationTimeout);
-    
-    // Debounce validation to avoid excessive calls
-    validationTimeout = setTimeout(() => {
-      bettingStore.validateEnhanced().catch(console.error);
-    }, 500);
-  }
+  // DISABLED: Automatic validation was causing infinite loops
+  // Enhanced validation will be triggered manually when needed
+  // let validationTimeout: number;
+  // $: if ($isWalletConnected && $walletAddress && ($bettingStore.betPerLine || $bettingStore.selectedPaylines)) {
+  //   // Validation disabled to prevent excessive network requests
+  // }
   
   // Handle bet input changes
   function handleBetInput(event: Event) {
@@ -70,8 +65,8 @@
     }
   }
 
-  function toggleOddsAnalysis() {
-    // showOddsAnalysis = !showOddsAnalysis;
+  function togglePaylinePayouts() {
+    showPaylinePayouts = !showPaylinePayouts;
   }
   
   function handleSpin() {
@@ -227,13 +222,13 @@
       <h3 class="font-bold text-lg">Betting Controls</h3>
     </div>
     <button
-      on:click={toggleOddsAnalysis}
+      on:click={togglePaylinePayouts}
       class="nav-item flex items-center gap-2"
-      title="Show win odds and analysis"
+      title="Show paylines and payouts"
       disabled={$isNewUser}
     >
       <BarChart3 class="w-4 h-4" />
-      <span class="text-sm">Win Odds</span>
+      <span class="text-sm">Paylines & Payouts</span>
     </button>
   </div>
   {/if}
@@ -285,14 +280,13 @@
             <div class="relative">
               <input
                 type="number"
-                step="0.01"
                 min={formatVOI(BETTING_CONSTANTS.MIN_BET_PER_LINE)}
                 max={formatVOI(BETTING_CONSTANTS.MAX_BET_PER_LINE)}
                 bind:value={betInputValue}
                 on:input={handleBetInput}
                 disabled={disabled}
                 class="input-field pr-12 text-center font-medium text-lg"
-                placeholder="1.00"
+                placeholder="1"
               />
               <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-theme-text opacity-70 font-medium text-xs">
                 VOI
@@ -324,7 +318,7 @@
               disabled={disabled}
               class="w-full btn-secondary mt-2 text-theme"
             >
-              Max Bet
+              Max Bet ({formatVOI(BETTING_CONSTANTS.MAX_BET_PER_LINE)} VOI)
             </button>
           </div>
         </div>
@@ -336,7 +330,6 @@
               <div class="text-center mb-3">
                 <div class="text-theme-text font-medium mb-2">Total Bet</div>
                 <div class="flex items-center justify-center gap-2">
-                  <DollarSign class="w-5 h-5 text-voi-400" />
                   <span class="text-3xl font-bold text-theme">{$totalBetVOI} VOI</span>
                 </div>
               </div>
@@ -402,14 +395,13 @@
           <div class="relative">
             <input
               type="number"
-              step="0.01"
               min={formatVOI(BETTING_CONSTANTS.MIN_BET_PER_LINE)}
               max={formatVOI(BETTING_CONSTANTS.MAX_BET_PER_LINE)}
               bind:value={betInputValue}
               on:input={handleBetInput}
               disabled={disabled}
               class="input-field pr-12 text-center font-medium text-sm py-2"
-              placeholder="1.0"
+              placeholder="1"
             />
             <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-theme-text opacity-70 font-medium text-xs">
               VOI
@@ -438,7 +430,6 @@
           <div class="flex items-center justify-between">
             <span class="text-theme-text text-sm font-medium">Total</span>
             <div class="flex items-center gap-1">
-              <DollarSign class="w-3 h-3 text-voi-400" />
               <span class="text-lg font-bold text-theme">{$totalBetVOI}</span>
               <span class="text-xs text-theme-text opacity-70">VOI</span>
             </div>
@@ -583,29 +574,8 @@
   />
 {/if}
 
-<!-- Odds Analysis Modal -->
-{#if showOddsAnalysis}
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-    <div class="card max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-      <div class="p-6">
-        <div class="flex items-center justify-between mb-6">
-          <div class="flex items-center gap-3">
-            <BarChart3 class="w-6 h-6 text-voi-400" />
-            <h3 class="text-xl font-semibold text-theme">Win Odds & Analysis</h3>
-          </div>
-          <button
-            on:click={() => showOddsAnalysis = false}
-            class="text-theme-text opacity-70 hover:opacity-100 text-2xl leading-none"
-          >
-            ×
-          </button>
-        </div>
-        
-        <OddsAnalysis {compact} isModal={true} />
-      </div>
-    </div>
-  </div>
-{/if}
+<!-- Payline Payout Modal -->
+<PaylinePayoutModal bind:showModal={showPaylinePayouts} />
 
 <style lang="postcss">
   .betting-controls {
@@ -667,6 +637,17 @@
   
   .input-field {
     @apply w-full px-3 py-2 bg-surface-secondary border border-surface-border rounded-lg text-theme-text placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent transition-all duration-200;
+  }
+
+  /* Hide number input spinners */
+  .input-field[type="number"]::-webkit-outer-spin-button,
+  .input-field[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .input-field[type="number"] {
+    -moz-appearance: textfield;
   }
   
   .input-field:focus {

@@ -1,11 +1,14 @@
 <script lang="ts">
-  import { walletStore, walletBalance, walletAddress, isWalletConnected, hasExistingWallet } from '$lib/stores/wallet';
+  import { walletStore, walletBalance, walletAddress, isWalletConnected, hasExistingWallet, type BalanceChangeEventDetail } from '$lib/stores/wallet';
   import { reservedBalance } from '$lib/stores/queue';
   import { walletService } from '$lib/services/wallet';
   import { algorandService } from '$lib/services/algorand';
+  import { balanceManager } from '$lib/services/balanceManager';
   import { Wallet, MoreHorizontal, RefreshCw, Unlock, Lock } from 'lucide-svelte';
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import WalletDetailsModal from './WalletDetailsModal.svelte';
+  import BalanceUpdateAnimation from './BalanceUpdateAnimation.svelte';
+  import { playDeposit, playBalanceIncrease } from '$lib/services/soundService';
   
   const dispatch = createEventDispatcher();
   
@@ -13,6 +16,12 @@
   
   let showDetailsModal = false;
   let isRefreshing = false;
+  
+  // Balance animation state
+  let balanceAnimationComponent: BalanceUpdateAnimation;
+  let isAnimatingBalance = false;
+  let previousBalance = $walletBalance;
+  let balanceChangeUnsubscribe: (() => void) | null = null;
   
   // Public wallet data for locked wallets
   let publicWalletData: { address: string; createdAt: number; lastUsed: number; isPasswordless?: boolean } | null = null;
@@ -46,7 +55,7 @@
       if (publicWalletData?.address && algorandService) {
         loadingPublicBalance = true;
         try {
-          publicBalance = await algorandService.getBalance(publicWalletData.address);
+          publicBalance = await balanceManager.getBalance(publicWalletData.address);
         } catch (err) {
           console.error('Failed to load public wallet balance:', err);
           publicBalance = null;
@@ -57,13 +66,47 @@
     }
   }
   
+  // Handle balance changes for animation and sound
+  const handleBalanceChange = async (event: BalanceChangeEventDetail) => {
+    if (!event.isIncrease || !event.isSignificant) return; // Only animate significant increases (> 1 VOI)
+    
+    console.log('Significant balance increase detected:', event);
+    
+    // Play deposit sound for any significant balance increase
+    await playDeposit();
+    
+    // Start balance animation
+    if (balanceAnimationComponent) {
+      isAnimatingBalance = true;
+      await balanceAnimationComponent.animate(event.newBalance);
+    }
+  };
+
   onMount(() => {
     loadPublicWalletData();
+    
+    // Subscribe to balance changes
+    balanceChangeUnsubscribe = walletStore.onBalanceChange(handleBalanceChange);
   });
   
-  // Reload public data when wallet state changes
-  $: if ($walletStore.isGuest && $hasExistingWallet) {
+  onDestroy(() => {
+    // Cleanup balance change subscription
+    if (balanceChangeUnsubscribe) {
+      balanceChangeUnsubscribe();
+    }
+  });
+  
+  // Load public data once when component mounts and wallet conditions are met
+  let hasLoadedPublicData = false;
+  
+  $: if ($walletStore.isGuest && $hasExistingWallet && !hasLoadedPublicData) {
+    hasLoadedPublicData = true;
     loadPublicWalletData();
+  }
+  
+  // Reset flag when wallet state changes significantly
+  $: if (!$walletStore.isGuest || !$hasExistingWallet) {
+    hasLoadedPublicData = false;
   }
   
   async function refreshBalance() {
@@ -147,7 +190,19 @@
               <h3 class="text-base font-semibold text-voi-400">Available Credits: {formattedAvailableCredits} VOI</h3>
             </div>
             <div class="text-sm text-theme-text opacity-70 mt-0.5">
-              Wallet Balance: {#if loadingPublicBalance}Loading...{:else}{formattedBalance} VOI{/if}
+              Wallet Balance: {#if loadingPublicBalance}
+                Loading...
+              {:else}
+                <BalanceUpdateAnimation 
+                  bind:this={balanceAnimationComponent}
+                  startBalance={$isWalletConnected ? $walletBalance : (publicBalance || 0)}
+                  endBalance={$isWalletConnected ? $walletBalance : (publicBalance || 0)}
+                  formatAsCurrency={true}
+                  isWinnings={false}
+                  on:animationStart={() => isAnimatingBalance = true}
+                  on:animationEnd={() => isAnimatingBalance = false}
+                />
+              {/if}
             </div>
           {:else}
             <div class="flex items-center gap-2">

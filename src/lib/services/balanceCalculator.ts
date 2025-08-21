@@ -8,6 +8,29 @@ import { walletStore } from '$lib/stores/wallet';
 import { BLOCKCHAIN_CONFIG } from '$lib/constants/network';
 import { filterActivePendingSpins, calculateMbrBuffer } from '$lib/utils/balanceUtils';
 
+// Transaction params cache - fetch ONCE on mount
+let cachedTransactionParams: any = null;
+let transactionParamsPromise: Promise<any> | null = null;
+
+async function getTransactionParams() {
+  if (cachedTransactionParams) {
+    return cachedTransactionParams;
+  }
+  
+  if (transactionParamsPromise) {
+    return transactionParamsPromise;
+  }
+  
+  transactionParamsPromise = algorandService!.getSuggestedParams();
+  
+  try {
+    cachedTransactionParams = await transactionParamsPromise;
+    return cachedTransactionParams;
+  } finally {
+    transactionParamsPromise = null;
+  }
+}
+
 export interface BalanceRequirement {
   betAmount: number;
   contractCosts: number;
@@ -143,7 +166,7 @@ export class BalanceCalculator {
         throw new Error('AlgorandService not available');
       }
 
-      const suggestedParams = await algorandService.getSuggestedParams();
+      const suggestedParams = await getTransactionParams();
       const baseFee = suggestedParams.minFee;
       
       // Estimate for grouped transactions (payment + spin call)
@@ -167,11 +190,11 @@ export class BalanceCalculator {
         throw new Error('AlgorandService not available');
       }
 
-      // Query account info to get current MBR
-      const accountInfo = await algorandService.getClient().accountInformation(userAddress).do();
-      const minBalance = accountInfo.minBalance || 100000; // Fallback to 0.1 VOI
+      // Use a reasonable default MBR instead of making network requests
+      // Most accounts have ~0.1 VOI MBR, let's use 0.2 VOI as conservative estimate
+      const defaultMinBalance = 200000; // 0.2 VOI in microAlgos
 
-      return minBalance + calculateMbrBuffer();
+      return defaultMinBalance + calculateMbrBuffer();
     } catch (error) {
       console.error('MBR calculation failed:', error);
       // Conservative fallback

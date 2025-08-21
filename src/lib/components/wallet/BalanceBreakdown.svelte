@@ -21,6 +21,6 @@
 <div class="flex items-center justify-between text-sm">
   <span class="text-theme-text opacity-70">Available Credits:</span>
   <span class="font-mono font-medium text-theme">
-    {formatVOI(availableForBetting)} VOI
+    {Math.floor(availableForBetting / 1_000_000)} VOI
   </span>
 </div>

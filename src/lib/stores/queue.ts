@@ -129,9 +129,10 @@ function createQueueStore() {
         }
 
         // Update reserved balance - release funds when spin leaves pending/active states
+        // Only PENDING and SUBMITTING states should have funds reserved (not submitted to blockchain yet)
         let totalReservedBalance = state.totalReservedBalance;
         const isActivePendingStatus = (status: SpinStatus) => 
-          [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(status);
+          [SpinStatus.PENDING, SpinStatus.SUBMITTING].includes(status);
         
         const wasActivePending = isActivePendingStatus(oldStatus);
         const isActivePending = isActivePendingStatus(spinUpdate.status);
@@ -173,8 +174,9 @@ function createQueueStore() {
         }
 
         // Update reserved balance - release funds for removed active pending spins
+        // Only PENDING and SUBMITTING states should have funds reserved (not submitted to blockchain yet)
         let totalReservedBalance = state.totalReservedBalance;
-        const isActivePendingStatus = [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(spin.status);
+        const isActivePendingStatus = [SpinStatus.PENDING, SpinStatus.SUBMITTING].includes(spin.status);
         if (isActivePendingStatus) {
           totalReservedBalance -= (spin.estimatedTotalCost || spin.totalBet);
         }

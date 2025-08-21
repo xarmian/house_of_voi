@@ -9,6 +9,7 @@ import { BLOCKCHAIN_CONFIG } from '$lib/constants/network';
 import type { QueuedSpin } from '$lib/types/queue';
 import type { SpinTransaction, BlockchainError } from '$lib/types/blockchain';
 import { balanceCalculator } from './balanceCalculator';
+import { balanceManager } from './balanceManager';
 import { get } from 'svelte/store';
 
 // Add global debug method to clear invalid queue data
@@ -164,8 +165,7 @@ export class BlockchainService {
           }
         });
         
-        // Refresh wallet balance
-        walletStore.refreshBalance();
+        // Balance will be updated automatically by balance manager
         return;
       }
       
@@ -329,14 +329,15 @@ export class BlockchainService {
       // Optimistic balance update to prevent race condition
       const currentBalance = get(walletStore).balance;
       const transactionCost = (spin.betPerLine * spin.selectedPaylines);
-      const winnings = result.payout;
-      const expectedNewBalance = currentBalance - transactionCost + winnings;
+      const totalPayout = result.payout;
+      const expectedNewBalance = currentBalance - transactionCost + totalPayout;
       
-      // Immediate optimistic update
+      // Immediate optimistic update - threshold system will handle sound/animation
       walletStore.updateBalance(expectedNewBalance);
       
-      // Then refresh for accuracy
-      walletStore.refreshBalance();
+      if (account) {
+        balanceManager.getBalance(account.address, true);
+      }
 
     } catch (error) {
       console.error('Error submitting claim:', error);
@@ -365,14 +366,17 @@ export class BlockchainService {
         // Optimistic balance update - assume the transaction was processed
         const currentBalance = get(walletStore).balance;
         const transactionCost = (spin.betPerLine * spin.selectedPaylines);
-        const winnings = spin.winnings || 0; // Use stored winnings if available
-        const expectedNewBalance = currentBalance - transactionCost + winnings;
+        const gameWinnings = spin.winnings || 0;
+        const expectedNewBalance = currentBalance - transactionCost + gameWinnings;
         
-        // Immediate optimistic update
+        // Immediate optimistic update - threshold system will handle sound/animation
         walletStore.updateBalance(expectedNewBalance);
         
-        // Then refresh for accuracy
-        walletStore.refreshBalance();
+        // Force refresh balance after claim to bypass cache
+        const account = get(walletStore).account;
+        if (account) {
+          balanceManager.getBalance(account.address, true);
+        }
         
         return; // Early return to avoid the error handling below
       }

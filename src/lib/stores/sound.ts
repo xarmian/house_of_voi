@@ -39,7 +39,7 @@ const defaultPreferences: SoundPreferences = {
 
 // Sound categories for easy management
 export type SoundCategory = 'spin' | 'win' | 'ui' | 'background';
-export type SoundType = 'spin-start' | 'spin-loop' | 'reel-stop' | 'win-small' | 'win-medium' | 'win-large' | 'win-jackpot' | 'loss' | 'button-click' | 'background-ambience';
+export type SoundType = 'spin-start' | 'spin-loop' | 'reel-stop' | 'win-small' | 'win-medium' | 'win-large' | 'win-jackpot' | 'loss' | 'button-click' | 'background-ambience' | 'deposit' | 'balance-increase';
 
 // Load preferences from localStorage
 function loadPreferences(): SoundPreferences {
@@ -355,7 +355,9 @@ export function getSoundCategory(soundType: SoundType): SoundCategory {
     'win-jackpot': 'win',
     'loss': 'win', // Loss is in win category as it's outcome-related
     'button-click': 'ui',
-    'background-ambience': 'background'
+    'background-ambience': 'background',
+    'deposit': 'ui',
+    'balance-increase': 'ui'
   };
   
   return categoryMap[soundType];

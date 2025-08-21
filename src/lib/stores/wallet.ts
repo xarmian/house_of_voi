@@ -2,7 +2,11 @@ import { writable, derived } from 'svelte/store';
 import type { WalletState, WalletAccount } from '$lib/types/wallet';
 import { walletService } from '$lib/services/wallet';
 import { algorandService } from '$lib/services/algorand';
+import { balanceManager, type BalanceChangeEventDetail } from '$lib/services/balanceManager';
 import { browser } from '$app/environment';
+
+// Balance change events are now handled by balanceManager
+export type { BalanceChangeEvent, BalanceChangeEventDetail } from '$lib/services/balanceManager';
 
 function createWalletStore() {
   const { subscribe, set, update } = writable<WalletState>({
@@ -16,30 +20,41 @@ function createWalletStore() {
     lastUpdated: null
   });
 
-  // Auto-refresh balance every 30 seconds when connected
-  let balanceRefreshInterval: NodeJS.Timeout | null = null;
+  // Balance change tracking is now handled by balanceManager
+  let balanceChangeUnsubscribe: (() => void) | null = null;
+  let currentMonitoredAddress: string | null = null;
 
-  const startBalanceRefresh = (address: string) => {
-    if (balanceRefreshInterval) clearInterval(balanceRefreshInterval);
+  const startBalanceMonitoring = (address: string) => {
+    // Stop any existing monitoring first
+    stopBalanceMonitoring();
     
-    balanceRefreshInterval = setInterval(async () => {
-      try {
-        if (!algorandService) {
-          console.error('AlgorandService not available');
-          return;
-        }
-        const balance = await algorandService.getBalance(address);
-        update(state => ({ ...state, balance, lastUpdated: Date.now() }));
-      } catch (error) {
-        console.error('Error refreshing balance:', error);
-      }
-    }, 30000); // 30 seconds
+    currentMonitoredAddress = address;
+    
+    // Start monitoring with the balance manager
+    balanceManager.startMonitoring(address);
+    
+    // Subscribe to balance change events
+    balanceChangeUnsubscribe = balanceManager.onBalanceChange((event) => {
+      // Update the store when balance changes
+      update(state => ({
+        ...state,
+        balance: event.newBalance,
+        lastUpdated: event.timestamp
+      }));
+    });
   };
 
-  const stopBalanceRefresh = () => {
-    if (balanceRefreshInterval) {
-      clearInterval(balanceRefreshInterval);
-      balanceRefreshInterval = null;
+  const stopBalanceMonitoring = () => {
+    // Stop balance monitoring in the manager
+    if (currentMonitoredAddress) {
+      balanceManager.stopMonitoring(currentMonitoredAddress);
+      currentMonitoredAddress = null;
+    }
+    
+    // Unsubscribe from events
+    if (balanceChangeUnsubscribe) {
+      balanceChangeUnsubscribe();
+      balanceChangeUnsubscribe = null;
     }
   };
 
@@ -57,7 +72,7 @@ function createWalletStore() {
               const account = await walletService.retrieveWallet(''); // Empty password
               
               if (account && algorandService) {
-                const balance = await algorandService.getBalance(account.address);
+                const balance = await balanceManager.getBalance(account.address);
                 
                 set({
                   account,
@@ -70,7 +85,7 @@ function createWalletStore() {
                   lastUpdated: Date.now()
                 });
                 
-                startBalanceRefresh(account.address);
+                startBalanceMonitoring(account.address);
                 return; // Successfully auto-unlocked
               }
             } catch (error) {
@@ -154,11 +169,11 @@ function createWalletStore() {
 
     async refreshBalance() {
       update(state => {
-        if (!state.account || !algorandService) return state;
+        if (!state.account) return state;
         
-        algorandService.getBalance(state.account.address)
-          .then(balance => {
-            update(s => ({ ...s, balance, lastUpdated: Date.now() }));
+        balanceManager.getBalance(state.account.address, true)
+          .then(newBalance => {
+            update(s => ({ ...s, balance: newBalance, lastUpdated: Date.now() }));
           })
           .catch(error => {
             console.error('Error refreshing balance:', error);
@@ -230,7 +245,7 @@ function createWalletStore() {
 
     lock() {
       walletService.lockWallet();
-      stopBalanceRefresh();
+      stopBalanceMonitoring();
       
       update(state => ({
         ...state,
@@ -251,7 +266,7 @@ function createWalletStore() {
           if (!algorandService) {
             throw new Error('AlgorandService not available');
           }
-          const balance = await algorandService.getBalance(account.address);
+          const balance = await balanceManager.getBalance(account.address);
           
           set({
             account,
@@ -264,7 +279,7 @@ function createWalletStore() {
             lastUpdated: Date.now()
           });
           
-          startBalanceRefresh(account.address);
+          startBalanceMonitoring(account.address);
         } else {
           throw new Error('Failed to unlock wallet');
         }
@@ -280,7 +295,7 @@ function createWalletStore() {
 
     disconnect() {
       walletService.clearWallet();
-      stopBalanceRefresh();
+      stopBalanceMonitoring();
       
       set({
         account: null,
@@ -309,7 +324,7 @@ function createWalletStore() {
         
         // Clear existing wallet first
         walletService.clearWallet();
-        stopBalanceRefresh();
+        stopBalanceMonitoring();
         
         // Store the new wallet with password
         await walletService.storeWallet(account, password);
@@ -325,7 +340,7 @@ function createWalletStore() {
           lastUpdated: Date.now()
         });
         
-        startBalanceRefresh(account.address);
+        startBalanceMonitoring(account.address);
         
       } catch (error) {
         update(state => ({
@@ -357,7 +372,7 @@ function createWalletStore() {
         if (!algorandService) {
           throw new Error('AlgorandService not available');
         }
-        const balance = await algorandService.getBalance(account.address);
+        const balance = await balanceManager.getBalance(account.address);
         
         set({
           account,
@@ -370,7 +385,7 @@ function createWalletStore() {
           lastUpdated: Date.now()
         });
         
-        startBalanceRefresh(account.address);
+        startBalanceMonitoring(account.address);
         
       } catch (error) {
         update(state => ({
@@ -387,7 +402,7 @@ function createWalletStore() {
       
       // Clear existing wallet and go back to setup mode
       walletService.clearWallet();
-      stopBalanceRefresh();
+      stopBalanceMonitoring();
       
       set({
         account: null,
@@ -399,6 +414,19 @@ function createWalletStore() {
         error: null,
         lastUpdated: null
       });
+    },
+
+    // Balance change event management - delegated to balanceManager
+    onBalanceChange(listener: (event: BalanceChangeEventDetail) => void): () => void {
+      return balanceManager.onBalanceChange(listener);
+    },
+
+    getBalanceHistory() {
+      return balanceManager.getBalanceHistory();
+    },
+
+    getRecentBalanceIncreases(limitToLast: number = 10) {
+      return balanceManager.getRecentBalanceIncreases(limitToLast);
     }
   };
 }

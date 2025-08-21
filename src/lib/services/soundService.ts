@@ -12,7 +12,9 @@ const SOUND_PATHS: Record<SoundType, string> = {
   'win-jackpot': '/sounds/win-jackpot.mp3',
   'loss': '/sounds/loss.mp3',
   'button-click': '/sounds/button-click.mp3',
-  'background-ambience': '/sounds/background-ambience.mp3'
+  'background-ambience': '/sounds/background-ambience.mp3',
+  'deposit': '/sounds/deposit.mp3',
+  'balance-increase': '/sounds/balance-increase.mp3'
 };
 
 // Audio buffer cache
@@ -702,6 +704,14 @@ export async function playReelStop() {
 
 export async function playLoss() {
   return soundService.playSound('loss');
+}
+
+export async function playDeposit() {
+  return soundService.playSound('deposit');
+}
+
+export async function playBalanceIncrease() {
+  return soundService.playSound('balance-increase');
 }
 
 // Enhanced debugging and cleanup functions

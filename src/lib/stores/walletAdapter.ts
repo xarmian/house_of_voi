@@ -1,6 +1,7 @@
 import { derived, writable, get } from 'svelte/store';
 import { selectedWallet, connectedWallets, signAndSendTransactions } from 'avm-wallet-svelte';
 import { algorandService } from '$lib/services/algorand';
+import { balanceManager } from '$lib/services/balanceManager';
 import type { WalletAccount, WalletState } from '$lib/types/wallet';
 import { browser } from '$app/environment';
 
@@ -20,41 +21,41 @@ function createWalletAdapter() {
     lastUpdated: null
   });
 
-  let balanceRefreshInterval: NodeJS.Timeout | null = null;
+  let balanceChangeUnsubscribe: (() => void) | null = null;
+  let currentMonitoredAddress: string | null = null;
 
-  // Start balance refresh for connected wallet
-  const startBalanceRefresh = (address: string) => {
-    if (balanceRefreshInterval) clearInterval(balanceRefreshInterval);
+  // Start balance monitoring for connected wallet
+  const startBalanceMonitoring = (address: string) => {
+    // Stop any existing monitoring
+    stopBalanceMonitoring();
     
-    balanceRefreshInterval = setInterval(async () => {
-      try {
-        if (!algorandService) {
-          console.error('AlgorandService not available');
-          return;
-        }
-        
-        // Get current state to check if we should update
-        const currentState = get({ subscribe });
-        if (!currentState.isConnected || currentState.account?.address !== address) {
-          return; // Don't update if wallet changed or disconnected
-        }
-        
-        const balance = await algorandService.getBalance(address);
-        
-        // Only update if balance actually changed to prevent unnecessary reactivity
-        if (currentState.balance !== balance) {
-          update(state => ({ ...state, balance, lastUpdated: Date.now() }));
-        }
-      } catch (error) {
-        console.error('Error refreshing balance:', error);
-      }
-    }, 60000); // 60 seconds (reduced frequency)
+    currentMonitoredAddress = address;
+    
+    // Start monitoring with the balance manager
+    balanceManager.startMonitoring(address);
+    
+    // Subscribe to balance change events
+    balanceChangeUnsubscribe = balanceManager.onBalanceChange((event) => {
+      // Update the store when balance changes
+      update(state => ({
+        ...state,
+        balance: event.newBalance,
+        lastUpdated: event.timestamp
+      }));
+    });
   };
 
-  const stopBalanceRefresh = () => {
-    if (balanceRefreshInterval) {
-      clearInterval(balanceRefreshInterval);
-      balanceRefreshInterval = null;
+  const stopBalanceMonitoring = () => {
+    // Stop balance monitoring in the manager
+    if (currentMonitoredAddress) {
+      balanceManager.stopMonitoring(currentMonitoredAddress);
+      currentMonitoredAddress = null;
+    }
+    
+    // Unsubscribe from events
+    if (balanceChangeUnsubscribe) {
+      balanceChangeUnsubscribe();
+      balanceChangeUnsubscribe = null;
     }
   };
 
@@ -81,7 +82,7 @@ function createWalletAdapter() {
       if (wallet && wallet.address) {
         try {
           // Get balance for the connected wallet
-          const balance = await algorandService.getBalance(wallet.address);
+          const balance = await balanceManager.getBalance(wallet.address);
           
           // Create a WalletAccount-compatible object
           const account: WalletAccount = {
@@ -102,7 +103,7 @@ function createWalletAdapter() {
             lastUpdated: Date.now()
           });
 
-          startBalanceRefresh(wallet.address);
+          startBalanceMonitoring(wallet.address);
         } catch (error) {
           console.error('Error getting balance for connected wallet:', error);
           set({
@@ -117,7 +118,7 @@ function createWalletAdapter() {
         }
       } else {
         // No wallet connected
-        stopBalanceRefresh();
+        stopBalanceMonitoring();
         set({
           account: null,
           balance: 0,
@@ -142,9 +143,9 @@ function createWalletAdapter() {
 
     async refreshBalance() {
       const wallet = get(selectedWallet);
-      if (wallet && algorandService) {
+      if (wallet) {
         try {
-          const balance = await algorandService.getBalance(wallet.address);
+          const balance = await balanceManager.getBalance(wallet.address, true);
           update(state => ({ ...state, balance, lastUpdated: Date.now() }));
         } catch (error) {
           console.error('Error refreshing balance:', error);
@@ -203,7 +204,7 @@ function createWalletAdapter() {
 
     // Cleanup method
     destroy() {
-      stopBalanceRefresh();
+      stopBalanceMonitoring();
       if (walletSubscription) {
         walletSubscription();
         walletSubscription = null;

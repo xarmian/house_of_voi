@@ -2,6 +2,7 @@
   import { createEventDispatcher, onMount } from 'svelte';
   import { walletService } from '$lib/services/wallet';
   import { algorandService } from '$lib/services/algorand';
+  import { balanceManager } from '$lib/services/balanceManager';
   import { formatVOI } from '$lib/constants/betting';
   import { Trash2 } from 'lucide-svelte';
 
@@ -32,7 +33,7 @@
     if (walletInfo?.address && algorandService) {
       loadingBalance = true;
       try {
-        walletBalance = await algorandService.getBalance(walletInfo.address);
+        walletBalance = await balanceManager.getBalance(walletInfo.address);
       } catch (err) {
         console.error('Failed to load wallet balance:', err);
         walletBalance = null;

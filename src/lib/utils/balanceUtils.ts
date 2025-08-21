@@ -15,11 +15,13 @@ export function isRecentSpin(timestamp: number): boolean {
 
 /**
  * Filter spins to only include those that are actively pending and should have funds reserved
+ * Only includes spins that haven't been submitted to blockchain yet (PENDING, SUBMITTING)
+ * Once in WAITING or PROCESSING, funds are already deducted on-chain
  */
 export function filterActivePendingSpins(spins: QueuedSpin[]): QueuedSpin[] {
   return spins.filter(spin => 
-    // Must be in an active processing state
-    [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(spin.status) &&
+    // Only reserve funds for spins not yet submitted to blockchain
+    [SpinStatus.PENDING, SpinStatus.SUBMITTING].includes(spin.status) &&
     // Must be recent (not stuck/abandoned)
     isRecentSpin(spin.timestamp)
   );
@@ -196,7 +198,7 @@ export function validateBetSizing(betAmount: number, walletBalance: number): {
   }
   
   return {
-    isValid: betPercentage <= 90, // Don't allow bets >90% of balance
+    isValid: true, // betPercentage <= 90, // Don't allow bets >90% of balance
     warnings
   };
 }

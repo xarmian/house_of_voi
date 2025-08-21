@@ -406,12 +406,12 @@ export const bettingStore = createBettingStore();
 // Derived stores for convenience
 export const betPerLineVOI = derived(
   bettingStore,
-  $betting => formatVOI($betting.betPerLine)
+  $betting => formatVOI($betting.betPerLine, 0)
 );
 
 export const totalBetVOI = derived(
   bettingStore,
-  $betting => formatVOI($betting.totalBet)
+  $betting => formatVOI($betting.totalBet, 0)
 );
 
 export const canAffordBet = derived(
