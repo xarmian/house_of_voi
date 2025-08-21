@@ -371,13 +371,36 @@
   
   function checkForWins(outcome: string[][]) {
     // Simple win detection for demonstration
-    // Check for three in a row on first payline
+    // Check for any 3+ matching symbols on first payline
     const firstRow = outcome.map(reel => reel[0]);
-    const isWin = ['A', 'B', 'C', 'D'].includes(firstRow[0]) && firstRow.slice(0, 3).every(symbol => symbol === firstRow[0]);
     
-    if (isWin) {
-      const symbol = firstRow[0];
-      const multiplier = { 'A': 100, 'B': 50, 'C': 25, 'D': 10 }[symbol] || 1;
+    // Count occurrences of each symbol
+    const symbolCounts: { [symbol: string]: number } = {
+      'A': 0,
+      'B': 0,
+      'C': 0,
+      'D': 0
+    };
+    
+    firstRow.forEach(symbol => {
+      if (['A', 'B', 'C', 'D'].includes(symbol)) {
+        symbolCounts[symbol]++;
+      }
+    });
+    
+    // Find the symbol with the highest count (must be at least 3)
+    let bestSymbol = '';
+    let bestCount = 0;
+    
+    for (const symbol of ['A', 'B', 'C', 'D']) {
+      if (symbolCounts[symbol] >= 3 && symbolCounts[symbol] > bestCount) {
+        bestSymbol = symbol;
+        bestCount = symbolCounts[symbol];
+      }
+    }
+    
+    if (bestCount >= 3) {
+      const multiplier = { 'A': 100, 'B': 50, 'C': 25, 'D': 10 }[bestSymbol] || 1;
       const amount = $bettingStore.betPerLine * multiplier;
       
       return {

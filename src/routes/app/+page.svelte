@@ -59,14 +59,14 @@
       </div>
       
       <!-- Main content grid -->
-      <div class="grid grid-cols-12 gap-4 items-start">
+      <div class="grid grid-cols-12 gap-6 items-start">
         <!-- Main game area -->
-        <div class="col-span-8">
+        <div class="col-span-8 relative z-20">
           <SlotMachine disabled={false} />
         </div>
         
         <!-- Right sidebar: Wallet and Queue - aligned with game status bar -->
-        <div class="col-span-4 space-y-4">
+        <div class="col-span-4 space-y-4 relative z-10">
           <WalletManager />
           <GameQueue maxHeight="calc(100vh - 20rem)" />
         </div>

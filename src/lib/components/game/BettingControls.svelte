@@ -208,14 +208,14 @@
   <!-- Always show betting controls structure -->
   <!-- Header -->
   {#if !compact}
-  <div class="flex items-center justify-between pb-2" class:blurred-background={$isNewUser || walletExistsButLocked}>
-    <div class="flex items-center gap-2 text-amber-400 mb-4">
+  <div class="flex items-center justify-between my-2 py-1 border-b border-surface-tertiary" class:blurred-background={$isNewUser || walletExistsButLocked}>
+    <div class="flex items-center gap-2 text-amber-400">
       <DollarSign class="w-5 h-5" />
       <h3 class="font-bold text-lg">Betting Controls</h3>
     </div>
     <button
       on:click={toggleOddsAnalysis}
-      class="nav-item"
+      class="nav-item flex items-center gap-2"
       title="Show win odds and analysis"
       disabled={$isNewUser}
     >
@@ -237,7 +237,7 @@
               <span class="label-text">Paylines</span>
               <span class="label-value">{$bettingStore.selectedPaylines}/20</span>
             </div>
-            <div class="card p-3">
+            <div class="card p-3 flex items-center gap-3">
               <button
                 on:click={(e) => handleControlButton(() => bettingStore.decreasePaylines(), e.currentTarget)}
                 disabled={$bettingStore.selectedPaylines <= BETTING_CONSTANTS.MIN_PAYLINES || disabled}
@@ -360,7 +360,7 @@
     <div class="space-y-3" class:blurred-background={$isNewUser || walletExistsButLocked}>
       <!-- Paylines Control -->
       <div class="control-group">
-        <div class="card p-2">
+        <div class="card p-2 flex items-center gap-3">
           <button
             on:click={(e) => handleControlButton(() => bettingStore.decreasePaylines(), e.currentTarget)}
             disabled={$bettingStore.selectedPaylines <= BETTING_CONSTANTS.MIN_PAYLINES || disabled}
