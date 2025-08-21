@@ -60,7 +60,7 @@
   <div class="card max-w-lg w-full max-h-[90vh] overflow-y-auto">
     <!-- Header -->
     <div class="flex items-center justify-between p-6 border-b border-slate-700">
-      <h2 id="modal-title" class="text-xl font-semibold text-theme">Add Funds to Wallet</h2>
+      <h2 id="modal-title" class="text-xl font-semibold text-theme">Add Credits to Account</h2>
       <button
         on:click={closeModal}
         class="p-1 text-gray-400 hover:text-theme transition-colors"

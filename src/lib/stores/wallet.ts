@@ -169,6 +169,15 @@ function createWalletStore() {
       });
     },
 
+    // Optimistic balance update (immediate) - used to prevent race conditions
+    updateBalance(newBalance: number) {
+      update(state => ({
+        ...state,
+        balance: newBalance,
+        lastUpdated: Date.now()
+      }));
+    },
+
     async exportPrivateKey(): Promise<string | null> {
       return new Promise((resolve) => {
         update(state => {

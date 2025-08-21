@@ -165,7 +165,7 @@
             class="btn-primary flex items-center justify-center gap-2"
           >
             <Plus class="w-4 h-4" />
-            Add Funds
+            Add Credits
           </button>
           
           <button

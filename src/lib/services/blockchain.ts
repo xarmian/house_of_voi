@@ -8,6 +8,7 @@ import { SpinStatus } from '$lib/types/queue';
 import { BLOCKCHAIN_CONFIG } from '$lib/constants/network';
 import type { QueuedSpin } from '$lib/types/queue';
 import type { SpinTransaction, BlockchainError } from '$lib/types/blockchain';
+import { balanceCalculator } from './balanceCalculator';
 import { get } from 'svelte/store';
 
 // Add global debug method to clear invalid queue data
@@ -50,10 +51,24 @@ export class BlockchainService {
         throw new Error('Wallet not connected');
       }
 
-      // Calculate extra payment for transaction fees
-      const suggestedParams = await algorandService.getSuggestedParams();
-      const baseFee = suggestedParams.minFee;
-      const extraPayment = Math.min(baseFee * 3, BLOCKCHAIN_CONFIG.maxExtraPayment); // Estimate for grouped transactions
+      // Enhanced balance validation and cost calculation
+      const balanceValidation = await balanceCalculator.validateSufficientBalance(
+        spin.betPerLine,
+        spin.selectedPaylines,
+        account.address,
+        get(walletStore).balance
+      );
+
+      if (!balanceValidation.isValid) {
+        const shortfall = balanceValidation.requirement.totalRequired - balanceValidation.requirement.availableAfterReserved;
+        throw new Error(
+          `Insufficient balance for spin. Need ${(shortfall / 1000000).toFixed(6)} more VOI. ` +
+          `Details: ${balanceValidation.errors.join('; ')}`
+        );
+      }
+
+      // Use calculated costs from enhanced validation
+      const extraPayment = balanceValidation.requirement.contractCosts + balanceValidation.requirement.networkFees;
 
       // Prepare spin transaction
       const spinTx: SpinTransaction = {
@@ -311,7 +326,16 @@ export class BlockchainService {
         }
       });
 
-      // Refresh wallet balance
+      // Optimistic balance update to prevent race condition
+      const currentBalance = get(walletStore).balance;
+      const transactionCost = (spin.betPerLine * spin.selectedPaylines);
+      const winnings = result.payout;
+      const expectedNewBalance = currentBalance - transactionCost + winnings;
+      
+      // Immediate optimistic update
+      walletStore.updateBalance(expectedNewBalance);
+      
+      // Then refresh for accuracy
       walletStore.refreshBalance();
 
     } catch (error) {
@@ -338,7 +362,16 @@ export class BlockchainService {
           }
         });
         
-        // Refresh wallet balance in case the claim was processed elsewhere
+        // Optimistic balance update - assume the transaction was processed
+        const currentBalance = get(walletStore).balance;
+        const transactionCost = (spin.betPerLine * spin.selectedPaylines);
+        const winnings = spin.winnings || 0; // Use stored winnings if available
+        const expectedNewBalance = currentBalance - transactionCost + winnings;
+        
+        // Immediate optimistic update
+        walletStore.updateBalance(expectedNewBalance);
+        
+        // Then refresh for accuracy
         walletStore.refreshBalance();
         
         return; // Early return to avoid the error handling below

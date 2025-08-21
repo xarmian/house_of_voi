@@ -34,7 +34,7 @@
     {
       icon: Play,
       number: '02',
-      title: 'Add Funds & Spin',
+      title: 'Add Credits & Spin',
       description: 'Add VOI to your wallet and start spinning. Choose your bet amount and number of paylines.',
       color: 'from-blue-500 to-blue-600'
     },

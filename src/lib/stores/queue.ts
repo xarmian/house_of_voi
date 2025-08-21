@@ -5,6 +5,7 @@ import { writable, derived } from 'svelte/store';
 import type { QueuedSpin, QueueState, QueueStats, SpinUpdate } from '$lib/types/queue';
 import { SpinStatus } from '$lib/types/queue';
 import { browser } from '$app/environment';
+import { estimateSpinTransactionCost, filterActivePendingSpins } from '$lib/utils/balanceUtils';
 
 const STORAGE_KEY = 'hov_queue';
 const MAX_QUEUE_SIZE = 50;
@@ -17,6 +18,7 @@ function createQueueStore() {
     spins: [],
     isProcessing: false,
     totalPendingValue: 0,
+    totalReservedBalance: 0,
     lastUpdated: Date.now()
   };
 
@@ -42,10 +44,22 @@ function createQueueStore() {
         const parsed = JSON.parse(stored);
         // Clean up old spins (older than 24 hours)
         const cutoff = Date.now() - (24 * 60 * 60 * 1000);
-        parsed.spins = parsed.spins.filter((spin: QueuedSpin) => 
+        const filteredSpins = parsed.spins.filter((spin: QueuedSpin) => 
           spin.timestamp > cutoff
         );
-        return parsed;
+        
+        // Calculate reserved balance from active pending spins
+        const activePendingSpins = filterActivePendingSpins(filteredSpins);
+        const totalReservedBalance = activePendingSpins.reduce((total, spin) => {
+          return total + (spin.estimatedTotalCost || estimateSpinTransactionCost(spin.betPerLine, spin.selectedPaylines));
+        }, 0);
+        
+        return {
+          ...parsed,
+          spins: filteredSpins,
+          totalReservedBalance: totalReservedBalance || 0, // Ensure this field exists
+          lastUpdated: Date.now()
+        };
       }
     } catch (error) {
       console.error('Error loading queue from storage:', error);
@@ -61,7 +75,7 @@ function createQueueStore() {
     subscribe,
 
     // Add new spin to queue
-    addSpin(betPerLine: number, selectedPaylines: number, totalBet: number): string {
+    addSpin(betPerLine: number, selectedPaylines: number, totalBet: number, estimatedTotalCost?: number): string {
       const spinId = generateSpinId();
       
       update(state => {
@@ -70,6 +84,9 @@ function createQueueStore() {
           ? state.spins.slice(-(MAX_QUEUE_SIZE - 1))
           : [...state.spins];
 
+        // Calculate estimated total cost if not provided
+        const totalCostEstimate = estimatedTotalCost || estimateSpinTransactionCost(betPerLine, selectedPaylines);
+
         const newSpin: QueuedSpin = {
           id: spinId,
           timestamp: Date.now(),
@@ -77,6 +94,7 @@ function createQueueStore() {
           betPerLine,
           selectedPaylines,
           totalBet,
+          estimatedTotalCost: totalCostEstimate,
           retryCount: 0
         };
 
@@ -86,6 +104,7 @@ function createQueueStore() {
           ...state,
           spins,
           totalPendingValue: state.totalPendingValue + totalBet,
+          totalReservedBalance: state.totalReservedBalance + totalCostEstimate,
           lastUpdated: Date.now()
         };
       });
@@ -109,6 +128,22 @@ function createQueueStore() {
           totalPendingValue -= spin.totalBet;
         }
 
+        // Update reserved balance - release funds when spin leaves pending/active states
+        let totalReservedBalance = state.totalReservedBalance;
+        const isActivePendingStatus = (status: SpinStatus) => 
+          [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(status);
+        
+        const wasActivePending = isActivePendingStatus(oldStatus);
+        const isActivePending = isActivePendingStatus(spinUpdate.status);
+        
+        if (wasActivePending && !isActivePending) {
+          // Spin is no longer active pending - release reserved funds
+          totalReservedBalance -= (spin.estimatedTotalCost || spin.totalBet);
+        } else if (!wasActivePending && isActivePending) {
+          // Spin became active pending (e.g., retry) - reserve funds again
+          totalReservedBalance += (newSpin.estimatedTotalCost || newSpin.totalBet);
+        }
+
         const newSpins = [...state.spins];
         newSpins[spinIndex] = newSpin;
 
@@ -116,6 +151,7 @@ function createQueueStore() {
           ...state,
           spins: newSpins,
           totalPendingValue,
+          totalReservedBalance,
           lastUpdated: Date.now()
         };
       });
@@ -136,10 +172,18 @@ function createQueueStore() {
           totalPendingValue -= spin.totalBet;
         }
 
+        // Update reserved balance - release funds for removed active pending spins
+        let totalReservedBalance = state.totalReservedBalance;
+        const isActivePendingStatus = [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(spin.status);
+        if (isActivePendingStatus) {
+          totalReservedBalance -= (spin.estimatedTotalCost || spin.totalBet);
+        }
+
         return {
           ...state,
           spins: newSpins,
           totalPendingValue,
+          totalReservedBalance,
           lastUpdated: Date.now()
         };
       });
@@ -201,6 +245,7 @@ function createQueueStore() {
         spins: [],
         isProcessing: false,
         totalPendingValue: 0,
+        totalReservedBalance: 0,
         lastUpdated: Date.now()
       });
     },
@@ -257,4 +302,20 @@ export const recentSpins = derived(
     .filter(spin => spin.status !== SpinStatus.PENDING)
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, 10)
+);
+
+export const reservedBalance = derived(
+  queueStore,
+  $queue => $queue.totalReservedBalance
+);
+
+export const availableBalance = derived(
+  [queueStore],
+  ([$queue]) => {
+    // This will be combined with wallet balance in components
+    return {
+      reservedBalance: $queue.totalReservedBalance,
+      activePendingSpins: filterActivePendingSpins($queue.spins)
+    };
+  }
 );

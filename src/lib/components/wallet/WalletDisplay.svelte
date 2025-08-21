@@ -1,5 +1,6 @@
 <script lang="ts">
   import { walletStore, walletBalance, walletAddress, isWalletConnected, hasExistingWallet } from '$lib/stores/wallet';
+  import { reservedBalance } from '$lib/stores/queue';
   import { walletService } from '$lib/services/wallet';
   import { algorandService } from '$lib/services/algorand';
   import { Wallet, MoreHorizontal, RefreshCw, Unlock, Lock } from 'lucide-svelte';
@@ -24,6 +25,14 @@
     publicBalance !== null ? 
       (publicBalance / 1_000_000).toFixed(6) : 
       '0.000000';
+  
+  // Calculate available credits for betting
+  $: walletBal = $isWalletConnected ? $walletBalance : (publicBalance || 0);
+  $: reserved = $reservedBalance || 0;
+  const minTransactionCost = 50500 + 30000 + 28500 + 15000 + 1000000; // spin + 1 payline + box + network + buffer
+  $: grossAvailable = Math.max(0, walletBal - reserved);
+  $: availableForBetting = Math.max(0, grossAvailable - minTransactionCost);
+  $: formattedAvailableCredits = (availableForBetting / 1_000_000).toFixed(6);
   
   $: shortAddress = $isWalletConnected ? 
     ($walletAddress ? $walletAddress.slice(0, 8) + '...' + $walletAddress.slice(-8) : '') :
@@ -83,7 +92,7 @@
   <div class="card-secondary px-3 py-2 flex items-center justify-between">
     <div class="flex items-center gap-2">
       <Wallet class="w-4 h-4 text-voi-400" />
-      <span class="text-sm font-medium text-theme">{formattedBalance} VOI</span>
+      <span class="text-sm font-medium text-theme">Credits: {formattedAvailableCredits} VOI</span>
     </div>
     
     {#if $walletStore.isGuest && !$hasExistingWallet}
@@ -91,7 +100,7 @@
         on:click={openDetailsModal}
         class="px-3 py-1 bg-green-600 hover:bg-green-700 text-theme text-xs font-medium rounded transition-colors"
       >
-        Add Funds
+        Add Credits
       </button>
     {:else if $walletStore.isGuest && $hasExistingWallet}
       <button
@@ -131,17 +140,21 @@
     <div class="flex items-center justify-between mb-3">
       <!-- Header Section -->
       <div class="flex items-center gap-3">
-        <Wallet class="w-6 h-6 text-voi-400" />
-        <h3 class="text-lg font-semibold text-theme">Gaming Wallet</h3>
-        {#if $isWalletConnected || publicBalance !== null || loadingPublicBalance}
-          <span class="text-xl font-bold text-voi-400">
-            {#if loadingPublicBalance}
-              Loading...
-            {:else}
-              {formattedBalance} VOI
-            {/if}
-          </span>
-        {/if}
+        <Wallet class="w-5 h-5 text-voi-400" />
+        <div>
+          {#if $isWalletConnected || publicBalance !== null}
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-semibold text-voi-400">Available Credits: {formattedAvailableCredits} VOI</h3>
+            </div>
+            <div class="text-sm text-theme-text opacity-70 mt-0.5">
+              Wallet Balance: {#if loadingPublicBalance}Loading...{:else}{formattedBalance} VOI{/if}
+            </div>
+          {:else}
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-medium text-theme">Available Credits</h3>
+            </div>
+          {/if}
+        </div>
       </div>
       
       <!-- Action Buttons -->
@@ -193,7 +206,7 @@
         on:click={openDetailsModal}
         class="px-4 py-2 bg-green-600 hover:bg-green-700 text-theme text-sm font-medium rounded-lg transition-colors"
       >
-        Add Funds
+        Add Credits
       </button>
     </div>
   {:else if $walletStore.isGuest && $hasExistingWallet}

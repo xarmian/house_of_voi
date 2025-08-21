@@ -6,6 +6,7 @@
   import { walletActions } from '$lib/stores/walletActions';
   import { isSpinning } from '$lib/stores/game';
   import AddFundsModal from '$lib/components/wallet/AddFundsModal.svelte';
+  import BalanceBreakdown from '$lib/components/wallet/BalanceBreakdown.svelte';
   import OddsAnalysis from '$lib/components/analytics/OddsAnalysis.svelte';
   import { BETTING_CONSTANTS, formatVOI } from '$lib/constants/betting';
   import { 
@@ -45,6 +46,18 @@
   
   // Update input when store changes
   $: betInputValue = $betPerLineVOI;
+  
+  // Trigger enhanced validation when wallet connects or betting values change
+  let validationTimeout: number;
+  $: if ($isWalletConnected && $walletAddress && ($bettingStore.betPerLine || $bettingStore.selectedPaylines)) {
+    // Clear previous timeout
+    if (validationTimeout) clearTimeout(validationTimeout);
+    
+    // Debounce validation to avoid excessive calls
+    validationTimeout = setTimeout(() => {
+      bettingStore.validateEnhanced().catch(console.error);
+    }, 500);
+  }
   
   // Handle bet input changes
   function handleBetInput(event: Event) {
@@ -332,12 +345,9 @@
                 {$bettingStore.selectedPaylines} lines × {$betPerLineVOI} VOI
               </div>
               
-              <!-- Balance Check -->
-              <div class="flex items-center justify-between text-sm border-t border-surface-border pt-3 mb-3">
-                <span class="text-theme-text opacity-70">Balance:</span>
-                <span class="font-medium" class:text-green-400={$canAffordBet} class:text-red-400={!$canAffordBet}>
-                  {formatVOI($walletBalance)} VOI
-                </span>
+              <!-- Available Credits -->
+              <div class="border-t border-surface-border pt-3 mb-3">
+                <BalanceBreakdown />
               </div>
               
               <!-- Add Funds Button -->
@@ -347,7 +357,7 @@
                   disabled={!$isWalletConnected}
                   class="btn-primary text-sm py-2 px-4"
                 >
-                  Add Funds
+                  Add Credits
                 </button>
               </div>
             </div>
