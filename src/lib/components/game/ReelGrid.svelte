@@ -28,6 +28,7 @@
   let symbolGrid: HTMLElement[][] = [];
   let isMounted = false;
   let physicsEngine: ReelPhysicsEngine | null = null;
+  let gridElement: HTMLElement; // Reference to this component's grid element
   
   // Extended reel data for seamless scrolling
   let extendedReels: SlotSymbol[][] = [];
@@ -217,20 +218,20 @@
     
     // Initialize reel references
     const updateReelRefs = () => {
-      // Use more specific selectors to get exactly 5 reels
-      const gridElement = document.querySelector('.reel-grid');
+      // Use component-scoped selectors instead of global document queries
       if (gridElement) {
         reelElements = Array.from(gridElement.querySelectorAll('.reel-strip'));
         reelContainers = Array.from(gridElement.querySelectorAll('.reel-viewport'));
+        
+        // Initialize symbol grid references with component scope
+        symbolGrid = Array(5).fill(null).map((_, reelIndex) => 
+          Array.from(gridElement.querySelectorAll(`[data-reel="${reelIndex}"] .symbol-element`))
+        );
       } else {
         reelElements = [];
         reelContainers = [];
+        symbolGrid = [];
       }
-      
-      // Initialize symbol grid references
-      symbolGrid = Array(5).fill(null).map((_, reelIndex) => 
-        Array.from(document.querySelectorAll(`[data-reel="${reelIndex}"] .symbol-element`))
-      );
       
       // Elements initialized
     };
@@ -245,7 +246,6 @@
     
     // Also update on any changes
     const observer = new MutationObserver(updateReelRefs);
-    const gridElement = document.querySelector('.reel-grid');
     if (gridElement) {
       observer.observe(gridElement, {
         childList: true,
@@ -268,7 +268,7 @@
   });
 </script>
 
-<div class="reel-grid" role="application" aria-label="Slot machine reels">
+<div class="reel-grid" bind:this={gridElement} role="application" aria-label="Slot machine reels">
   {#each extendedReels as extendedReel, reelIndex}
     <div 
       class="reel-container"

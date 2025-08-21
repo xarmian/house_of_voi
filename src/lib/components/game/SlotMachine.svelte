@@ -128,7 +128,7 @@
 
     // @ts-ignore
     document.addEventListener('replay-spin', handleReplayEvent);
-
+    
     return () => {
       // @ts-ignore
       document.removeEventListener('replay-spin', handleReplayEvent);
@@ -510,18 +510,29 @@
       return;
     }
     
-    // Prevent overlapping replays
+    // Cancel any existing replay and start new one
     if (isReplayMode) {
-      console.warn('Replay already in progress, ignoring new replay request');
-      return;
+      console.log('⚠️ Canceling existing replay to start new one');
+      // Cancel existing replay timeouts
+      replayTimeouts.forEach(timeout => clearTimeout(timeout));
+      replayTimeouts = [];
+      // Force stop any ongoing animations
+      callAllReelGrids('stopSpin');
+      callAllReelGrids('setFinalPositions', [['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_']], 'cancel-previous');
+      gameStore.reset();
     }
     
-    // Mark this replay as processed GLOBALLY
+    // Mark this replay as processed GLOBALLY (temporarily to prevent immediate duplicates)
     GLOBAL_PROCESSED_REPLAYS.add(replayId);
     
     // Mark that user has initiated a replay (allows animations)
     userSessionStarted = true;
     isReplayMode = true; // Prevent queue auto-start during replay
+    
+    // Remove from global set after a short delay to allow future replays of same spin
+    setTimeout(() => {
+      GLOBAL_PROCESSED_REPLAYS.delete(replayId);
+    }, 1000); // Allow re-replay after 1 second
     
     console.log(`=== REPLAY: Starting replay sequence for ${replayId} ===`);
     
@@ -627,8 +638,7 @@
           // Clear replay mode flag to allow normal operation
           isReplayMode = false;
           
-          // Remove this replay from GLOBAL processed set (allow future replays of same spin)
-          GLOBAL_PROCESSED_REPLAYS.delete(replayId);
+          // Global deduplication already cleared earlier
           
           // Remove completed timeouts from tracking
           replayTimeouts = replayTimeouts.filter(t => t !== startTimeout && t !== outcomeTimeout && t !== celebrationTimeout && t !== cleanupTimeout);
@@ -646,6 +656,7 @@
 <!-- Reactive theme styles -->
 <div class="slot-machine-container h-full" 
      style="--theme-primary: {$currentTheme.primary}; --theme-secondary: {$currentTheme.secondary}; --theme-lights: {$currentTheme.lights};">
+
   <!-- Desktop: Vertical Layout -->
   <div class="hidden lg:block">
     <!-- Slot Machine Frame -->
@@ -857,7 +868,7 @@
   
   <!-- Maintenance Overlay - only show after initial balance check completes -->
   {#if !$isSlotMachineOperational && showMaintenanceOverlay && hasInitialBalanceCheckCompleted && !$isLoadingHouseBalance}
-    <div class="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 rounded-xl">
+    <div class="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-40 rounded-xl">
       <div class="bg-surface-primary border border-surface-border rounded-lg shadow-xl bg-gradient-to-br from-orange-900/90 to-red-900/90 border-orange-600 p-8 max-w-md mx-4 shadow-2xl">
         <div class="text-center">
           <!-- Maintenance Icon -->
@@ -900,6 +911,7 @@
     flex-direction: column;
     position: relative;
   }
+
 
   /* Enhanced Slot Machine Frame Styling */
   .slot-machine-frame {
@@ -995,6 +1007,7 @@
       inset 0 2px 4px rgba(0, 0, 0, 0.6),
       0 0 10px var(--theme-lights);
   }
+
 
   /* Animations */
   @keyframes shimmer {
