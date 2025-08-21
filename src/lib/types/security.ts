@@ -8,6 +8,8 @@ export interface EncryptedWallet {
   };
   salt: string;
   iv: string;
+  version?: number; // 1 = fingerprint-encrypted (legacy), 2 = password-encrypted
+  isPasswordless?: boolean; // true if wallet uses empty password (weak encryption)
 }
 
 export interface WalletSession {

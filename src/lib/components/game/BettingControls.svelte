@@ -2,7 +2,8 @@
   import { createEventDispatcher, onMount } from 'svelte';
   import { Plus, Minus, Zap, DollarSign, BarChart3 } from 'lucide-svelte';
   import { bettingStore, betPerLineVOI, totalBetVOI, canAffordBet } from '$lib/stores/betting';
-  import { walletBalance, isWalletConnected, walletAddress } from '$lib/stores/wallet';
+  import { walletBalance, isWalletConnected, isWalletGuest, walletAddress, isNewUser, hasExistingWallet } from '$lib/stores/wallet';
+  import { walletActions } from '$lib/stores/walletActions';
   import { isSpinning } from '$lib/stores/game';
   import AddFundsModal from '$lib/components/wallet/AddFundsModal.svelte';
   import OddsAnalysis from '$lib/components/analytics/OddsAnalysis.svelte';
@@ -16,7 +17,7 @@
   import { playButtonClick } from '$lib/services/soundService';
   
   const dispatch = createEventDispatcher<{
-    spin: { betPerLine: number; selectedPaylines: number; totalBet: number }
+    spin: { betPerLine: number; selectedPaylines: number; totalBet: number };
   }>();
   
   export let disabled = false;
@@ -160,10 +161,11 @@
                      'Spin';
 </script>
 
-<div class="betting-controls" class:compact={compact}>
+<div class="betting-controls relative" class:compact={compact}>
+  <!-- Always show betting controls structure -->
   <!-- Header -->
   {#if !compact}
-  <div class="flex items-center justify-between pb-2">
+  <div class="flex items-center justify-between pb-2" class:blurred-background={$isNewUser}>
     <div class="flex items-center gap-2 text-amber-400 mb-4">
       <DollarSign class="w-5 h-5" />
       <h3 class="font-bold text-lg">Betting Controls</h3>
@@ -172,6 +174,7 @@
       on:click={toggleOddsAnalysis}
       class="flex items-center gap-2 text-gray-400 hover:text-white transition-colors px-3 py-1 rounded-md hover:bg-slate-700"
       title="Show win odds and analysis"
+      disabled={$isNewUser}
     >
       <BarChart3 class="w-4 h-4" />
       <span class="text-sm">Win Odds</span>
@@ -181,7 +184,7 @@
 
   <!-- Main betting controls - horizontal layout for desktop -->
   {#if !compact}
-    <div class="desktop-betting-grid">
+    <div class="desktop-betting-grid" class:blurred-background={$isNewUser}>
       <div class="main-betting-row">
         <!-- Left side: Controls -->
         <div class="betting-controls-left">
@@ -311,7 +314,7 @@
     </div>
   {:else}
     <!-- Compact mobile layout (unchanged) -->
-    <div class="space-y-3">
+    <div class="space-y-3" class:blurred-background={$isNewUser}>
       <!-- Paylines Control -->
       <div class="control-group">
         <div class="flex items-center justify-between bg-slate-800 rounded-lg border border-slate-700 p-2">
@@ -398,7 +401,7 @@
 
   <!-- Error Messages -->
   {#if $bettingStore.errors.length > 0}
-    <div class="control-group" class:mt-4={!compact} class:mt-3={compact}>
+    <div class="control-group" class:mt-4={!compact} class:mt-3={compact} class:blurred-background={$isNewUser}>
       <div class="bg-red-900/20 border border-red-700/50 rounded-lg p-3">
         {#each $bettingStore.errors as error}
           <p class="text-red-400 text-sm">{error}</p>
@@ -408,7 +411,7 @@
   {/if}
   
   <!-- Spin Button -->
-  <div class="control-group" class:mt-4={!compact} class:mt-3={compact}>
+  <div class="control-group" class:mt-4={!compact} class:mt-3={compact} class:blurred-background={$isNewUser}>
     <button
       bind:this={spinButtonElement}
       on:click={handleSpin}
@@ -430,6 +433,25 @@
       {/if}
     </button>
   </div>
+
+  <!-- New User Overlay - only for users who don't have a wallet yet -->
+  {#if $isNewUser}
+    <div class="absolute -left-4 -right-4 -bottom-4 top-0 flex items-center justify-center z-[5] rounded-lg bg-black/20">
+      <div class="text-center py-8 px-8 bg-black/30 rounded-lg border border-gray-600/30">
+        <div class="flex items-center justify-center gap-2 text-amber-400 mb-4">
+          <DollarSign class="w-6 h-6" />
+          <h3 class="font-bold text-lg">Ready to Play!</h3>
+        </div>
+        <p class="text-gray-300 text-sm mb-4">Add funds to your wallet to start spinning</p>
+        <button
+          class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+          on:click={() => walletActions.triggerWalletSetup()}
+        >
+          Add Funds to Play
+        </button>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <!-- Add Funds Modal -->
@@ -464,7 +486,7 @@
   </div>
 {/if}
 
-<style>
+<style lang="postcss">
   .betting-controls {
     @apply max-w-full;
   }
@@ -764,5 +786,18 @@
     .spin-button:not(:disabled):hover::before {
       transform: translateX(-100%);
     }
+  }
+
+  /* Guest mode blur effect */
+  .blurred-background {
+    @apply opacity-40 pointer-events-none;
+    filter: blur(1px) grayscale(0.5);
+    transition: all 0.3s ease-in-out;
+  }
+
+  /* Ensure overlay is positioned correctly */
+  .betting-controls.relative {
+    position: relative;
+    isolation: isolate;
   }
 </style>

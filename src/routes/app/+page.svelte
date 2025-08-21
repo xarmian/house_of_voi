@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { walletStore } from '$lib/stores/wallet';
   import { contractDataCache } from '$lib/services/contractDataCache';
-  import WalletDisplay from '$lib/components/wallet/WalletDisplay.svelte';
+  import WalletManager from '$lib/components/wallet/WalletManager.svelte';
   import SlotMachine from '$lib/components/game/SlotMachine.svelte';
   import GameQueue from '$lib/components/game/GameQueue.svelte';
   import GameHeader from '$lib/components/game/GameHeader.svelte';
@@ -14,8 +14,6 @@
   let hasPreloadedCache = false;
 
   onMount(async () => {
-    await walletStore.initialize();
-    
     // Pre-load contract data after wallet is initialized - but only once per session
     const unsubscribe = walletStore.subscribe(async (state) => {
       if (state.account && !state.isLocked && !hasPreloadedCache) {
@@ -51,12 +49,12 @@
       <div class="grid grid-cols-12 gap-4 items-start">
         <!-- Main game area -->
         <div class="col-span-8">
-          <SlotMachine disabled={!$walletStore.isConnected} />
+          <SlotMachine disabled={false} />
         </div>
         
         <!-- Right sidebar: Wallet and Queue - aligned with game status bar -->
         <div class="col-span-4 space-y-4">
-          <WalletDisplay />
+          <WalletManager />
           <GameQueue maxHeight="calc(100vh - 20rem)" />
         </div>
       </div>
@@ -68,7 +66,7 @@
       <div class="flex-shrink-0 px-2 py-1 safe-area-left safe-area-right mb-2">
         <div class="flex items-center justify-between gap-2">
           <div class="flex-1">
-            <WalletDisplay compact={true} />
+            <WalletManager compact={true} />
           </div>
           <div class="flex-shrink-0">
             <SoundSettingsIcon />
@@ -78,7 +76,7 @@
       
       <!-- Main game area - allows natural scrolling -->
       <div class="flex-1 flex flex-col px-2 pb-2 safe-area-left safe-area-right">
-        <SlotMachine disabled={!$walletStore.isConnected} compact={true} />
+        <SlotMachine disabled={false} compact={true} />
       </div>
     </div>
   </div>

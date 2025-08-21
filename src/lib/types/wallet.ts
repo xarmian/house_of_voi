@@ -10,6 +10,7 @@ export interface WalletState {
   account: WalletAccount | null;
   balance: number;
   isConnected: boolean;
+  isGuest: boolean;
   isLoading: boolean;
   isLocked: boolean;
   error: string | null;

@@ -25,7 +25,7 @@ export interface SoundState {
 
 // Default sound preferences
 const defaultPreferences: SoundPreferences = {
-  masterEnabled: true,
+  masterEnabled: false, // Disabled by default
   masterVolume: 0.7,
   spinSoundsEnabled: true,
   spinVolume: 0.8,
@@ -76,6 +76,9 @@ function checkAudioSupport(): boolean {
   
   return !!(window.AudioContext || (window as any).webkitAudioContext);
 }
+
+// Cleanup callback for external sound services
+let externalCleanupCallback: (() => void) | null = null;
 
 // Create the sound store
 function createSoundStore() {
@@ -151,6 +154,16 @@ function createSoundStore() {
         
         // Stop all currently playing sounds if disabling
         if (!updatedPreferences.masterEnabled) {
+          // Call external cleanup first (for complex looping sounds)
+          if (externalCleanupCallback) {
+            try {
+              externalCleanupCallback();
+            } catch (e) {
+              console.warn('External cleanup callback failed:', e);
+            }
+          }
+          
+          // Then stop basic sounds tracked in store
           state.currentlyPlaying.forEach((sources, soundType) => {
             sources.forEach(source => {
               try {
@@ -169,6 +182,11 @@ function createSoundStore() {
           currentlyPlaying: updatedPreferences.masterEnabled ? state.currentlyPlaying : new Map()
         };
       });
+    },
+
+    // Register external cleanup callback
+    registerCleanupCallback(callback: () => void): void {
+      externalCleanupCallback = callback;
     },
 
     // Set master volume

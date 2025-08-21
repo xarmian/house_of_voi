@@ -9,6 +9,7 @@ function createWalletStore() {
     account: null,
     balance: 0,
     isConnected: false,
+    isGuest: true, // Start in guest mode by default
     isLoading: false,
     isLocked: false,
     error: null,
@@ -48,66 +49,106 @@ function createWalletStore() {
     async initialize() {
       if (!browser) return;
       
-      update(state => ({ ...state, isLoading: true, error: null }));
-      
       try {
-        // Check for existing wallet
         if (walletService.hasStoredWallet()) {
-          let account = await walletService.retrieveWallet();
-          
-          // If retrieval failed, attempt recovery (for corrupted sessions)
-          if (!account) {
-            console.log('Wallet retrieval failed, attempting recovery...');
-            account = await walletService.recoverWallet();
-          }
-          
-          if (account) {
-            if (!algorandService) {
-              throw new Error('AlgorandService not available');
+          // Check if wallet is passwordless and try to auto-unlock
+          if (walletService.isPasswordlessWallet()) {
+            try {
+              const account = await walletService.retrieveWallet(''); // Empty password
+              
+              if (account && algorandService) {
+                const balance = await algorandService.getBalance(account.address);
+                
+                set({
+                  account,
+                  balance,
+                  isConnected: true,
+                  isGuest: false,
+                  isLoading: false,
+                  isLocked: false,
+                  error: null,
+                  lastUpdated: Date.now()
+                });
+                
+                startBalanceRefresh(account.address);
+                return; // Successfully auto-unlocked
+              }
+            } catch (error) {
+              console.error('Failed to auto-unlock passwordless wallet:', error);
+              // Fall through to guest mode
             }
-            const balance = await algorandService.getBalance(account.address);
-            
-            set({
-              account,
-              balance,
-              isConnected: true,
-              isLoading: false,
-              isLocked: false,
-              error: null,
-              lastUpdated: Date.now()
-            });
-            
-            startBalanceRefresh(account.address);
-            return;
           }
+          
+          // Wallet exists but stay in guest mode until user initiates setup
+          set({
+            account: null,
+            balance: 0,
+            isConnected: false,
+            isGuest: true,
+            isLoading: false,
+            isLocked: false,
+            error: null,
+            lastUpdated: null
+          });
+        } else {
+          // No wallet exists - stay in guest mode
+          set({
+            account: null,
+            balance: 0,
+            isConnected: false,
+            isGuest: true,
+            isLoading: false,
+            isLocked: false,
+            error: null,
+            lastUpdated: null
+          });
         }
-        
-        // Generate new wallet
-        const account = await walletService.generateWallet();
-        await walletService.storeWallet(account);
-        
-        set({
-          account,
-          balance: 0,
-          isConnected: true,
-          isLoading: false,
-          isLocked: false,
-          error: null,
-          lastUpdated: Date.now()
-        });
-        
-        startBalanceRefresh(account.address);
-        
       } catch (error) {
         set({
           account: null,
           balance: 0,
           isConnected: false,
+          isGuest: true,
           isLoading: false,
           isLocked: false,
           error: error instanceof Error ? error.message : 'Failed to initialize wallet',
           lastUpdated: null
         });
+      }
+    },
+
+    async startWalletSetup() {
+      if (!browser) return;
+      
+      update(state => ({ ...state, isLoading: true, error: null }));
+      
+      try {
+        // Check for existing wallet when user actually wants to set up
+        if (walletService.hasStoredWallet()) {
+          // Wallet exists - transition to locked state to prompt for password
+          update(state => ({
+            ...state,
+            isGuest: false,
+            isLocked: true,
+            isLoading: false
+          }));
+          return 'existing';
+        } else {
+          // No wallet exists - transition to setup mode
+          update(state => ({
+            ...state,
+            isGuest: false,
+            isLoading: false
+          }));
+          return 'new';
+        }
+      } catch (error) {
+        update(state => ({
+          ...state,
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Failed to start wallet setup'
+        }));
+        return 'error';
       }
     },
 
@@ -189,20 +230,28 @@ function createWalletStore() {
       }));
     },
 
-    async unlock() {
-      update(state => ({ ...state, isLoading: true }));
+    async unlock(password: string) {
+      update(state => ({ ...state, isLoading: true, error: null }));
       
       try {
-        const account = await walletService.retrieveWallet();
+        const account = await walletService.retrieveWallet(password);
         
         if (account) {
-          update(state => ({
-            ...state,
+          if (!algorandService) {
+            throw new Error('AlgorandService not available');
+          }
+          const balance = await algorandService.getBalance(account.address);
+          
+          set({
             account,
-            isLocked: false,
+            balance,
+            isConnected: true,
+            isGuest: false,
             isLoading: false,
-            error: null
-          }));
+            isLocked: false,
+            error: null,
+            lastUpdated: Date.now()
+          });
           
           startBalanceRefresh(account.address);
         } else {
@@ -212,8 +261,9 @@ function createWalletStore() {
         update(state => ({
           ...state,
           isLoading: false,
-          error: 'Failed to unlock wallet'
+          error: error instanceof Error ? error.message : 'Failed to unlock wallet'
         }));
+        throw error; // Re-throw to ensure UI shows the error
       }
     },
 
@@ -225,6 +275,7 @@ function createWalletStore() {
         account: null,
         balance: 0,
         isConnected: false,
+        isGuest: true, // Return to guest mode
         isLoading: false,
         isLocked: false,
         error: null,
@@ -236,7 +287,46 @@ function createWalletStore() {
       update(state => ({ ...state, error: null }));
     },
 
-    async importWallet(mnemonic: string) {
+    async createWallet(password: string) {
+      if (!browser) return;
+      
+      update(state => ({ ...state, isLoading: true, error: null }));
+      
+      try {
+        // Generate new wallet
+        const account = await walletService.generateWallet();
+        
+        // Clear existing wallet first
+        walletService.clearWallet();
+        stopBalanceRefresh();
+        
+        // Store the new wallet with password
+        await walletService.storeWallet(account, password);
+        
+        set({
+          account,
+          balance: 0,
+          isConnected: true,
+          isGuest: false,
+          isLoading: false,
+          isLocked: false,
+          error: null,
+          lastUpdated: Date.now()
+        });
+        
+        startBalanceRefresh(account.address);
+        
+      } catch (error) {
+        update(state => ({
+          ...state,
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Failed to create wallet'
+        }));
+        throw error;
+      }
+    },
+
+    async importWallet(mnemonic: string, password: string) {
       if (!browser) return;
       
       update(state => ({ ...state, isLoading: true, error: null }));
@@ -249,8 +339,8 @@ function createWalletStore() {
         walletService.clearWallet();
         stopBalanceRefresh();
         
-        // Store the imported wallet
-        await walletService.storeWallet(account);
+        // Store the imported wallet with password
+        await walletService.storeWallet(account, password);
         
         // Get balance for the imported wallet
         if (!algorandService) {
@@ -262,6 +352,7 @@ function createWalletStore() {
           account,
           balance,
           isConnected: true,
+          isGuest: false,
           isLoading: false,
           isLocked: false,
           error: null,
@@ -283,36 +374,20 @@ function createWalletStore() {
     async resetWallet() {
       if (!browser) return;
       
-      update(state => ({ ...state, isLoading: true, error: null }));
+      // Clear existing wallet and go back to setup mode
+      walletService.clearWallet();
+      stopBalanceRefresh();
       
-      try {
-        // Clear existing wallet
-        walletService.clearWallet();
-        stopBalanceRefresh();
-        
-        // Generate new wallet
-        const account = await walletService.generateWallet();
-        await walletService.storeWallet(account);
-        
-        set({
-          account,
-          balance: 0,
-          isConnected: true,
-          isLoading: false,
-          isLocked: false,
-          error: null,
-          lastUpdated: Date.now()
-        });
-        
-        startBalanceRefresh(account.address);
-        
-      } catch (error) {
-        update(state => ({
-          ...state,
-          isLoading: false,
-          error: error instanceof Error ? error.message : 'Failed to reset wallet'
-        }));
-      }
+      set({
+        account: null,
+        balance: 0,
+        isConnected: false,
+        isGuest: true, // Return to guest mode
+        isLoading: false,
+        isLocked: false,
+        error: null,
+        lastUpdated: null
+      });
     }
   };
 }
@@ -333,4 +408,25 @@ export const walletBalance = derived(
 export const isWalletConnected = derived(
   walletStore,
   $wallet => $wallet.isConnected && !$wallet.isLocked
+);
+
+export const isWalletGuest = derived(
+  walletStore,
+  $wallet => $wallet.isGuest
+);
+
+export const isNewUser = derived(
+  walletStore,
+  $wallet => {
+    if (!browser) return false;
+    return $wallet.isGuest && !walletService.hasStoredWallet();
+  }
+);
+
+export const hasExistingWallet = derived(
+  walletStore,
+  $wallet => {
+    if (!browser) return false;
+    return walletService.hasStoredWallet();
+  }
 );

@@ -30,6 +30,8 @@ class SoundService {
   constructor() {
     if (browser) {
       this.init();
+      // Register cleanup callback with sound store to handle master sound toggle
+      soundStore.registerCleanupCallback(() => this.cleanup());
     }
   }
 
@@ -176,11 +178,22 @@ class SoundService {
       // Set initial volume
       const startTime = this.audioContext.currentTime + (options.delay || 0);
       
+      // Check current volume again just before playing (in case settings changed)
+      const currentEffectiveVolume = options.volume !== undefined 
+        ? options.volume 
+        : getEffectiveVolume(category);
+      
+      if (currentEffectiveVolume <= 0) {
+        // Volume was disabled after we started - stop immediately
+        source.stop(startTime);
+        return null;
+      }
+      
       if (options.fadeIn && options.fadeIn > 0) {
         gainNode.gain.setValueAtTime(0, startTime);
-        gainNode.gain.linearRampToValueAtTime(effectiveVolume, startTime + options.fadeIn);
+        gainNode.gain.linearRampToValueAtTime(currentEffectiveVolume, startTime + options.fadeIn);
       } else {
-        gainNode.gain.setValueAtTime(effectiveVolume, startTime);
+        gainNode.gain.setValueAtTime(currentEffectiveVolume, startTime);
       }
 
       // Start playing
@@ -206,8 +219,8 @@ class SoundService {
       fadeOut?: number; // Fade out duration when stopped
     } = {}
   ): Promise<AudioBufferSourceNode | null> {
-    // Stop any existing instances of this sound
-    soundStore.stopSounds(soundType);
+    // Stop any existing instances of this sound using thorough cleanup
+    await this.stopLoopingSound(soundType);
     
     if (!browser) return null;
     
@@ -256,12 +269,21 @@ class SoundService {
         source.connect(gainNode);
         gainNode.connect(this.audioContext.destination);
         
+        // Check current volume again just before playing (in case settings changed)
+        const currentEffectiveVolume = getEffectiveVolume(category);
+        if (currentEffectiveVolume <= 0) {
+          // Volume was disabled after we started - stop this source
+          source.stop(when);
+          loopingData.isActive = false;
+          return null;
+        }
+        
         // Set volume with optional fade in
         if (fadeIn && options.fadeIn && options.fadeIn > 0) {
           gainNode.gain.setValueAtTime(0, when);
-          gainNode.gain.linearRampToValueAtTime(effectiveVolume, when + options.fadeIn);
+          gainNode.gain.linearRampToValueAtTime(currentEffectiveVolume, when + options.fadeIn);
         } else {
-          gainNode.gain.setValueAtTime(effectiveVolume, when);
+          gainNode.gain.setValueAtTime(currentEffectiveVolume, when);
         }
         
         // Store references for cleanup
@@ -283,6 +305,33 @@ class SoundService {
           const timeoutIndex = loopingData.timeoutHandles.indexOf(timeoutHandle);
           if (timeoutIndex > -1) {
             loopingData.timeoutHandles.splice(timeoutIndex, 1);
+          }
+          
+          // CRITICAL: Check if still active before scheduling next source
+          if (!loopingData.isActive) {
+            return; // Don't schedule new source if stopped
+          }
+          
+          // Check if sound is still enabled before continuing loop (use direct store access)
+          const state = soundStore.getSnapshot();
+          if (!state.preferences.masterEnabled) {
+            console.log(`Stopping ${soundType} loop - master sound disabled`);
+            loopingData.isActive = false;
+            return; // Don't schedule new source if master sound is disabled
+          }
+          
+          const category = getSoundCategory(soundType);
+          const categoryEnabled = {
+            spin: state.preferences.spinSoundsEnabled,
+            win: state.preferences.winSoundsEnabled,
+            ui: state.preferences.uiSoundsEnabled,
+            background: state.preferences.backgroundEnabled
+          }[category];
+          
+          if (!categoryEnabled) {
+            console.log(`Stopping ${soundType} loop - category sound disabled`);
+            loopingData.isActive = false;
+            return; // Don't schedule new source if category is disabled
           }
           
           createAndScheduleSource(nextLoopTime);

@@ -23,6 +23,7 @@
   import WinCelebration from './WinCelebration.svelte';
   import LoadingOverlay from '../ui/LoadingOverlay.svelte';
   import { soundService, playSpinStart, playReelStop, playWinSound, playLoss } from '$lib/services/soundService';
+  import { themeStore, currentTheme } from '$lib/stores/theme';
   
   // References to ReelGrid components for direct function calls
   let desktopReelGrid: ReelGrid;
@@ -36,7 +37,24 @@
       }
     });
   }
+
+  // Theme switching function
+  let isThemeChanging = false;
+  function handleThemeClick(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Add visual feedback
+    isThemeChanging = true;
+    setTimeout(() => {
+      isThemeChanging = false;
+    }, 500);
+    
+    themeStore.nextTheme();
+  }
+
   import { PUBLIC_DEBUG_MODE } from '$env/static/public';
+  
   
   export let disabled = false;
   export let compact = false;
@@ -160,6 +178,11 @@
       return;
     }
 
+    // SOUND GUARD: Don't restart sound if this spin is already playing
+    if ($currentSpinId === spinId && $isSpinning) {
+      return; // Same spin already spinning, don't restart sound
+    }
+
     // CLEANUP: Clear any existing animation interval
     if (spinningInterval) {
       clearInterval(spinningInterval);
@@ -273,7 +296,7 @@
     }
   }
 
-  function displayOutcome(spin: any) {
+  async function displayOutcome(spin: any) {
     // CRITICAL STATE COORDINATION CHECK: Only display if this spin is current
     if (!spin.outcome || $currentSpinId !== spin.id) {
       return;
@@ -292,10 +315,11 @@
       spinningInterval = null;
     }
     
-    // Stop the spinning loop sound with fade out
-    soundService.stopLoopingSound('spin-loop', { fadeOut: 0.3 }).catch(() => {
-      // Ignore sound errors
-    });
+    // Stop the spinning loop sound with verification (same as replays)
+    const soundStopped = await soundService.forceStopWithVerification('spin-loop', 3);
+    if (!soundStopped) {
+      console.warn('Failed to stop spin-loop sound after normal spin');
+    }
     
     // Play reel stop sound (only once, not from each ReelGrid)
     setTimeout(() => {
@@ -594,13 +618,22 @@
   }
 </script>
 
-<div class="slot-machine-container h-full">
+<!-- Reactive theme styles -->
+<div class="slot-machine-container h-full" 
+     style="--theme-primary: {$currentTheme.primary}; --theme-secondary: {$currentTheme.secondary}; --theme-lights: {$currentTheme.lights};">
   <!-- Desktop: Vertical Layout -->
   <div class="hidden lg:block">
     <!-- Slot Machine Frame -->
     <div class="slot-machine-frame mb-4">
       <!-- Outer decorative border with casino lights -->
-      <div class="casino-border">
+      <div class="casino-border" 
+           class:theme-changing={isThemeChanging}
+           role="button" 
+           tabindex="0"
+           aria-label="Change slot machine theme"
+           title="Click to change theme: {$currentTheme.displayName}"
+           on:click={handleThemeClick}
+           on:keydown={(e) => e.key === 'Enter' && handleThemeClick(e)}>
         <div class="casino-lights"></div>
       </div>
       
@@ -636,7 +669,14 @@
       <!-- Slot Machine Frame - Fixed size -->
       <div class="flex-shrink-0 slot-machine-frame mb-3">
         <!-- Outer decorative border with casino lights -->
-        <div class="casino-border">
+        <div class="casino-border" 
+             class:theme-changing={isThemeChanging}
+             role="button" 
+             tabindex="0"
+             aria-label="Change slot machine theme"
+             title="Click to change theme: {$currentTheme.displayName}"
+             on:click={handleThemeClick}
+             on:keydown={(e) => e.key === 'Enter' && handleThemeClick(e)}>
           <div class="casino-lights"></div>
         </div>
         
@@ -680,7 +720,14 @@
         <!-- Slot Machine Frame -->
         <div class="slot-machine-frame">
           <!-- Outer decorative border with casino lights -->
-          <div class="casino-border">
+          <div class="casino-border" 
+               class:theme-changing={isThemeChanging}
+               role="button" 
+               tabindex="0"
+               aria-label="Change slot machine theme"
+               title="Click to change theme: {$currentTheme.displayName}"
+               on:click={handleThemeClick}
+               on:keydown={(e) => e.key === 'Enter' && handleThemeClick(e)}>
             <div class="casino-lights"></div>
           </div>
           
@@ -836,13 +883,33 @@
   }
 
   .casino-border {
-    @apply absolute -inset-4 rounded-2xl;
+    @apply absolute -inset-4 rounded-2xl cursor-pointer;
     background: linear-gradient(45deg, 
-      #7c3aed 0%, #a855f7 25%, #7c3aed 50%, #a855f7 75%, #7c3aed 100%);
+      var(--theme-primary) 0%, var(--theme-secondary) 25%, var(--theme-primary) 50%, var(--theme-secondary) 75%, var(--theme-primary) 100%);
     background-size: 200% 200%;
     animation: shimmer 3s ease-in-out infinite;
     padding: 3px;
     border-radius: 20px;
+    transition: all 0.3s ease;
+  }
+
+  .casino-border:hover {
+    transform: scale(1.02);
+    filter: brightness(1.1);
+  }
+
+  .casino-border:active {
+    transform: scale(0.98);
+  }
+
+  .casino-border.theme-changing {
+    animation: theme-change-pulse 0.5s ease-out;
+  }
+
+  @keyframes theme-change-pulse {
+    0% { transform: scale(1); filter: brightness(1); }
+    50% { transform: scale(1.05); filter: brightness(1.3); }
+    100% { transform: scale(1); filter: brightness(1); }
   }
 
   .casino-lights {
@@ -850,7 +917,7 @@
     background: repeating-linear-gradient(
       0deg,
       transparent 0px,
-      rgba(168, 85, 247, 0.3) 2px,
+      var(--theme-lights) 2px,
       transparent 4px,
       transparent 20px
     );

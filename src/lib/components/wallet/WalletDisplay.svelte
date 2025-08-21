@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { walletStore, walletBalance, walletAddress, isWalletConnected } from '$lib/stores/wallet';
-  import { Wallet, MoreHorizontal, RefreshCw } from 'lucide-svelte';
-  import { createEventDispatcher } from 'svelte';
+  import { walletStore, walletBalance, walletAddress, isWalletConnected, hasExistingWallet } from '$lib/stores/wallet';
+  import { walletService } from '$lib/services/wallet';
+  import { algorandService } from '$lib/services/algorand';
+  import { Wallet, MoreHorizontal, RefreshCw, Unlock } from 'lucide-svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
   import WalletDetailsModal from './WalletDetailsModal.svelte';
   
   const dispatch = createEventDispatcher();
@@ -11,10 +13,49 @@
   let showDetailsModal = false;
   let isRefreshing = false;
   
+  // Public wallet data for locked wallets
+  let publicWalletData: { address: string; createdAt: number; lastUsed: number; isPasswordless?: boolean } | null = null;
+  let publicBalance: number | null = null;
+  let loadingPublicBalance = false;
+  
   // Format balance for display
-  $: formattedBalance = ($walletBalance / 1_000_000).toFixed(6);
-  $: shortAddress = $walletAddress ? 
-    $walletAddress.slice(0, 8) + '...' + $walletAddress.slice(-8) : '';
+  $: formattedBalance = $isWalletConnected ? 
+    ($walletBalance / 1_000_000).toFixed(6) : 
+    publicBalance !== null ? 
+      (publicBalance / 1_000_000).toFixed(6) : 
+      '0.000000';
+  
+  $: shortAddress = $isWalletConnected ? 
+    ($walletAddress ? $walletAddress.slice(0, 8) + '...' + $walletAddress.slice(-8) : '') :
+    (publicWalletData?.address ? publicWalletData.address.slice(0, 8) + '...' + publicWalletData.address.slice(-8) : '');
+  
+  // Load public wallet data for guest mode with existing wallet
+  async function loadPublicWalletData() {
+    if ($walletStore.isGuest && $hasExistingWallet) {
+      publicWalletData = walletService.getPublicWalletData();
+      
+      if (publicWalletData?.address && algorandService) {
+        loadingPublicBalance = true;
+        try {
+          publicBalance = await algorandService.getBalance(publicWalletData.address);
+        } catch (err) {
+          console.error('Failed to load public wallet balance:', err);
+          publicBalance = null;
+        } finally {
+          loadingPublicBalance = false;
+        }
+      }
+    }
+  }
+  
+  onMount(() => {
+    loadPublicWalletData();
+  });
+  
+  // Reload public data when wallet state changes
+  $: if ($walletStore.isGuest && $hasExistingWallet) {
+    loadPublicWalletData();
+  }
   
   async function refreshBalance() {
     isRefreshing = true;
@@ -23,61 +64,110 @@
   }
   
   function openDetailsModal() {
-    showDetailsModal = true;
+    if ($walletStore.isGuest && !$hasExistingWallet) {
+      // True new user - start wallet setup
+      dispatch('startSetup');
+    } else if ($walletStore.isGuest && $hasExistingWallet) {
+      // Existing wallet in guest mode - trigger unlock flow
+      dispatch('unlock');
+    } else {
+      // Connected wallet - show details modal
+      showDetailsModal = true;
+    }
   }
 </script>
 
 <!-- Unified Wallet Component - opens modal for all functionality -->
-<div class="bg-gradient-to-b from-slate-800 to-slate-900 rounded-2xl shadow-2xl border border-slate-700 h-fit"
-     class:p-4={!compact}
-     class:p-2={compact}
-     class:rounded-xl={compact}>
-  <div class="flex items-center justify-between"
-       class:mb-3={!compact}
-       class:mb-2={compact}>
-    <!-- Header Section -->
-    {#if compact}
-      <div class="flex items-center gap-2">
-        <Wallet class="w-5 h-5 text-voi-400" />
-        <h3 class="text-base font-semibold text-white">Wallet</h3>
-        {#if $isWalletConnected}
-          <span class="text-lg font-bold text-voi-400">{formattedBalance} VOI</span>
-        {/if}
-      </div>
-    {:else}
-      <div class="flex items-center gap-3">
-        <Wallet class="w-6 h-6 text-voi-400" />
-        <h3 class="text-lg font-semibold text-white">Gaming Wallet</h3>
-        {#if $isWalletConnected}
-          <span class="text-xl font-bold text-voi-400">{formattedBalance} VOI</span>
-        {/if}
-      </div>
-    {/if}
-    
-    <!-- Action Buttons -->
+{#if compact}
+  <!-- Compact Mobile View - Single Line -->
+  <div class="bg-slate-800/90 rounded-lg px-3 py-2 border border-slate-700/50 flex items-center justify-between">
     <div class="flex items-center gap-2">
-      <!-- Refresh Balance (non-compact only) -->
-      {#if !compact && $isWalletConnected}
-        <button
-          on:click={refreshBalance}
-          disabled={isRefreshing}
-          class="p-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
-          title="Refresh balance"
-        >
-          <RefreshCw class="w-4 h-4 {isRefreshing ? 'animate-spin' : ''}" />
-        </button>
-      {/if}
-      
-      <!-- Details/Settings Button -->
+      <Wallet class="w-4 h-4 text-voi-400" />
+      <span class="text-sm font-medium text-white">{formattedBalance} VOI</span>
+    </div>
+    
+    {#if $walletStore.isGuest && !$hasExistingWallet}
       <button
         on:click={openDetailsModal}
-        class="p-1.5 text-gray-400 hover:text-white transition-colors"
-        title="Open wallet details"
+        class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded transition-colors"
+      >
+        Add Funds
+      </button>
+    {:else if $walletStore.isGuest && $hasExistingWallet}
+      <button
+        on:click={openDetailsModal}
+        class="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded transition-colors flex items-center gap-1"
+      >
+        <Unlock class="w-3 h-3" />
+        Unlock
+      </button>
+    {:else if $walletStore.isLocked}
+      <button
+        on:click={openDetailsModal}
+        class="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded transition-colors"
+      >
+        Unlock
+      </button>
+    {:else if $walletStore.error}
+      <button
+        on:click={() => walletStore.initialize()}
+        class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded transition-colors"
+      >
+        Retry
+      </button>
+    {:else}
+      <button
+        on:click={openDetailsModal}
+        class="p-1 text-gray-400 hover:text-white transition-colors"
+        title="Wallet options"
       >
         <MoreHorizontal class="w-4 h-4" />
       </button>
-    </div>
+    {/if}
   </div>
+{:else}
+  <!-- Desktop View - Full Display -->
+  <div class="bg-gradient-to-b from-slate-800 to-slate-900 rounded-2xl shadow-2xl border border-slate-700 h-fit p-4">
+    <div class="flex items-center justify-between mb-3">
+      <!-- Header Section -->
+      <div class="flex items-center gap-3">
+        <Wallet class="w-6 h-6 text-voi-400" />
+        <h3 class="text-lg font-semibold text-white">Gaming Wallet</h3>
+        {#if $isWalletConnected || publicBalance !== null || loadingPublicBalance}
+          <span class="text-xl font-bold text-voi-400">
+            {#if loadingPublicBalance}
+              Loading...
+            {:else}
+              {formattedBalance} VOI
+            {/if}
+          </span>
+        {/if}
+      </div>
+      
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-2">
+        <!-- Refresh Balance -->
+        {#if $isWalletConnected}
+          <button
+            on:click={refreshBalance}
+            disabled={isRefreshing}
+            class="p-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+            title="Refresh balance"
+          >
+            <RefreshCw class="w-4 h-4 {isRefreshing ? 'animate-spin' : ''}" />
+          </button>
+        {/if}
+        
+        <!-- Details/Settings Button -->
+        <button
+          on:click={openDetailsModal}
+          class="p-1.5 text-gray-400 hover:text-white transition-colors"
+          title="Open wallet details"
+        >
+          <MoreHorizontal class="w-4 h-4" />
+        </button>
+      </div>
+    </div>
   
   <!-- Status Display -->
   {#if $walletStore.isLoading}
@@ -95,16 +185,36 @@
         Retry
       </button>
     </div>
-  {:else if !$isWalletConnected && !$walletStore.isLocked}
-    <!-- Not connected - show connect button -->
+  {:else if $walletStore.isGuest && !$hasExistingWallet}
+    <!-- True new user - show Add Funds button -->
     <div class="text-center py-4">
-      <p class="text-gray-400 text-sm mb-3">No wallet connected</p>
+      <p class="text-gray-400 text-sm mb-3">Ready to play!</p>
       <button
-        on:click={() => walletStore.initialize()}
-        class="px-4 py-2 bg-voi-600 hover:bg-voi-700 text-white text-sm font-medium rounded-lg transition-colors"
+        on:click={openDetailsModal}
+        class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
       >
-        Connect Wallet
+        Add Funds
       </button>
+    </div>
+  {:else if $walletStore.isGuest && $hasExistingWallet}
+    <!-- Existing wallet in guest mode - show unlock with address -->
+    <div class="py-4">
+      <div class="bg-slate-700/50 rounded-lg p-3 mb-3">
+        <p class="text-xs text-gray-400 mb-1">Address</p>
+        <p class="font-mono text-sm text-white">{shortAddress}</p>
+        {#if publicWalletData?.isPasswordless}
+          <p class="text-xs text-amber-400 mt-1">Passwordless wallet</p>
+        {/if}
+      </div>
+      <div class="text-center">
+        <button
+          on:click={openDetailsModal}
+          class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 mx-auto"
+        >
+          <Unlock class="w-4 h-4" />
+          Unlock Wallet
+        </button>
+      </div>
     </div>
   {:else if $walletStore.isLocked}
     <!-- Locked state -->
@@ -127,7 +237,8 @@
       </p>
     </div>
   {/if}
-</div>
+  </div>
+{/if}
 
 <!-- Unified Modal -->
 {#if showDetailsModal}
