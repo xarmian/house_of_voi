@@ -117,14 +117,6 @@
     return new Date(timestamp).toLocaleDateString();
   }
   
-  function handleRetrySpin(spin: QueuedSpin) {
-    // Play button click sound for retry
-    playButtonClick().catch(() => {
-      // Ignore sound errors
-    });
-    
-    queueStore.retrySpin(spin.id);
-  }
   
   async function handleClaimSpin(spin: QueuedSpin) {
     console.log('🎯 Manual claim triggered for spin:', spin.id);
@@ -365,7 +357,7 @@
           </div>
 
           <!-- Info Button -->
-          {#if spin.txId || spin.claimTxId || spin.commitmentRound || spin.outcomeRound}
+          {#if spin.txId || spin.claimTxId || spin.commitmentRound || spin.outcomeRound || spin.status === SpinStatus.FAILED}
             <button 
               class="info-button"
               on:click|stopPropagation={() => openSpinDetails(spin)}
@@ -475,23 +467,12 @@
                   Retry Claim
                 </button>
               {/if}
-            {:else if spin.status === SpinStatus.FAILED && spin.retryCount < 3}
-              <button
-                on:click={() => handleRetrySpin(spin)}
-                class="retry-button"
-              >
-                Retry
-              </button>
             {:else if [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(spin.status)}
               <!-- Show processing indicator for active spins -->
               <div class="processing-indicator">
                 <div class="text-xs text-theme-text opacity-70">
                   Bet: {formatVOI(spin.totalBet)} VOI
                 </div>
-              </div>
-            {:else if [SpinStatus.FAILED, SpinStatus.EXPIRED].includes(spin.status)}
-              <div class="loss-amount text-red-400">
-                -{formatVOI(spin.totalBet)} VOI
               </div>
             {/if}
           </div>

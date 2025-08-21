@@ -69,6 +69,11 @@
   let showLossFeedback = false;
   let lossAmount = 0;
   
+  // Transaction failure feedback state
+  let showFailureFeedback = false;
+  let failureMessage = 'Transaction failed, please try again';
+  let failureFeedbackTimeout: NodeJS.Timeout | null = null;
+  
   // Continuous spinning management
   let spinningInterval: NodeJS.Timeout | null = null;
   let queueUnsubscribe: (() => void) | null = null;
@@ -208,10 +213,62 @@
     callAllReelGrids('startSpin', spinId);
   }
 
+  async function handleFailedSpin(spin: any) {
+    console.log(`🛑 Handling failed spin: ${spin.id} (${spin.status})`);
+    
+    // Show failure feedback to user
+    const errorMessage = spin.error || 'Transaction failed, please try again';
+    triggerFailureFeedback(errorMessage);
+    
+    // Stop spinning interval
+    if (spinningInterval) {
+      clearInterval(spinningInterval);
+      spinningInterval = null;
+    }
+    
+    // Stop spin-loop audio (same as successful spins)
+    const soundStopped = await soundService.forceStopWithVerification('spin-loop', 3);
+    if (!soundStopped) {
+      console.warn('Failed to stop spin-loop sound after failed spin');
+    }
+    
+    // Play reel stop sound to indicate spin has ended
+    setTimeout(() => {
+      playReelStop().catch(() => {
+        // Ignore sound errors
+      });
+    }, 100);
+    
+    // Stop reel animations completely
+    callAllReelGrids('stopSpin');
+    
+    // Reset game state
+    gameStore.reset();
+  }
+
   function handleQueueUpdate(queueState: any) {
+    // Check if the current spinning spin has failed
+    if ($currentSpinId && queueState.spins && queueState.spins.length > 0) {
+      const currentSpin = queueState.spins.find((spin: any) => spin.id === $currentSpinId);
+      
+      // If the current spin just failed or expired, properly end the spin
+      if (currentSpin && [SpinStatus.FAILED, SpinStatus.EXPIRED].includes(currentSpin.status)) {
+        handleFailedSpin(currentSpin);
+        return; // Don't continue with other processing
+      }
+    }
+    
     // If there are no spins at all, make sure we're not spinning
     if (!queueState.spins || queueState.spins.length === 0) {
       if ($isSpinning || $waitingForOutcome) {
+        // Use the same proper cleanup as failed spins
+        console.log(`🛑 Queue is empty - ending any active spin`);
+        soundService.forceStopWithVerification('spin-loop', 3).then(soundStopped => {
+          if (!soundStopped) {
+            console.warn('Failed to stop spin-loop sound after queue empty');
+          }
+        });
+        callAllReelGrids('stopSpin');
         gameStore.reset();
         if (spinningInterval) {
           clearInterval(spinningInterval);
@@ -288,11 +345,18 @@
       // No pending or processing spins but we still have a current spin ID - check if it should be cleared
       const currentSpin = queueState.spins.find((spin: any) => spin.id === $currentSpinId);
       if (!currentSpin || [SpinStatus.COMPLETED, SpinStatus.FAILED, SpinStatus.EXPIRED].includes(currentSpin.status)) {
-        // Current spin is done, reset the display
-        gameStore.reset();
-        if (spinningInterval) {
-          clearInterval(spinningInterval);
-          spinningInterval = null;
+        // Failed/expired spins should have been handled earlier by handleFailedSpin
+        // This section mainly handles completed spins that weren't displayed yet
+        if (currentSpin && [SpinStatus.FAILED, SpinStatus.EXPIRED].includes(currentSpin.status)) {
+          // This should have been caught earlier, but handle it just in case
+          handleFailedSpin(currentSpin);
+        } else {
+          // Current spin is done (completed), reset the display
+          gameStore.reset();
+          if (spinningInterval) {
+            clearInterval(spinningInterval);
+            spinningInterval = null;
+          }
         }
       }
     }
@@ -499,6 +563,28 @@
       showLossFeedback = false;
       lossFeedbackTimeout = null;
     }, 2000);
+  }
+
+  function triggerFailureFeedback(message: string = 'Transaction failed, please try again') {
+    // Clear any existing failure feedback timeout
+    if (failureFeedbackTimeout) {
+      clearTimeout(failureFeedbackTimeout);
+      failureFeedbackTimeout = null;
+    }
+    
+    // Don't show failure feedback if we're showing win celebration
+    if (showWinCelebration) {
+      return;
+    }
+    
+    failureMessage = message;
+    showFailureFeedback = true;
+    
+    // Auto-hide failure feedback after 3 seconds
+    failureFeedbackTimeout = setTimeout(() => {
+      showFailureFeedback = false;
+      failureFeedbackTimeout = null;
+    }, 3000);
   }
 
   async function handleReplaySpin(replayData: { spin: any; outcome: string[][]; winnings: number; betAmount: number }) {
@@ -851,6 +937,25 @@
           </div>
           <div class="text-red-400 text-xl font-bold">
             -{formatVOI(lossAmount)} VOI
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+  
+  <!-- Transaction Failure Feedback Overlay -->
+  {#if showFailureFeedback}
+    <div class="fixed inset-0 flex items-center justify-center pointer-events-none z-50" 
+         in:fly={{ y: -50, duration: 400 }}
+         out:fade={{ duration: 300 }}>
+      <div class="bg-surface-primary border-2 border-red-600 rounded-lg px-8 py-6 shadow-2xl max-w-md">
+        <div class="text-center">
+          <div class="text-red-500 text-3xl mb-3">⚠️</div>
+          <div class="text-red-400 text-xl font-bold mb-2">
+            Transaction Failed
+          </div>
+          <div class="text-red-300 text-sm">
+            {failureMessage}
           </div>
         </div>
       </div>
