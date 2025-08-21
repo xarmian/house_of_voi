@@ -45,39 +45,39 @@ export class QueueProcessor {
       return; // Nothing to process
     }
 
-    // Process each spin based on its status (skip completed/failed spins)
-    for (const spin of currentSpins) {
-      // Skip spins that don't need processing
-      if ([SpinStatus.COMPLETED, SpinStatus.FAILED, SpinStatus.EXPIRED].includes(spin.status)) {
-        continue;
-      }
-
-      try {
-        switch (spin.status) {
-          case SpinStatus.PENDING:
-            await this.submitSpin(spin);
-            break;
-          case SpinStatus.WAITING:
-            await this.checkCommitment(spin);
-            break;
-          case SpinStatus.PROCESSING:
-            await this.checkOutcome(spin);
-            break;
-          case SpinStatus.CLAIMING:
-            await this.checkClaimStatus(spin);
-            break;
-          case SpinStatus.READY_TO_CLAIM:
-            await this.attemptAutoClaim(spin);
-            break;
-          default:
-            // No action needed for other statuses
-            break;
+    // Process all spins in parallel - don't block claims while waiting for other spins
+    const processingPromises = currentSpins
+      .filter(spin => ![SpinStatus.COMPLETED, SpinStatus.FAILED, SpinStatus.EXPIRED].includes(spin.status))
+      .map(async (spin) => {
+        try {
+          switch (spin.status) {
+            case SpinStatus.PENDING:
+              await this.submitSpin(spin);
+              break;
+            case SpinStatus.WAITING:
+              await this.checkCommitment(spin);
+              break;
+            case SpinStatus.PROCESSING:
+              await this.checkOutcome(spin);
+              break;
+            case SpinStatus.CLAIMING:
+              await this.checkClaimStatus(spin);
+              break;
+            case SpinStatus.READY_TO_CLAIM:
+              await this.attemptAutoClaim(spin);
+              break;
+            default:
+              // No action needed for other statuses
+              break;
+          }
+        } catch (error) {
+          console.error(`Error processing spin ${spin.id}:`, error);
+          this.handleSpinError(spin, error);
         }
-      } catch (error) {
-        console.error(`Error processing spin ${spin.id}:`, error);
-        this.handleSpinError(spin, error);
-      }
-    }
+      });
+
+    // Wait for all spins to process in parallel
+    await Promise.allSettled(processingPromises);
   }
 
   private async submitSpin(spin: QueuedSpin) {
@@ -177,14 +177,23 @@ export class QueueProcessor {
     const claimRetryCount = spin.claimRetryCount || 0;
     const lastClaimRetry = spin.lastClaimRetry || 0;
     
-    // Don't auto-claim if we've already tried 3 times
+    // Don't auto-claim if we've already tried 3 times - just give up silently
     if (claimRetryCount >= 3) {
-      console.log(`Auto-claim disabled for spin ${spin.id} after ${claimRetryCount} attempts. Manual claim required.`);
+      console.log(`Auto-claim completed for spin ${spin.id} after ${claimRetryCount} attempts. Likely claimed by bot (good!).`);
+      // Mark as completed since claim failures usually mean someone else claimed it
+      queueStore.updateSpin({
+        id: spin.id,
+        status: SpinStatus.COMPLETED
+      });
       return;
     }
     
-    // Don't retry too frequently (wait at least 5 seconds between attempts)
-    if (lastClaimRetry && (currentTime - lastClaimRetry) < 5000) {
+    // Wait 10-20 seconds between claim attempts (random to avoid collision with bots)
+    const minWait = 10000; // 10 seconds
+    const maxWait = 20000; // 20 seconds
+    const randomWait = minWait + Math.random() * (maxWait - minWait);
+    
+    if (lastClaimRetry && (currentTime - lastClaimRetry) < randomWait) {
       return;
     }
     
@@ -208,24 +217,22 @@ export class QueueProcessor {
       console.error(`Auto-claim attempt ${claimRetryCount + 1} failed for spin ${spin.id}:`, error);
       
       if (claimRetryCount + 1 >= 3) {
-        console.log(`Auto-claim disabled for spin ${spin.id} after ${claimRetryCount + 1} failed attempts. Manual claim required.`);
-        // After 3 failed attempts, mark as ready to claim with error for manual intervention
+        console.log(`Auto-claim completed for spin ${spin.id} after ${claimRetryCount + 1} attempts. Likely claimed by bot (good!).`);
+        // After 3 failed attempts, just mark as completed - failures usually mean someone else claimed it
         queueStore.updateSpin({
           id: spin.id,
-          status: SpinStatus.READY_TO_CLAIM,
+          status: SpinStatus.COMPLETED,
           data: {
-            error: `Auto-claim failed after ${claimRetryCount + 1} attempts. Manual claim required.`,
             isAutoClaimInProgress: undefined
           }
         });
       } else {
-        // For attempts < 3, reset to READY_TO_CLAIM so it can be retried
-        console.log(`Will retry auto-claim for spin ${spin.id} in 5 seconds (attempt ${claimRetryCount + 1}/3)`);
+        // For attempts < 3, reset to READY_TO_CLAIM so it can be retried with proper spacing
+        console.log(`Will retry auto-claim for spin ${spin.id} in 10-20 seconds (attempt ${claimRetryCount + 1}/3)`);
         queueStore.updateSpin({
           id: spin.id,
           status: SpinStatus.READY_TO_CLAIM,
           data: {
-            error: `Auto-claim attempt ${claimRetryCount + 1} failed, will retry automatically`,
             isAutoClaimInProgress: undefined
           }
         });

@@ -2,7 +2,7 @@
   import { walletStore, walletBalance, walletAddress, isWalletConnected, hasExistingWallet } from '$lib/stores/wallet';
   import { walletService } from '$lib/services/wallet';
   import { algorandService } from '$lib/services/algorand';
-  import { Wallet, MoreHorizontal, RefreshCw, Unlock } from 'lucide-svelte';
+  import { Wallet, MoreHorizontal, RefreshCw, Unlock, Lock } from 'lucide-svelte';
   import { createEventDispatcher, onMount } from 'svelte';
   import WalletDetailsModal from './WalletDetailsModal.svelte';
   
@@ -80,7 +80,7 @@
 <!-- Unified Wallet Component - opens modal for all functionality -->
 {#if compact}
   <!-- Compact Mobile View - Single Line -->
-  <div class="bg-slate-800/90 rounded-lg px-3 py-2 border border-slate-700/50 flex items-center justify-between">
+  <div class="card-secondary px-3 py-2 flex items-center justify-between">
     <div class="flex items-center gap-2">
       <Wallet class="w-4 h-4 text-voi-400" />
       <span class="text-sm font-medium text-white">{formattedBalance} VOI</span>
@@ -118,7 +118,7 @@
     {:else}
       <button
         on:click={openDetailsModal}
-        class="p-1 text-gray-400 hover:text-white transition-colors"
+        class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
         title="Wallet options"
       >
         <MoreHorizontal class="w-4 h-4" />
@@ -127,7 +127,7 @@
   </div>
 {:else}
   <!-- Desktop View - Full Display -->
-  <div class="bg-gradient-to-b from-slate-800 to-slate-900 rounded-2xl shadow-2xl border border-slate-700 h-fit p-4">
+  <div class="card bg-gradient-to-b from-surface-primary to-surface-secondary rounded-2xl shadow-2xl h-fit p-4">
     <div class="flex items-center justify-between mb-3">
       <!-- Header Section -->
       <div class="flex items-center gap-3">
@@ -151,7 +151,7 @@
           <button
             on:click={refreshBalance}
             disabled={isRefreshing}
-            class="p-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+            class="p-2 text-theme-text opacity-70 hover:opacity-100 transition-colors disabled:opacity-50"
             title="Refresh balance"
           >
             <RefreshCw class="w-4 h-4 {isRefreshing ? 'animate-spin' : ''}" />
@@ -161,7 +161,7 @@
         <!-- Details/Settings Button -->
         <button
           on:click={openDetailsModal}
-          class="p-1.5 text-gray-400 hover:text-white transition-colors"
+          class="p-1.5 text-theme-text opacity-70 hover:opacity-100 transition-colors"
           title="Open wallet details"
         >
           <MoreHorizontal class="w-4 h-4" />
@@ -173,7 +173,7 @@
   {#if $walletStore.isLoading}
     <div class="text-center py-4">
       <div class="w-6 h-6 border-2 border-voi-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-      <p class="text-gray-400 text-sm">Loading wallet...</p>
+      <p class="text-theme-text opacity-70 text-sm">Loading wallet...</p>
     </div>
   {:else if $walletStore.error}
     <div class="text-center py-4">
@@ -188,7 +188,7 @@
   {:else if $walletStore.isGuest && !$hasExistingWallet}
     <!-- True new user - show Add Funds button -->
     <div class="text-center py-4">
-      <p class="text-gray-400 text-sm mb-3">Ready to play!</p>
+      <p class="text-theme-text opacity-70 text-sm mb-3">Ready to play!</p>
       <button
         on:click={openDetailsModal}
         class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
@@ -199,8 +199,11 @@
   {:else if $walletStore.isGuest && $hasExistingWallet}
     <!-- Existing wallet in guest mode - show unlock with address -->
     <div class="py-4">
-      <div class="bg-slate-700/50 rounded-lg p-3 mb-3">
-        <p class="text-xs text-gray-400 mb-1">Address</p>
+      <div class="bg-surface-tertiary rounded-lg shadow-lg border border-surface-border backdrop-blur-sm p-3 mb-3">
+        <div class="flex items-center gap-1 mb-1">
+          <p class="text-xs text-theme-text opacity-70">Address</p>
+          <Lock class="w-3 h-3 text-theme-text opacity-70" />
+        </div>
         <p class="font-mono text-sm text-white">{shortAddress}</p>
         {#if publicWalletData?.isPasswordless}
           <p class="text-xs text-amber-400 mt-1">Passwordless wallet</p>
@@ -216,24 +219,25 @@
         </button>
       </div>
     </div>
-  {:else if $walletStore.isLocked}
-    <!-- Locked state -->
-    <div class="text-center py-4">
-      <p class="text-gray-400 text-sm mb-3">Wallet is locked</p>
-      <button
-        on:click={openDetailsModal}
-        class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors"
-      >
-        Unlock Wallet
-      </button>
-    </div>
   {:else if !compact}
     <!-- Desktop connected state - show address info -->
-    <div class="bg-slate-700/50 rounded-lg p-3">
-      <p class="text-xs text-gray-400 mb-1">Address</p>
+    <div class="bg-surface-tertiary rounded-lg shadow-lg border border-surface-border backdrop-blur-sm p-3">
+      <div class="flex items-center justify-between mb-1">
+        <div class="flex items-center gap-1">
+          <p class="text-xs text-theme-text opacity-70">Address</p>
+          <Unlock class="w-3 h-3 text-theme-text opacity-70" />
+        </div>
+        <button
+          on:click={() => walletStore.lock()}
+          class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
+          title="Lock wallet"
+        >
+          <Lock class="w-3 h-3" />
+        </button>
+      </div>
       <p class="font-mono text-sm text-white">{shortAddress}</p>
-      <p class="text-xs text-gray-400 mt-2">
-        Click the menu to access all wallet functions
+      <p class="text-xs text-theme-text opacity-70 mt-2">
+        Click the menu to access functions • Click lock to secure
       </p>
     </div>
   {/if}
@@ -255,6 +259,6 @@
   }
   
   :global(.btn-secondary) {
-    @apply px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-medium rounded-lg transition-colors duration-200;
+    @apply px-4 py-2 bg-surface-secondary hover:bg-surface-hover text-white font-medium rounded-lg transition-colors duration-200;
   }
 </style>

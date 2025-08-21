@@ -13,6 +13,16 @@ export default {
     },
     extend: {
       colors: {
+        // Theme-aware colors using CSS custom properties
+        theme: {
+          primary: 'var(--theme-primary, #7c3aed)',
+          secondary: 'var(--theme-secondary, #a855f7)',
+          lights: 'var(--theme-lights, rgba(168, 85, 247, 0.3))',
+          'bg-from': 'var(--theme-bg-from, #0f172a)',
+          'bg-via': 'var(--theme-bg-via, #1e293b)',
+          'bg-to': 'var(--theme-bg-to, #0f172a)',
+          text: 'var(--theme-text, #ffffff)',
+        },
         primary: {
           50: '#f0f9ff',
           500: '#3b82f6',
@@ -31,6 +41,14 @@ export default {
           700: '#047857',
           800: '#065f46',
           900: '#064e3b'
+        },
+        // Surface colors that adapt to themes
+        surface: {
+          primary: 'var(--theme-surface-primary, #1e293b)',
+          secondary: 'var(--theme-surface-secondary, #334155)',
+          tertiary: 'var(--theme-surface-tertiary, #475569)',
+          border: 'var(--theme-surface-border, #64748b)',
+          hover: 'var(--theme-surface-hover, #475569)',
         }
       },
       fontFamily: {

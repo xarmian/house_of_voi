@@ -225,7 +225,9 @@ function createWalletStore() {
       
       update(state => ({
         ...state,
-        isLocked: true,
+        isGuest: true,
+        isConnected: false,
+        isLocked: false,
         account: state.account ? { ...state.account, privateKey: '', mnemonic: '' } : null
       }));
     },

@@ -172,10 +172,11 @@
     startContinuousSpinning(spinId);
   }
 
-  function startContinuousSpinning(spinId: string) {
-    // ANIMATION GUARD: Don't start if another spin is already active
+  async function startContinuousSpinning(spinId: string) {
+    // SWITCHING SPINS: If we're switching to a different spin, stop the previous one's sound
     if ($currentSpinId && $currentSpinId !== spinId && $isSpinning) {
-      return;
+      console.log(`Switching from spin ${$currentSpinId} to ${spinId} - stopping previous sound`);
+      await soundService.forceStopWithVerification('spin-loop', 2);
     }
 
     // SOUND GUARD: Don't restart sound if this spin is already playing
@@ -189,13 +190,16 @@
       spinningInterval = null;
     }
     
-    // Start looping spin sound
-    soundService.playLoopingSound('spin-loop', {
-      fadeIn: 0.2,
-      volume: 0.6
-    }).catch(() => {
-      // Ignore sound errors
-    });
+    // Start looping spin sound (only if we're not already playing for this spin)
+    if ($currentSpinId !== spinId || !$isSpinning) {
+      console.log(`Starting spin-loop sound for spin ${spinId}`);
+      soundService.playLoopingSound('spin-loop', {
+        fadeIn: 0.2,
+        volume: 0.6
+      }).catch(() => {
+        // Ignore sound errors
+      });
+    }
     
     // Start the initial spin animation in game store
     gameStore.startSpin(spinId);
@@ -276,13 +280,11 @@
       }
     }
     
-    if (pendingSpins.length > 0 && !$currentSpinId && userSessionStarted && !isReplayMode) {
-      const mostRecentPending = pendingSpins[pendingSpins.length - 1];
-      
-      // Only animate if user has started a spin this session AND we're not in replay mode
-      // This prevents auto-animation for restored spins and after replays
-      startContinuousSpinning(mostRecentPending.id);
-    } else if (pendingSpins.length === 0 && processingSpins.length === 0 && $currentSpinId) {
+    // REMOVED: Automatic spin starting logic that caused duplicate sounds
+    // The spin should only start from handleSpin when user initiates it
+    // This prevents the queue update from restarting sounds unnecessarily
+    
+    if (pendingSpins.length === 0 && processingSpins.length === 0 && $currentSpinId) {
       // No pending or processing spins but we still have a current spin ID - check if it should be cleared
       const currentSpin = queueState.spins.find((spin: any) => spin.id === $currentSpinId);
       if (!currentSpin || [SpinStatus.COMPLETED, SpinStatus.FAILED, SpinStatus.EXPIRED].includes(currentSpin.status)) {
@@ -772,29 +774,29 @@
 
   <!-- Development Test Controls -->
   {#if PUBLIC_DEBUG_MODE === 'true'}
-    <div class="fixed bottom-4 right-4 bg-black/80 text-white p-4 rounded-lg text-sm z-50">
+    <div class="fixed bottom-4 right-4 card text-theme-text p-4 rounded-lg text-sm z-50">
       <div class="font-bold mb-2">Test Win Animations</div>
       <div class="flex flex-col gap-2">
         <button 
-          class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-xs"
+          class="status-success px-3 py-1 rounded text-xs"
           on:click={() => triggerWinCelebration({ amount: 5000000, level: 'small' }, 'test-small')}
         >
           Small Win
         </button>
         <button 
-          class="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs"
+          class="btn-primary px-3 py-1 rounded text-xs"
           on:click={() => triggerWinCelebration({ amount: 25000000, level: 'medium' }, 'test-medium')}
         >
           Medium Win
         </button>
         <button 
-          class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-xs"
+          class="bg-surface-secondary hover:bg-surface-hover text-white font-medium rounded-lg transition-colors duration-200 px-3 py-1 text-xs"
           on:click={() => triggerWinCelebration({ amount: 75000000, level: 'large' }, 'test-large')}
         >
           Large Win
         </button>
         <button 
-          class="bg-yellow-600 hover:bg-yellow-700 px-3 py-1 rounded text-xs"
+          class="status-warning px-3 py-1 rounded text-xs"
           on:click={() => triggerWinCelebration({ amount: 150000000, level: 'jackpot' }, 'test-jackpot')}
         >
           Jackpot
@@ -808,7 +810,7 @@
     <div class="fixed inset-0 flex items-center justify-center pointer-events-none z-40" 
          in:fly={{ y: -50, duration: 400 }}
          out:fade={{ duration: 300 }}>
-      <div class="bg-red-900/90 border border-red-600 rounded-lg px-6 py-4 shadow-2xl">
+      <div class="bg-surface-primary border border-red-500 rounded-lg px-6 py-4 shadow-2xl">
         <div class="text-center">
           <div class="text-red-300 text-lg font-bold mb-1">
             Better luck next time!
@@ -832,8 +834,8 @@
   
   <!-- Maintenance Overlay - only show after initial balance check completes -->
   {#if !$isSlotMachineOperational && showMaintenanceOverlay && hasInitialBalanceCheckCompleted && !$isLoadingHouseBalance}
-    <div class="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-xl">
-      <div class="bg-gradient-to-br from-orange-900/90 to-red-900/90 border border-orange-600 rounded-lg p-8 max-w-md mx-4 shadow-2xl">
+    <div class="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 rounded-xl">
+      <div class="bg-surface-primary border border-surface-border rounded-lg shadow-xl bg-gradient-to-br from-orange-900/90 to-red-900/90 border-orange-600 p-8 max-w-md mx-4 shadow-2xl">
         <div class="text-center">
           <!-- Maintenance Icon -->
           <div class="mb-4">
@@ -855,7 +857,7 @@
           
           <!-- Close Button -->
           <button 
-            class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 shadow-lg"
+            class="bg-surface-secondary hover:bg-surface-hover text-white font-medium rounded-lg transition-colors duration-200 py-3 px-6 shadow-lg"
             on:click={() => showMaintenanceOverlay = false}
           >
             Close
@@ -927,16 +929,16 @@
   .machine-body {
     @apply relative rounded-xl p-3;
     background: linear-gradient(145deg, 
-      #1e293b 0%, 
-      #334155 25%, 
-      #475569 50%, 
-      #334155 75%, 
-      #1e293b 100%);
-    border: 2px solid #475569;
+      var(--theme-surface-primary) 0%, 
+      var(--theme-surface-secondary) 25%, 
+      var(--theme-surface-tertiary) 50%, 
+      var(--theme-surface-secondary) 75%, 
+      var(--theme-surface-primary) 100%);
+    border: 2px solid var(--theme-surface-border);
     box-shadow: 
       inset 0 2px 4px rgba(255, 255, 255, 0.1),
       inset 0 -2px 4px rgba(0, 0, 0, 0.3),
-      0 0 20px rgba(16, 185, 129, 0.1);
+      0 0 20px var(--theme-lights);
   }
 
   .chrome-frame {
@@ -955,20 +957,20 @@
 
   .inner-frame {
     @apply rounded-md p-2;
-    background: radial-gradient(ellipse at center, #0f172a 0%, #1e293b 100%);
-    border: 2px inset #374151;
+    background: radial-gradient(ellipse at center, var(--theme-bg-from) 0%, var(--theme-surface-primary) 100%);
+    border: 2px inset var(--theme-surface-border);
     box-shadow: 
       inset 0 0 10px rgba(0, 0, 0, 0.8),
-      0 0 5px rgba(16, 185, 129, 0.3);
+      0 0 5px var(--theme-lights);
   }
 
   .game-grid {
     @apply relative rounded border-2;
-    background: linear-gradient(180deg, #000000 0%, #1a1a1a 100%);
-    border-color: #4b5563;
+    background: linear-gradient(180deg, var(--theme-bg-from) 0%, var(--theme-surface-primary) 100%);
+    border-color: var(--theme-surface-border);
     box-shadow: 
       inset 0 2px 4px rgba(0, 0, 0, 0.6),
-      0 0 10px rgba(16, 185, 129, 0.2);
+      0 0 10px var(--theme-lights);
   }
 
   /* Animations */

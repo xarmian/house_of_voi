@@ -272,8 +272,7 @@ class SoundService {
         // Check current volume again just before playing (in case settings changed)
         const currentEffectiveVolume = getEffectiveVolume(category);
         if (currentEffectiveVolume <= 0) {
-          // Volume was disabled after we started - stop this source
-          source.stop(when);
+          // Volume was disabled after we started - don't start this source
           loopingData.isActive = false;
           return null;
         }
