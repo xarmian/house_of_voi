@@ -128,7 +128,7 @@
   <div class="header">
     <div class="flex items-center gap-3">
       <BarChart3 class="w-6 h-6 text-voi-400" />
-      <h3 class="text-xl font-bold text-white">
+      <h3 class="text-xl font-bold text-theme">
         {showHouseMetrics ? 'Game Analytics' : 'Win Odds & Analysis'}
       </h3>
     </div>
@@ -544,7 +544,7 @@
   }
   
   .stat-value {
-    @apply text-xl font-bold text-white mt-1;
+    @apply text-xl font-bold text-theme mt-1;
   }
   
   .stat-detail {
@@ -569,7 +569,7 @@
   }
   
   .bet-stat .value {
-    @apply block text-lg font-bold text-white mt-1;
+    @apply block text-lg font-bold text-theme mt-1;
   }
   
   /* Profitable Combinations */
@@ -594,7 +594,7 @@
   }
   
   .symbol-icon {
-    @apply w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm;
+    @apply w-8 h-8 rounded-lg flex items-center justify-center text-theme font-bold text-sm;
   }
   
   .symbol-a { @apply bg-blue-600; }
@@ -657,7 +657,7 @@
   }
   
   .symbol-char {
-    @apply w-6 h-6 rounded flex items-center justify-center text-white font-bold;
+    @apply w-6 h-6 rounded flex items-center justify-center text-theme font-bold;
   }
   
   .symbol-count {
@@ -682,7 +682,7 @@
   }
   
   .breakeven-item .value {
-    @apply text-white font-medium;
+    @apply text-theme font-medium;
   }
   
   /* Export Section */
@@ -708,12 +708,12 @@
   }
   
   .house-stat .value {
-    @apply text-white font-medium;
+    @apply text-theme font-medium;
   }
   
   /* Common Elements */
   .section-title {
-    @apply text-lg font-semibold text-white;
+    @apply text-lg font-semibold text-theme;
   }
   
   .subsection-title {
@@ -721,15 +721,15 @@
   }
   
   .btn-primary {
-    @apply bg-voi-600 hover:bg-voi-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2;
+    @apply bg-voi-600 hover:bg-voi-700 text-theme font-semibold py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2;
   }
   
   .btn-secondary {
-    @apply bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 px-3 rounded-lg transition-colors duration-200 flex items-center gap-2;
+    @apply bg-slate-700 hover:bg-slate-600 text-theme font-medium py-2 px-3 rounded-lg transition-colors duration-200 flex items-center gap-2;
   }
   
   .btn-secondary-sm {
-    @apply bg-slate-700 hover:bg-slate-600 text-white font-medium py-1.5 px-3 rounded-md transition-colors duration-200 flex items-center gap-1 text-sm;
+    @apply bg-slate-700 hover:bg-slate-600 text-theme font-medium py-1.5 px-3 rounded-md transition-colors duration-200 flex items-center gap-1 text-sm;
   }
   
   .metadata {

@@ -370,15 +370,6 @@ export class WalletService {
     }
   }
 
-  /**
-   * Clear stored wallet data
-   */
-  clearWallet(): void {
-    if (!browser) return;
-    localStorage.removeItem(WalletService.STORAGE_KEY);
-  }
-
-
 }
 
 export const walletService = new WalletService();

@@ -80,7 +80,7 @@
       {#if mode === 'choose'}
         <!-- Choose setup method -->
         <div class="px-6 py-4 border-b border-slate-700">
-          <h2 class="text-xl font-bold text-white">Setup Wallet</h2>
+          <h2 class="text-xl font-bold text-theme">Setup Wallet</h2>
           <p class="text-slate-300 text-sm mt-1">Create a new wallet or import an existing one</p>
         </div>
 
@@ -100,12 +100,12 @@
             >
               <div class="flex items-center space-x-3">
                 <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg class="w-5 h-5 text-theme" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                   </svg>
                 </div>
                 <div>
-                  <h3 class="text-white font-medium">Create New Wallet</h3>
+                  <h3 class="text-theme font-medium">Create New Wallet</h3>
                   <p class="text-slate-400 text-sm">Generate a new wallet with recovery phrase</p>
                 </div>
               </div>
@@ -119,12 +119,12 @@
             >
               <div class="flex items-center space-x-3">
                 <div class="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg class="w-5 h-5 text-theme" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
                   </svg>
                 </div>
                 <div>
-                  <h3 class="text-white font-medium">Import Existing Wallet</h3>
+                  <h3 class="text-theme font-medium">Import Existing Wallet</h3>
                   <p class="text-slate-400 text-sm">Restore wallet from recovery phrase</p>
                 </div>
               </div>
@@ -137,7 +137,7 @@
             type="button"
             on:click={handleCancel}
             disabled={isLoading}
-            class="px-4 py-2 text-slate-300 hover:text-white transition-colors disabled:opacity-50"
+            class="px-4 py-2 text-slate-300 hover:text-theme transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
@@ -146,7 +146,7 @@
       {:else if mode === 'create'}
         <!-- Create new wallet -->
         <div class="px-6 py-4 border-b border-slate-700">
-          <h2 class="text-xl font-bold text-white">Create New Wallet</h2>
+          <h2 class="text-xl font-bold text-theme">Create New Wallet</h2>
           <p class="text-slate-300 text-sm mt-1">Set a password to secure your wallet</p>
         </div>
 
@@ -169,7 +169,7 @@
                   bind:value={password}
                   disabled={isLoading}
                   placeholder="Enter a password or leave empty"
-                  class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                  class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-theme placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                   autocomplete="new-password"
                 />
                 <button
@@ -202,7 +202,7 @@
                 bind:value={confirmPassword}
                 disabled={isLoading}
                 placeholder={password.trim() === '' ? "Leave empty to confirm no password" : "Confirm your password"}
-                class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-theme placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                 autocomplete="new-password"
               />
             </div>
@@ -230,7 +230,7 @@
             type="button"
             on:click={() => mode = 'choose'}
             disabled={isLoading}
-            class="px-4 py-2 text-slate-300 hover:text-white transition-colors disabled:opacity-50"
+            class="px-4 py-2 text-slate-300 hover:text-theme transition-colors disabled:opacity-50"
           >
             Back
           </button>
@@ -238,7 +238,7 @@
             type="button"
             on:click={handleCreateWallet}
             disabled={isLoading || !password || !confirmPassword}
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-theme rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
           >
             {#if isLoading}
               <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
@@ -253,7 +253,7 @@
       {:else if mode === 'import'}
         <!-- Import existing wallet -->
         <div class="px-6 py-4 border-b border-slate-700">
-          <h2 class="text-xl font-bold text-white">Import Wallet</h2>
+          <h2 class="text-xl font-bold text-theme">Import Wallet</h2>
           <p class="text-slate-300 text-sm mt-1">Enter your recovery phrase and set a password</p>
         </div>
 
@@ -275,7 +275,7 @@
                 disabled={isLoading}
                 placeholder="Enter your 25-word recovery phrase..."
                 rows="3"
-                class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 resize-none"
+                class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-theme placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 resize-none"
                 autocomplete="off"
               ></textarea>
             </div>
@@ -291,7 +291,7 @@
                   bind:value={password}
                   disabled={isLoading}
                   placeholder="Enter a password or leave empty"
-                  class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                  class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-theme placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                   autocomplete="new-password"
                 />
                 <button
@@ -324,7 +324,7 @@
                 bind:value={confirmPassword}
                 disabled={isLoading}
                 placeholder={password.trim() === '' ? "Leave empty to confirm no password" : "Confirm your password"}
-                class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-theme placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                 autocomplete="new-password"
               />
             </div>
@@ -352,7 +352,7 @@
             type="button"
             on:click={() => mode = 'choose'}
             disabled={isLoading}
-            class="px-4 py-2 text-slate-300 hover:text-white transition-colors disabled:opacity-50"
+            class="px-4 py-2 text-slate-300 hover:text-theme transition-colors disabled:opacity-50"
           >
             Back
           </button>
@@ -360,7 +360,7 @@
             type="button"
             on:click={handleImportWallet}
             disabled={isLoading || !password || !confirmPassword || !mnemonic.trim()}
-            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-theme rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
           >
             {#if isLoading}
               <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">

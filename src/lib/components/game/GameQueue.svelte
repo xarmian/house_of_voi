@@ -257,7 +257,7 @@
   <div class="queue-header">
     <div class="flex items-center gap-2">
       <Clock class="w-5 h-5 text-theme-text opacity-70" />
-      <h3 class="text-lg font-semibold text-white">Game Queue</h3>
+      <h3 class="text-lg font-semibold text-theme">Game Queue</h3>
       {#if $queueStats.pendingSpins > 0}
         <span class="pending-badge">{$queueStats.pendingSpins}</span>
       {/if}
@@ -325,7 +325,7 @@
     <div class="claim-banner" in:fly={{ y: -20, duration: 300 }}>
       <div class="flex items-center gap-2">
         <AlertCircle class="w-4 h-4 text-yellow-400" />
-        <span class="text-sm font-medium text-white">
+        <span class="text-sm font-medium text-theme">
           {readyToClaimWinners.length} winning spin{readyToClaimWinners.length > 1 ? 's' : ''} ready to claim
         </span>
       </div>
@@ -704,7 +704,7 @@
   }
   
   .pending-badge {
-    @apply bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full;
+    @apply bg-blue-600 text-theme text-xs font-bold px-2 py-1 rounded-full;
   }
   
   .queue-stats {
@@ -716,7 +716,7 @@
   }
   
   .stat-value {
-    @apply text-sm font-bold text-white;
+    @apply text-sm font-bold text-theme;
   }
   
   .stat-label {
@@ -733,7 +733,7 @@
   }
   
   .tab.active {
-    @apply text-white bg-surface-hover border-b-2 border-theme-primary;
+    @apply text-theme bg-surface-hover border-b-2 border-theme-primary;
   }
   
   .claim-banner {
@@ -741,7 +741,7 @@
   }
   
   .claim-all-button {
-    @apply bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-semibold px-3 py-1 rounded-md transition-colors;
+    @apply bg-yellow-600 hover:bg-yellow-700 text-theme text-xs font-semibold px-3 py-1 rounded-md transition-colors;
   }
   
   .spin-list {
@@ -781,7 +781,7 @@
   }
   
   .bet-amount {
-    @apply font-semibold text-white;
+    @apply font-semibold text-theme;
   }
   
   .paylines, .timestamp {
@@ -813,11 +813,11 @@
   }
   
   .claim-button {
-    @apply bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-semibold px-3 py-1 rounded-md transition-colors;
+    @apply bg-yellow-600 hover:bg-yellow-700 text-theme text-xs font-semibold px-3 py-1 rounded-md transition-colors;
   }
   
   .retry-button {
-    @apply bg-surface-secondary hover:bg-surface-hover text-white font-medium rounded-lg transition-colors duration-200 text-xs px-3 py-1;
+    @apply bg-surface-secondary hover:bg-surface-hover text-theme font-medium rounded-lg transition-colors duration-200 text-xs px-3 py-1;
   }
   
   .processing-indicator {
@@ -833,7 +833,7 @@
   }
   
   .empty-title {
-    @apply text-lg font-semibold text-white mb-2;
+    @apply text-lg font-semibold text-theme mb-2;
   }
   
   .empty-description {
@@ -888,7 +888,7 @@
   }
   
   .stat-value {
-    @apply text-lg font-bold text-white;
+    @apply text-lg font-bold text-theme;
     margin-top: 0.25rem;
   }
   
@@ -921,7 +921,7 @@
   }
 
   .modal-title {
-    @apply text-lg font-semibold text-white;
+    @apply text-lg font-semibold text-theme;
   }
 
   .modal-close {
@@ -957,7 +957,7 @@
   }
 
   .detail-value {
-    @apply text-sm text-white font-medium;
+    @apply text-sm text-theme font-medium;
   }
 
   .tx-link-container {
@@ -969,7 +969,7 @@
   }
 
   .explorer-link {
-    @apply text-xs bg-voi-600 hover:bg-voi-700 text-white px-3 py-1 rounded-md transition-colors font-medium;
+    @apply text-xs bg-voi-600 hover:bg-voi-700 text-theme px-3 py-1 rounded-md transition-colors font-medium;
   }
 
   .error-message {

@@ -241,21 +241,21 @@
               <button
                 on:click={(e) => handleControlButton(() => bettingStore.decreasePaylines(), e.currentTarget)}
                 disabled={$bettingStore.selectedPaylines <= BETTING_CONSTANTS.MIN_PAYLINES || disabled}
-                class="control-button"
+                class="control-button text-theme"
                 aria-label="Decrease paylines"
               >
                 <Minus class="w-4 h-4" />
               </button>
               
               <div class="flex-1 text-center">
-                <div class="text-xl font-bold text-white">{$bettingStore.selectedPaylines}</div>
+                <div class="text-xl font-bold text-theme">{$bettingStore.selectedPaylines}</div>
                 <div class="text-xs text-theme-text opacity-70">Lines</div>
               </div>
               
               <button
                 on:click={(e) => handleControlButton(() => bettingStore.increasePaylines(), e.currentTarget)}
                 disabled={$bettingStore.selectedPaylines >= BETTING_CONSTANTS.MAX_PAYLINES || disabled}
-                class="control-button"
+                class="control-button text-theme"
                 aria-label="Increase paylines"
               >
                 <Plus class="w-4 h-4" />
@@ -297,7 +297,7 @@
                 <button
                   on:click={(e) => setQuickBet(amount, e.currentTarget)}
                   disabled={disabled}
-                  class="quick-bet-button"
+                  class="quick-bet-button text-theme"
                   class:active={$bettingStore.betPerLine === amount * 1_000_000}
                 >
                   {amount} VOI
@@ -309,7 +309,7 @@
             <button
               on:click={(e) => handleControlButton(() => bettingStore.setMaxBet(), e.currentTarget)}
               disabled={disabled}
-              class="w-full btn-secondary mt-2"
+              class="w-full btn-secondary mt-2 text-theme"
             >
               Max Bet
             </button>
@@ -324,7 +324,7 @@
                 <div class="text-theme-text font-medium mb-2">Total Bet</div>
                 <div class="flex items-center justify-center gap-2">
                   <DollarSign class="w-5 h-5 text-voi-400" />
-                  <span class="text-3xl font-bold text-white">{$totalBetVOI} VOI</span>
+                  <span class="text-3xl font-bold text-theme">{$totalBetVOI} VOI</span>
                 </div>
               </div>
               
@@ -364,20 +364,20 @@
           <button
             on:click={(e) => handleControlButton(() => bettingStore.decreasePaylines(), e.currentTarget)}
             disabled={$bettingStore.selectedPaylines <= BETTING_CONSTANTS.MIN_PAYLINES || disabled}
-            class="control-button w-8 h-8"
+            class="control-button w-8 h-8 text-theme"
             aria-label="Decrease paylines"
           >
             <Minus class="w-3 h-3" />
           </button>
           
           <div class="flex-1 text-center">
-            <div class="text-sm font-medium text-white">{$bettingStore.selectedPaylines} Lines</div>
+            <div class="text-sm font-medium text-theme">{$bettingStore.selectedPaylines} Lines</div>
           </div>
           
           <button
             on:click={(e) => handleControlButton(() => bettingStore.increasePaylines(), e.currentTarget)}
             disabled={$bettingStore.selectedPaylines >= BETTING_CONSTANTS.MAX_PAYLINES || disabled}
-            class="control-button w-8 h-8"
+            class="control-button w-8 h-8 text-theme"
             aria-label="Increase paylines"
           >
             <Plus class="w-3 h-3" />
@@ -412,7 +412,7 @@
               <button
                 on:click={(e) => setQuickBet(amount, e.currentTarget)}
                 disabled={disabled}
-                class="quick-bet-button text-xs py-1.5"
+                class="quick-bet-button text-xs py-1.5 text-theme"
                 class:active={$bettingStore.betPerLine === amount * 1_000_000}
               >
                 {amount}
@@ -429,7 +429,7 @@
             <span class="text-theme-text text-sm font-medium">Total</span>
             <div class="flex items-center gap-1">
               <DollarSign class="w-3 h-3 text-voi-400" />
-              <span class="text-lg font-bold text-white">{$totalBetVOI}</span>
+              <span class="text-lg font-bold text-theme">{$totalBetVOI}</span>
               <span class="text-xs text-theme-text opacity-70">VOI</span>
             </div>
           </div>
@@ -487,7 +487,7 @@
         </div>
         <p class="text-theme-text text-sm mb-4">Add funds to your wallet to start spinning</p>
         <button
-          class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+          class="px-6 py-3 bg-green-600 hover:bg-green-700 font-semibold rounded-lg transition-colors text-theme"
           on:click={() => walletActions.triggerWalletSetup()}
         >
           Add Funds to Play
@@ -521,7 +521,9 @@
               disabled={unlocking}
               placeholder="Enter your wallet password"
               class="input-field w-full disabled:opacity-50"
-              autocomplete="current-password"
+              autocomplete="off"
+              data-lpignore="true"
+              data-form-type="other"
               on:keydown={handlePasswordKeydown}
             />
             <button
@@ -546,7 +548,7 @@
           <button
             type="submit"
             disabled={unlocking}
-            class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+            class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-theme"
           >
             {#if unlocking}
               <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
@@ -579,7 +581,7 @@
         <div class="flex items-center justify-between mb-6">
           <div class="flex items-center gap-3">
             <BarChart3 class="w-6 h-6 text-voi-400" />
-            <h3 class="text-xl font-semibold text-white">Win Odds & Analysis</h3>
+            <h3 class="text-xl font-semibold text-theme">Win Odds & Analysis</h3>
           </div>
           <button
             on:click={() => showOddsAnalysis = false}
@@ -642,7 +644,7 @@
   }
   
   .control-button {
-    @apply w-10 h-10 bg-surface-secondary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-all duration-200 flex items-center justify-center;
+    @apply w-10 h-10 bg-surface-secondary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-all duration-200 flex items-center justify-center;
     position: relative;
     overflow: hidden;
     transform-origin: center;
@@ -662,7 +664,7 @@
   }
   
   .quick-bet-button {
-    @apply py-2 px-3 bg-surface-secondary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-medium rounded-md transition-all duration-200;
+    @apply py-2 px-3 bg-surface-secondary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium rounded-md transition-all duration-200;
     position: relative;
     overflow: hidden;
     transform-origin: center;
@@ -689,7 +691,7 @@
   }
   
   .btn-secondary {
-    @apply px-4 py-2 bg-surface-secondary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-all duration-200;
+    @apply px-4 py-2 bg-surface-secondary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed font-medium rounded-lg transition-all duration-200;
     position: relative;
     overflow: hidden;
     transform-origin: center;
@@ -702,7 +704,7 @@
   }
   
   .spin-button {
-    @apply w-full py-4 px-6 bg-gradient-to-r from-voi-600 to-voi-700 hover:from-voi-700 hover:to-voi-800 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-lg rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl disabled:shadow-none;
+    @apply w-full py-4 px-6 bg-gradient-to-r from-voi-600 to-voi-700 hover:from-voi-700 hover:to-voi-800 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-100 font-bold text-lg rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl disabled:shadow-none;
     position: relative;
     overflow: hidden;
     transform-origin: center;

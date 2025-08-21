@@ -68,7 +68,7 @@ interface CacheStorage {
 
 export class ContractDataCache {
   private readonly CACHE_KEY = 'voi_contract_data_cache';
-  private readonly CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+  private readonly CACHE_DURATION = 1 * 60 * 60 * 1000; // 1 hour in milliseconds
   private cache: CacheStorage = {
     paylines: null,
     multipliers: {},

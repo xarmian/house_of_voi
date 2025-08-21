@@ -218,7 +218,7 @@
     <div class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div class="bg-slate-800 rounded-xl border border-slate-700 shadow-2xl max-w-md w-full">
         <div class="px-6 py-4 border-b border-slate-700">
-          <h2 class="text-xl font-bold text-white">Wallet Recovery</h2>
+          <h2 class="text-xl font-bold text-theme">Wallet Recovery</h2>
           <p class="text-slate-300 text-sm mt-1">Your wallet needs to be updated for better security</p>
         </div>
 
@@ -241,7 +241,7 @@
               type="button"
               on:click={handleLegacyRecover}
               disabled={isLoading}
-              class="w-full p-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center space-x-2"
+              class="w-full p-3 bg-green-600 hover:bg-green-700 text-theme rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center space-x-2"
             >
               {#if isLoading}
                 <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
@@ -256,7 +256,7 @@
               type="button"
               on:click={handleLegacyManualRecover}
               disabled={isLoading}
-              class="w-full p-3 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors disabled:opacity-50"
+              class="w-full p-3 bg-slate-600 hover:bg-slate-500 text-theme rounded-lg transition-colors disabled:opacity-50"
             >
               Import Using Recovery Phrase
             </button>
@@ -268,7 +268,7 @@
             type="button"
             on:click={handleCancel}
             disabled={isLoading}
-            class="px-4 py-2 text-slate-300 hover:text-white transition-colors disabled:opacity-50"
+            class="px-4 py-2 text-slate-300 hover:text-theme transition-colors disabled:opacity-50"
           >
             Cancel
           </button>

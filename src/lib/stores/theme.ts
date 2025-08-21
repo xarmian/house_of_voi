@@ -47,6 +47,7 @@ const availableThemes: Record<string, ThemeColors> = {
       to: '#0f172a',
       direction: 'to bottom right'
     },
+    textColor: '#ffffff',
     surface: {
       primary: '#1e293b',
       secondary: '#334155',
@@ -67,6 +68,7 @@ const availableThemes: Record<string, ThemeColors> = {
       to: '#1f2937',
       direction: 'to bottom right'
     },
+    textColor: '#ffffff',
     surface: {
       primary: '#111827',
       secondary: '#1f2937',
@@ -108,6 +110,7 @@ const availableThemes: Record<string, ThemeColors> = {
       to: '#451a03',
       direction: 'to bottom right'
     },
+    textColor: '#ffffff',
     surface: {
       primary: '#92400e',
       secondary: '#a3460f',
@@ -128,6 +131,7 @@ const availableThemes: Record<string, ThemeColors> = {
       to: '#1d4ed8',
       direction: 'to bottom right'
     },
+    textColor: '#ffffff',
     surface: {
       primary: '#1e40af',
       secondary: '#1d4ed8',

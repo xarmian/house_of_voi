@@ -48,7 +48,7 @@
     <div class="max-w-6xl mx-auto">
       <!-- Header -->
       <div class="text-center mb-8">
-        <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">
+        <h1 class="text-4xl md:text-5xl font-bold text-theme mb-4">
           The <span class="text-voi-400">House</span>
         </h1>
         <p class="text-slate-300 text-lg max-w-2xl mx-auto">
@@ -62,7 +62,7 @@
           <svg class="w-6 h-6 text-voi-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V8a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
           </svg>
-          <h3 class="text-lg font-semibold text-white">Wallet Connection</h3>
+          <h3 class="text-lg font-semibold text-theme">Wallet Connection</h3>
         </div>
         
         <!-- AVM Wallet Component -->
@@ -78,7 +78,7 @@
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-xs text-gray-400 mb-1">Connected Address</p>
-                <p class="font-mono text-sm text-white">
+                <p class="font-mono text-sm text-theme">
                   {$selectedWallet.address.slice(0, 8)}...{$selectedWallet.address.slice(-8)}
                 </p>
               </div>
@@ -102,7 +102,7 @@
               <svg class="w-6 h-6 text-voi-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
               </svg>
-              <h2 class="text-2xl font-bold text-white">Game Analytics & Transparency</h2>
+              <h2 class="text-2xl font-bold text-theme">Game Analytics & Transparency</h2>
             </div>
             
             <div class="text-slate-300 mb-6">
@@ -127,7 +127,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
               </svg>
             </div>
-            <h3 class="text-xl font-semibold text-white mb-2">Connect Your Wallet</h3>
+            <h3 class="text-xl font-semibold text-theme mb-2">Connect Your Wallet</h3>
             <p class="text-slate-400">
               Connect your wallet above to view and manage your YBT shares and access detailed game analytics.
             </p>
@@ -139,7 +139,7 @@
               <svg class="w-6 h-6 text-voi-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
               </svg>
-              <h2 class="text-2xl font-bold text-white">Game Transparency</h2>
+              <h2 class="text-2xl font-bold text-theme">Game Transparency</h2>
             </div>
             
             <div class="text-slate-300 mb-6">
@@ -157,7 +157,7 @@
               <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
               </svg>
-              <h3 class="text-lg font-semibold text-white mb-2">Provably Fair Gaming</h3>
+              <h3 class="text-lg font-semibold text-theme mb-2">Provably Fair Gaming</h3>
               <p class="text-slate-400 mb-4">
                 All odds calculations are performed using real contract data. No hidden mechanics or server-side randomness.
               </p>

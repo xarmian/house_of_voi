@@ -111,7 +111,7 @@
     <div class="bg-slate-800 rounded-xl border border-slate-700 shadow-2xl max-w-md w-full">
       <!-- Header -->
       <div class="px-6 py-4 border-b border-slate-700">
-        <h2 class="text-xl font-bold text-white">{title}</h2>
+        <h2 class="text-xl font-bold text-theme">{title}</h2>
         <p class="text-slate-300 text-sm mt-1">{message}</p>
       </div>
 
@@ -131,12 +131,12 @@
             <div class="space-y-2 text-sm">
               <div class="flex justify-between">
                 <span class="text-slate-400">Address:</span>
-                <span class="text-white font-mono">{formatAddress(walletInfo.address)}</span>
+                <span class="text-theme font-mono">{formatAddress(walletInfo.address)}</span>
               </div>
               
               <div class="flex justify-between">
                 <span class="text-slate-400">Balance:</span>
-                <span class="text-white">
+                <span class="text-theme">
                   {#if loadingBalance}
                     <span class="text-slate-400">Loading...</span>
                   {:else if walletBalance !== null}
@@ -149,12 +149,12 @@
               
               <div class="flex justify-between">
                 <span class="text-slate-400">Created:</span>
-                <span class="text-white">{formatDate(walletInfo.createdAt)}</span>
+                <span class="text-theme">{formatDate(walletInfo.createdAt)}</span>
               </div>
               
               <div class="flex justify-between">
                 <span class="text-slate-400">Last Used:</span>
-                <span class="text-white">{formatDate(walletInfo.lastUsed)}</span>
+                <span class="text-theme">{formatDate(walletInfo.lastUsed)}</span>
               </div>
             </div>
           </div>
@@ -171,9 +171,9 @@
               bind:value={password}
               disabled={isLoading}
               placeholder={walletInfo?.isPasswordless ? "Leave empty for passwordless wallet" : "Enter your wallet password"}
-              class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+              class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-theme placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
               on:keydown={handleKeydown}
-              autocomplete="current-password"
+              autocomplete="off"
             />
             <button
               type="button"
@@ -219,7 +219,7 @@
                 type="button"
                 on:click={handleAbandonWallet}
                 disabled={isLoading}
-                class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors disabled:opacity-50"
+                class="px-3 py-1 bg-red-600 hover:bg-red-700 text-theme text-sm rounded transition-colors disabled:opacity-50"
               >
                 Delete & Create New
               </button>
@@ -227,7 +227,7 @@
                 type="button"
                 on:click={cancelAbandon}
                 disabled={isLoading}
-                class="px-3 py-1 bg-slate-600 hover:bg-slate-700 text-white text-sm rounded transition-colors disabled:opacity-50"
+                class="px-3 py-1 bg-slate-600 hover:bg-slate-700 text-theme text-sm rounded transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -242,7 +242,7 @@
           type="button"
           on:click={handleCancel}
           disabled={isLoading}
-          class="px-4 py-2 text-slate-300 hover:text-white transition-colors disabled:opacity-50"
+          class="px-4 py-2 text-slate-300 hover:text-theme transition-colors disabled:opacity-50"
         >
           Cancel
         </button>
@@ -250,7 +250,7 @@
           type="button"
           on:click={handleSubmit}
           disabled={isLoading}
-          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-theme rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
         >
           {#if isLoading}
             <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">

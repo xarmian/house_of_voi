@@ -824,7 +824,7 @@
           Medium Win
         </button>
         <button 
-          class="bg-surface-secondary hover:bg-surface-hover text-white font-medium rounded-lg transition-colors duration-200 px-3 py-1 text-xs"
+          class="bg-surface-secondary hover:bg-surface-hover text-theme font-medium rounded-lg transition-colors duration-200 px-3 py-1 text-xs"
           on:click={() => triggerWinCelebration({ amount: 75000000, level: 'large' }, 'test-large')}
         >
           Large Win
@@ -891,7 +891,7 @@
           
           <!-- Close Button -->
           <button 
-            class="bg-surface-secondary hover:bg-surface-hover text-white font-medium rounded-lg transition-colors duration-200 py-3 px-6 shadow-lg"
+            class="bg-surface-secondary hover:bg-surface-hover text-theme font-medium rounded-lg transition-colors duration-200 py-3 px-6 shadow-lg"
             on:click={() => showMaintenanceOverlay = false}
           >
             Close

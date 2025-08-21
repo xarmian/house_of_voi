@@ -10,22 +10,29 @@
   }
   
   body {
-    @apply bg-slate-900 text-white;
+    @apply bg-slate-900;
+    color: var(--theme-text, #ffffff);
   }
 }
 
 @layer components {
   /* Theme-aware button variants */
   .btn-primary {
-    @apply bg-theme-primary hover:bg-theme-secondary text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
+    @apply bg-theme-primary hover:bg-theme-secondary font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
+    color: var(--theme-text, #ffffff);
   }
   
   .btn-secondary {
-    @apply bg-surface-secondary hover:bg-surface-hover text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
+    @apply bg-surface-secondary hover:bg-surface-hover font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
+    color: var(--theme-text, #ffffff);
   }
   
   .btn-outline {
-    @apply border-2 border-theme-primary text-theme-primary hover:bg-theme-primary hover:text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
+    @apply border-2 border-theme-primary text-theme-primary hover:bg-theme-primary font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
+  }
+  
+  .btn-outline:hover {
+    color: var(--theme-text, #ffffff);
   }
   
   /* Theme-aware card variants */
@@ -70,15 +77,18 @@
   
   /* Theme-aware badge and status variants */
   .badge-primary {
-    @apply bg-theme-primary text-white px-2 py-1 rounded-full text-xs font-semibold;
+    @apply bg-theme-primary px-2 py-1 rounded-full text-xs font-semibold;
+    color: var(--theme-text, #ffffff);
   }
   
   .badge-secondary {
-    @apply bg-theme-secondary text-white px-2 py-1 rounded-full text-xs font-semibold;
+    @apply bg-theme-secondary px-2 py-1 rounded-full text-xs font-semibold;
+    color: var(--theme-text, #ffffff);
   }
   
   .status-success {
-    @apply bg-green-500 text-white px-2 py-1 rounded text-sm;
+    @apply bg-green-500 px-2 py-1 rounded text-sm;
+    color: var(--theme-text, #ffffff);
   }
   
   .status-warning {
@@ -86,7 +96,8 @@
   }
   
   .status-error {
-    @apply bg-red-500 text-white px-2 py-1 rounded text-sm;
+    @apply bg-red-500 px-2 py-1 rounded text-sm;
+    color: var(--theme-text, #ffffff);
   }
   
   /* Theme-aware table variants */
@@ -100,6 +111,11 @@
   
   .table-cell {
     @apply text-theme-text py-3 px-4;
+  }
+  
+  /* Theme-aware text utility */
+  .text-theme {
+    color: var(--theme-text, #ffffff);
   }
 }
 

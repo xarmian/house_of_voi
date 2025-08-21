@@ -33,14 +33,14 @@
 
 <div class="card p-6">
   <div class="flex items-center justify-between mb-4">
-    <h2 class="text-2xl font-bold text-white">YBT Contract Overview</h2>
+    <h2 class="text-2xl font-bold text-theme">YBT Contract Overview</h2>
     <button
       on:click={loadGlobalState}
       disabled={isLoadingGlobal}
       class="btn-secondary text-sm"
     >
       {#if isLoadingGlobal}
-        <svg class="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <svg class="animate-spin -ml-1 mr-1 h-3 w-3 text-theme" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
@@ -73,7 +73,7 @@
       <!-- Token Name -->
       <div class="bg-slate-700 rounded-lg p-4">
         <div class="text-slate-400 text-sm font-medium mb-1">Token Name</div>
-        <div class="text-lg font-bold text-white truncate">
+        <div class="text-lg font-bold text-theme truncate">
           {globalState.name}
         </div>
         <div class="text-xs text-slate-500 mt-1">({globalState.symbol})</div>
@@ -109,26 +109,26 @@
 
     <!-- Additional Info -->
     <div class="mt-6 p-4 bg-slate-900 rounded-lg">
-      <h3 class="text-lg font-semibold text-white mb-3">How YBT Works</h3>
+      <h3 class="text-lg font-semibold text-theme mb-3">How YBT Works</h3>
       <div class="grid md:grid-cols-3 gap-4 text-sm">
         <div class="flex items-start">
           <div class="w-2 h-2 bg-voi-400 rounded-full mt-2 mr-3 flex-shrink-0"></div>
           <div>
-            <div class="text-white font-medium">Deposit Funds</div>
+            <div class="text-theme font-medium">Deposit Funds</div>
             <div class="text-slate-400">Deposit VOI to receive YBT shares proportional to your contribution</div>
           </div>
         </div>
         <div class="flex items-start">
           <div class="w-2 h-2 bg-voi-400 rounded-full mt-2 mr-3 flex-shrink-0"></div>
           <div>
-            <div class="text-white font-medium">Earn Yield</div>
+            <div class="text-theme font-medium">Earn Yield</div>
             <div class="text-slate-400">Your shares earn yield from house profits and gaming activities</div>
           </div>
         </div>
         <div class="flex items-start">
           <div class="w-2 h-2 bg-voi-400 rounded-full mt-2 mr-3 flex-shrink-0"></div>
           <div>
-            <div class="text-white font-medium">Withdraw Anytime</div>
+            <div class="text-theme font-medium">Withdraw Anytime</div>
             <div class="text-slate-400">Redeem your shares for the underlying VOI value plus any earned yield</div>
           </div>
         </div>

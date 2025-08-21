@@ -83,20 +83,20 @@
   <div class="card-secondary px-3 py-2 flex items-center justify-between">
     <div class="flex items-center gap-2">
       <Wallet class="w-4 h-4 text-voi-400" />
-      <span class="text-sm font-medium text-white">{formattedBalance} VOI</span>
+      <span class="text-sm font-medium text-theme">{formattedBalance} VOI</span>
     </div>
     
     {#if $walletStore.isGuest && !$hasExistingWallet}
       <button
         on:click={openDetailsModal}
-        class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded transition-colors"
+        class="px-3 py-1 bg-green-600 hover:bg-green-700 text-theme text-xs font-medium rounded transition-colors"
       >
         Add Funds
       </button>
     {:else if $walletStore.isGuest && $hasExistingWallet}
       <button
         on:click={openDetailsModal}
-        class="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded transition-colors flex items-center gap-1"
+        class="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-theme text-xs font-medium rounded transition-colors flex items-center gap-1"
       >
         <Unlock class="w-3 h-3" />
         Unlock
@@ -104,14 +104,14 @@
     {:else if $walletStore.isLocked}
       <button
         on:click={openDetailsModal}
-        class="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded transition-colors"
+        class="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-theme text-xs font-medium rounded transition-colors"
       >
         Unlock
       </button>
     {:else if $walletStore.error}
       <button
         on:click={() => walletStore.initialize()}
-        class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded transition-colors"
+        class="px-3 py-1 bg-red-600 hover:bg-red-700 text-theme text-xs font-medium rounded transition-colors"
       >
         Retry
       </button>
@@ -132,7 +132,7 @@
       <!-- Header Section -->
       <div class="flex items-center gap-3">
         <Wallet class="w-6 h-6 text-voi-400" />
-        <h3 class="text-lg font-semibold text-white">Gaming Wallet</h3>
+        <h3 class="text-lg font-semibold text-theme">Gaming Wallet</h3>
         {#if $isWalletConnected || publicBalance !== null || loadingPublicBalance}
           <span class="text-xl font-bold text-voi-400">
             {#if loadingPublicBalance}
@@ -180,7 +180,7 @@
       <p class="text-red-400 text-sm mb-3">{$walletStore.error}</p>
       <button
         on:click={() => walletStore.initialize()}
-        class="px-4 py-2 bg-voi-600 hover:bg-voi-700 text-white text-sm font-medium rounded-lg transition-colors"
+        class="px-4 py-2 bg-voi-600 hover:bg-voi-700 text-theme text-sm font-medium rounded-lg transition-colors"
       >
         Retry
       </button>
@@ -191,7 +191,7 @@
       <p class="text-theme-text opacity-70 text-sm mb-3">Ready to play!</p>
       <button
         on:click={openDetailsModal}
-        class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+        class="px-4 py-2 bg-green-600 hover:bg-green-700 text-theme text-sm font-medium rounded-lg transition-colors"
       >
         Add Funds
       </button>
@@ -204,7 +204,7 @@
           <p class="text-xs text-theme-text opacity-70">Address</p>
           <Lock class="w-3 h-3 text-theme-text opacity-70" />
         </div>
-        <p class="font-mono text-sm text-white">{shortAddress}</p>
+        <p class="font-mono text-sm text-theme">{shortAddress}</p>
         {#if publicWalletData?.isPasswordless}
           <p class="text-xs text-amber-400 mt-1">Passwordless wallet</p>
         {/if}
@@ -212,7 +212,7 @@
       <div class="text-center">
         <button
           on:click={openDetailsModal}
-          class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 mx-auto"
+          class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-theme text-sm font-medium rounded-lg transition-colors flex items-center gap-2 mx-auto"
         >
           <Unlock class="w-4 h-4" />
           Unlock Wallet
@@ -235,7 +235,7 @@
           <Lock class="w-3 h-3" />
         </button>
       </div>
-      <p class="font-mono text-sm text-white">{shortAddress}</p>
+      <p class="font-mono text-sm text-theme">{shortAddress}</p>
       <p class="text-xs text-theme-text opacity-70 mt-2">
         Click the menu to access functions • Click lock to secure
       </p>
@@ -255,10 +255,10 @@
 <style>
   /* Ensure consistent button styling */
   :global(.btn-primary) {
-    @apply px-4 py-2 bg-voi-600 hover:bg-voi-700 text-white font-medium rounded-lg transition-colors duration-200;
+    @apply px-4 py-2 bg-voi-600 hover:bg-voi-700 text-theme font-medium rounded-lg transition-colors duration-200;
   }
   
   :global(.btn-secondary) {
-    @apply px-4 py-2 bg-surface-secondary hover:bg-surface-hover text-white font-medium rounded-lg transition-colors duration-200;
+    @apply px-4 py-2 bg-surface-secondary hover:bg-surface-hover text-theme font-medium rounded-lg transition-colors duration-200;
   }
 </style>

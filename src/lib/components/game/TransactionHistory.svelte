@@ -106,7 +106,7 @@
 
 {#if completedSpins.length > 0}
   <div class="transaction-history card p-4">
-    <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+    <h3 class="text-lg font-semibold text-theme mb-4 flex items-center gap-2">
       <ExternalLink class="w-5 h-5" />
       Transaction History
     </h3>
@@ -178,7 +178,7 @@
   </div>
 {:else}
   <div class="transaction-history card p-4">
-    <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+    <h3 class="text-lg font-semibold text-theme mb-4 flex items-center gap-2">
       <ExternalLink class="w-5 h-5" />
       Transaction History
     </h3>
@@ -215,7 +215,7 @@
   }
   
   .copy-button {
-    @apply text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-slate-600/50;
+    @apply text-gray-400 hover:text-theme transition-colors p-1 rounded hover:bg-slate-600/50;
   }
   
   .tx-status {
@@ -243,7 +243,7 @@
   }
   
   .amount {
-    @apply font-semibold text-white;
+    @apply font-semibold text-theme;
   }
   
   .winnings {

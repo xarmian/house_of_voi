@@ -51,6 +51,11 @@ export default {
           hover: 'var(--theme-surface-hover, #475569)',
         }
       },
+      textColor: {
+        theme: 'var(--theme-text, #ffffff)',
+        'theme-text': 'var(--theme-text, #ffffff)',
+        'theme-primary': 'var(--theme-primary, #7c3aed)',
+      },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace']

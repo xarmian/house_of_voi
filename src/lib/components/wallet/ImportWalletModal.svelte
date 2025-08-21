@@ -74,10 +74,10 @@
   <div class="card max-w-2xl w-full max-h-[90vh] overflow-y-auto">
     <!-- Header -->
     <div class="flex items-center justify-between p-6 border-b border-slate-700">
-      <h2 id="import-modal-title" class="text-xl font-semibold text-white">Import Wallet</h2>
+      <h2 id="import-modal-title" class="text-xl font-semibold text-theme">Import Wallet</h2>
       <button
         on:click={closeModal}
-        class="p-1 text-gray-400 hover:text-white transition-colors"
+        class="p-1 text-gray-400 hover:text-theme transition-colors"
       >
         <X class="w-5 h-5" />
       </button>
@@ -137,6 +137,7 @@
           placeholder="Enter a password to secure your wallet"
           class="w-full input-field"
           class:border-red-500={password && password.length < 4}
+          autocomplete="off"
         />
         {#if password && password.length < 4}
           <p class="text-red-400 text-sm">Password must be at least 4 characters</p>
@@ -155,6 +156,7 @@
           placeholder="Confirm your password"
           class="w-full input-field"
           class:border-red-500={confirmPassword && password !== confirmPassword}
+          autocomplete="off"
         />
         {#if confirmPassword && password !== confirmPassword}
           <p class="text-red-400 text-sm">Passwords do not match</p>

@@ -99,13 +99,13 @@
   <div class="card max-w-md w-full max-h-[90vh] overflow-y-auto">
     <!-- Header -->
     <div class="flex items-center justify-between p-6 border-b border-slate-700">
-      <h2 id="transfer-modal-title" class="text-xl font-semibold text-white flex items-center gap-2">
+      <h2 id="transfer-modal-title" class="text-xl font-semibold text-theme flex items-center gap-2">
         <Send class="w-5 h-5" />
         Transfer Tokens
       </h2>
       <button
         on:click={closeModal}
-        class="p-1 text-gray-400 hover:text-white transition-colors"
+        class="p-1 text-gray-400 hover:text-theme transition-colors"
       >
         <X class="w-5 h-5" />
       </button>
@@ -118,14 +118,14 @@
         <!-- Success Message -->
         <div class="text-center space-y-4">
           <div class="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto">
-            <CheckCircle class="w-8 h-8 text-white" />
+            <CheckCircle class="w-8 h-8 text-theme" />
           </div>
           <div>
             <h3 class="text-lg font-semibold text-green-400 mb-2">Transfer Successful!</h3>
             <p class="text-gray-300 mb-4">Your tokens have been sent successfully.</p>
             <div class="p-3 bg-slate-700/50 rounded-lg">
               <p class="text-sm text-gray-400 mb-1">Transaction ID:</p>
-              <p class="font-mono text-xs text-white break-all">{txId}</p>
+              <p class="font-mono text-xs text-theme break-all">{txId}</p>
             </div>
           </div>
           <button
@@ -141,7 +141,7 @@
         <div class="p-4 bg-slate-700/50 rounded-lg">
           <div class="text-center">
             <p class="text-sm text-gray-400 mb-1">Available Balance</p>
-            <p class="text-2xl font-bold text-white">{formattedBalance} VOI</p>
+            <p class="text-2xl font-bold text-theme">{formattedBalance} VOI</p>
           </div>
         </div>
         
@@ -243,11 +243,11 @@
 
 <style>
   .btn-primary {
-    @apply px-4 py-2 bg-voi-600 hover:bg-voi-700 disabled:bg-voi-600/50 text-white font-medium rounded-lg transition-colors duration-200;
+    @apply px-4 py-2 bg-voi-600 hover:bg-voi-700 disabled:bg-voi-600/50 text-theme font-medium rounded-lg transition-colors duration-200;
   }
   
   .input-field {
-    @apply px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:border-transparent;
+    @apply px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-theme placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:border-transparent;
   }
   
   .card {

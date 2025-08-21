@@ -39,7 +39,7 @@
   <div class="min-h-screen bg-slate-900 flex items-center justify-center">
     <div class="text-center">
       <div class="w-12 h-12 border-4 border-voi-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-      <p class="text-white">Loading House of Voi...</p>
+      <p class="text-theme">Loading House of Voi...</p>
     </div>
   </div>
 {/if}

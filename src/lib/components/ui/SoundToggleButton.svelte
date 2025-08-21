@@ -185,7 +185,7 @@
   }
 
   .sound-toggle-btn {
-    @apply flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-gray-300 hover:text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:ring-offset-2 focus:ring-offset-slate-800;
+    @apply flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-gray-300 hover:text-theme transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:ring-offset-2 focus:ring-offset-slate-800;
     min-height: 40px;
     touch-action: manipulation;
   }
@@ -200,7 +200,7 @@
   }
 
   .sound-toggle-btn.enabled {
-    @apply bg-voi-700 hover:bg-voi-600 text-white;
+    @apply bg-voi-700 hover:bg-voi-600 text-theme;
     box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
   }
 
@@ -258,7 +258,7 @@
   }
 
   .sound-settings-btn {
-    @apply p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-gray-400 hover:text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:ring-offset-2 focus:ring-offset-slate-800;
+    @apply p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-gray-400 hover:text-theme transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:ring-offset-2 focus:ring-offset-slate-800;
   }
 
   .sound-status-indicator {

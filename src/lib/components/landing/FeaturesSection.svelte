@@ -73,7 +73,7 @@
         in:fly={{ y: 30, duration: 600 }}
         class="text-center mb-16"
       >
-        <h2 class="text-4xl md:text-5xl font-bold text-white mb-6">
+        <h2 class="text-4xl md:text-5xl font-bold text-theme mb-6">
           Why Choose House of Voi?
         </h2>
         <p class="text-xl text-gray-400 max-w-3xl mx-auto">
@@ -91,7 +91,7 @@
               <div class="p-3 rounded-lg bg-slate-700/50 mr-4">
                 <svelte:component this={feature.icon} class="w-6 h-6 {feature.color}" />
               </div>
-              <h3 class="text-xl font-semibold text-white">{feature.title}</h3>
+              <h3 class="text-xl font-semibold text-theme">{feature.title}</h3>
             </div>
             <p class="text-gray-400 leading-relaxed">
               {feature.description}

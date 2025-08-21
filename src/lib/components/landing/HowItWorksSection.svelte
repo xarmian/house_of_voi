@@ -58,7 +58,7 @@
         in:fly={{ y: 30, duration: 600 }}
         class="text-center mb-16"
       >
-        <h2 class="text-4xl md:text-5xl font-bold text-white mb-6">
+        <h2 class="text-4xl md:text-5xl font-bold text-theme mb-6">
           How It Works
         </h2>
         <p class="text-xl text-gray-400 max-w-2xl mx-auto">
@@ -80,19 +80,19 @@
               <div class="relative inline-flex items-center justify-center w-20 h-20 mb-6">
                 <div class="absolute inset-0 bg-gradient-to-r {step.color} rounded-full"></div>
                 <div class="absolute inset-1 bg-slate-900 rounded-full flex items-center justify-center">
-                  <span class="text-2xl font-bold text-white">{step.number}</span>
+                  <span class="text-2xl font-bold text-theme">{step.number}</span>
                 </div>
               </div>
               
               <!-- Icon -->
               <div class="mb-6">
                 <div class="inline-flex items-center justify-center w-16 h-16 bg-slate-800 rounded-2xl">
-                  <svelte:component this={step.icon} class="w-8 h-8 text-white" />
+                  <svelte:component this={step.icon} class="w-8 h-8 text-theme" />
                 </div>
               </div>
               
               <!-- Content -->
-              <h3 class="text-2xl font-bold text-white mb-4">{step.title}</h3>
+              <h3 class="text-2xl font-bold text-theme mb-4">{step.title}</h3>
               <p class="text-gray-400 leading-relaxed max-w-xs mx-auto">
                 {step.description}
               </p>
