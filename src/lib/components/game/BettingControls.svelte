@@ -42,10 +42,7 @@
   
   // Detect when wallet exists but is locked
   $: walletExistsButLocked = $hasExistingWallet && !$isWalletConnected;
-  
-  // Check if the locked wallet is passwordless
-  $: isPasswordlessWallet = walletExistsButLocked && walletService.getPublicWalletData()?.isPasswordless;
-  
+  $: isLegacyWallet = walletExistsButLocked && walletService.isLegacyWallet();
   
   // Update input when store changes
   $: betInputValue = $betPerLineVOI;
@@ -508,7 +505,7 @@
           <Lock class="w-6 h-6" />
           <h3 class="font-bold text-lg">Wallet Locked</h3>
         </div>
-        {#if isPasswordlessWallet}
+        {#if isLegacyWallet}
           <p class="text-theme-text text-sm mb-4">Your wallet is currently locked</p>
         {:else}
           <p class="text-theme-text text-sm mb-4">Enter your password to unlock and start playing</p>
