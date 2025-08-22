@@ -274,14 +274,19 @@ export const queueStats = derived(
   ($queue): QueueStats => {
     const spins = $queue.spins;
     
+    // Only count spins that actually executed or are in progress (exclude failed/expired)
+    const validSpins = spins.filter(s => 
+      ![SpinStatus.FAILED, SpinStatus.EXPIRED].includes(s.status)
+    );
+    
     return {
       totalSpins: spins.length,
       pendingSpins: spins.filter(s => [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(s.status)).length,
       completedSpins: spins.filter(s => s.status === SpinStatus.COMPLETED).length,
       failedSpins: spins.filter(s => [SpinStatus.FAILED, SpinStatus.EXPIRED].includes(s.status)).length,
-      totalWagered: spins.reduce((sum, spin) => sum + spin.totalBet, 0),
-      totalWinnings: spins.reduce((sum, spin) => sum + (spin.winnings || 0), 0),
-      netProfit: spins.reduce((sum, spin) => sum + (spin.winnings || 0) - spin.totalBet, 0)
+      totalWagered: validSpins.reduce((sum, spin) => sum + spin.totalBet, 0),
+      totalWinnings: validSpins.reduce((sum, spin) => sum + (spin.winnings || 0), 0),
+      netProfit: validSpins.reduce((sum, spin) => sum + (spin.winnings || 0) - spin.totalBet, 0)
     };
   }
 );
