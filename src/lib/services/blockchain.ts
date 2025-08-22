@@ -210,29 +210,6 @@ export class BlockchainService {
             outcomeRound: gridOutcome.round
           }
         });
-        
-        // For losing spins, trigger silent auto-claim in the background
-        // For winning spins, let the auto-claim processor handle it normally
-        if (winnings === 0) {
-          // Small delay to let UI show the result first
-          setTimeout(async () => {
-            try {
-              // Get the updated spin object with latest data
-              const updatedSpin = { ...spin, outcome: gridOutcome.grid, winnings, outcomeRound: gridOutcome.round };
-              await this.submitClaim(updatedSpin, true); // Auto-claim silently
-            } catch (error) {
-              console.error('Silent auto-claim failed for losing spin:', error);
-              // If auto-claim fails, keep as ready to claim so user can manually claim
-              queueStore.updateSpin({
-                id: spin.id,
-                status: SpinStatus.READY_TO_CLAIM,
-                data: {
-                  error: 'Auto-claim failed, manual claim required'
-                }
-              });
-            }
-          }, 1000); // Small delay to let UI settle
-        }
       }
     } catch (error) {
       console.error('Error checking bet outcome:', error);

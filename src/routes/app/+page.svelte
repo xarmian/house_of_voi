@@ -3,6 +3,7 @@
   import { walletStore } from '$lib/stores/wallet';
   import { contractDataCache } from '$lib/services/contractDataCache';
   import { currentTheme } from '$lib/stores/theme';
+  import { isMasterSoundEnabled } from '$lib/stores/sound';
   import WalletManager from '$lib/components/wallet/WalletManager.svelte';
   import SlotMachine from '$lib/components/game/SlotMachine.svelte';
   import GameQueue from '$lib/components/game/GameQueue.svelte';
@@ -95,6 +96,8 @@
     </div>
   </div>
   
-  <!-- VOI Radio Player - Fixed position, visible on all layouts -->
-  <VoiRadioPlayer />
+  <!-- VOI Radio Player - Fixed position, visible when sound is enabled -->
+  {#if $isMasterSoundEnabled}
+    <VoiRadioPlayer />
+  {/if}
 </main>

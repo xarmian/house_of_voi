@@ -431,7 +431,7 @@
                   Loss
                 </div>
               {/if}
-            {:else if (spin.status === SpinStatus.READY_TO_CLAIM || spin.status === SpinStatus.CLAIMING) && typeof spin.winnings === 'number'}
+            {:else if (spin.status === SpinStatus.READY_TO_CLAIM || spin.status === SpinStatus.CLAIMING || spin.status === SpinStatus.COMPLETED) && typeof spin.winnings === 'number'}
               <!-- Show win/loss amount immediately when outcome is known -->
               <div class="result-display">
                 {#if spin.winnings > 0}
@@ -458,20 +458,6 @@
                   <!-- For losing spins, show processing status -->
                   <div class="text-xs text-blue-400 font-medium" style="margin-top: 0.25rem;">
                   </div>
-                {:else if spin.status === SpinStatus.CLAIMING && !spin.error}
-                  <div class="text-xs font-medium" style="margin-top: 0.25rem;"
-                       class:text-blue-400={spin.winnings === 0}
-                       class:text-orange-400={spin.winnings !== 0}>
-                  </div>
-                {:else if spin.status === SpinStatus.CLAIMING && spin.error && spin.winnings > 0}
-                  <!-- Only show retry button for winning spins with errors -->
-                  <button
-                    on:click={() => handleRetryClaim(spin)}
-                    class="retry-button"
-                    style="margin-top: 0.25rem;"
-                  >
-                    Retry Claim
-                  </button>
                 {/if}
               </div>
             {:else if spin.status === SpinStatus.READY_TO_CLAIM && !spin.isAutoClaimInProgress}
@@ -489,16 +475,6 @@
               {/if}
             {:else if spin.status === SpinStatus.READY_TO_CLAIM && spin.isAutoClaimInProgress}
               <!-- Remove auto-claiming message - claiming happens silently -->
-            {:else if spin.status === SpinStatus.CLAIMING && spin.error}
-              <!-- Only show retry for winning spins -->
-              {#if typeof spin.winnings !== 'number' || spin.winnings > 0}
-                <button
-                  on:click={() => handleRetryClaim(spin)}
-                  class="retry-button"
-                >
-                  Retry Claim
-                </button>
-              {/if}
             {:else if [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(spin.status)}
               <!-- Show processing indicator for active spins -->
               <div class="processing-indicator">
