@@ -9,6 +9,7 @@
   import WalletDetailsModal from './WalletDetailsModal.svelte';
   import BalanceUpdateAnimation from './BalanceUpdateAnimation.svelte';
   import { playDeposit, playBalanceIncrease } from '$lib/services/soundService';
+  import { formatVOI } from '$lib/constants/betting';
   
   const dispatch = createEventDispatcher();
   
@@ -41,7 +42,7 @@
   const minTransactionCost = 50500 + 30000 + 28500 + 15000 + 1000000; // spin + 1 payline + box + network + buffer
   $: grossAvailable = Math.max(0, walletBal - reserved);
   $: availableForBetting = Math.max(0, grossAvailable - minTransactionCost);
-  $: formattedAvailableCredits = (availableForBetting / 1_000_000).toFixed(6);
+  $: formattedAvailableCredits = formatVOI(availableForBetting);
   
   $: shortAddress = $isWalletConnected ? 
     ($walletAddress ? $walletAddress.slice(0, 8) + '...' + $walletAddress.slice(-8) : '') :
@@ -189,7 +190,7 @@
             <div class="flex items-center gap-2">
               <h3 class="text-base font-semibold text-voi-400">Available Credits: {formattedAvailableCredits} VOI</h3>
             </div>
-            <div class="text-sm text-theme-text opacity-70 mt-0.5">
+            <div class="text-sm text-theme-text opacity-70 mt-0.5 hidden">
               Wallet Balance: {#if loadingPublicBalance}
                 Loading...
               {:else}

@@ -3,7 +3,6 @@
   import { walletService } from '$lib/services/wallet';
   import { algorandService } from '$lib/services/algorand';
   import { balanceManager } from '$lib/services/balanceManager';
-  import { formatVOI } from '$lib/constants/betting';
   import { Trash2 } from 'lucide-svelte';
 
   export let isOpen = false;
@@ -26,6 +25,10 @@
   let walletInfo: { address: string; createdAt: number; lastUsed: number; isPasswordless?: boolean } | null = null;
   let walletBalance: number | null = null;
   let loadingBalance = false;
+
+  const formatVOI = (amount: number) => {
+    return (amount / 1_000_000).toFixed(6);
+  }
 
   async function loadWalletInfo() {
     walletInfo = walletService.getPublicWalletData();
