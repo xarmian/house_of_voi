@@ -8,6 +8,8 @@ import { SpinStatus } from '$lib/types/queue';
 import { BLOCKCHAIN_CONFIG } from '$lib/constants/network';
 import type { QueuedSpin } from '$lib/types/queue';
 import type { SpinTransaction, BlockchainError } from '$lib/types/blockchain';
+import { balanceCalculator } from './balanceCalculator';
+import { balanceManager } from './balanceManager';
 import { get } from 'svelte/store';
 
 // Add global debug method to clear invalid queue data
@@ -50,10 +52,24 @@ export class BlockchainService {
         throw new Error('Wallet not connected');
       }
 
-      // Calculate extra payment for transaction fees
-      const suggestedParams = await algorandService.getSuggestedParams();
-      const baseFee = suggestedParams.minFee;
-      const extraPayment = Math.min(baseFee * 3, BLOCKCHAIN_CONFIG.maxExtraPayment); // Estimate for grouped transactions
+      // Enhanced balance validation and cost calculation
+      const balanceValidation = await balanceCalculator.validateSufficientBalance(
+        spin.betPerLine,
+        spin.selectedPaylines,
+        account.address,
+        get(walletStore).balance
+      );
+
+      if (!balanceValidation.isValid) {
+        const shortfall = balanceValidation.requirement.totalRequired - balanceValidation.requirement.availableAfterReserved;
+        throw new Error(
+          `Insufficient balance for spin. Need ${(shortfall / 1000000).toFixed(6)} more VOI. ` +
+          `Details: ${balanceValidation.errors.join('; ')}`
+        );
+      }
+
+      // Use calculated costs from enhanced validation
+      const extraPayment = balanceValidation.requirement.contractCosts + balanceValidation.requirement.networkFees;
 
       // Prepare spin transaction
       const spinTx: SpinTransaction = {
@@ -149,8 +165,7 @@ export class BlockchainService {
           }
         });
         
-        // Refresh wallet balance
-        walletStore.refreshBalance();
+        // Balance will be updated automatically by balance manager
         return;
       }
       
@@ -311,8 +326,18 @@ export class BlockchainService {
         }
       });
 
-      // Refresh wallet balance
-      walletStore.refreshBalance();
+      // Optimistic balance update to prevent race condition
+      const currentBalance = get(walletStore).balance;
+      const transactionCost = (spin.betPerLine * spin.selectedPaylines);
+      const totalPayout = result.payout;
+      const expectedNewBalance = currentBalance - transactionCost + totalPayout;
+      
+      // Immediate optimistic update - threshold system will handle sound/animation
+      walletStore.updateBalance(expectedNewBalance);
+      
+      if (account) {
+        balanceManager.getBalance(account.address, true);
+      }
 
     } catch (error) {
       console.error('Error submitting claim:', error);
@@ -338,8 +363,20 @@ export class BlockchainService {
           }
         });
         
-        // Refresh wallet balance in case the claim was processed elsewhere
-        walletStore.refreshBalance();
+        // Optimistic balance update - assume the transaction was processed
+        const currentBalance = get(walletStore).balance;
+        const transactionCost = (spin.betPerLine * spin.selectedPaylines);
+        const gameWinnings = spin.winnings || 0;
+        const expectedNewBalance = currentBalance - transactionCost + gameWinnings;
+        
+        // Immediate optimistic update - threshold system will handle sound/animation
+        walletStore.updateBalance(expectedNewBalance);
+        
+        // Force refresh balance after claim to bypass cache
+        const account = get(walletStore).account;
+        if (account) {
+          balanceManager.getBalance(account.address, true);
+        }
         
         return; // Early return to avoid the error handling below
       }
@@ -475,25 +512,39 @@ export class BlockchainService {
 
       for (let line = 0; line < Math.min(selectedPaylines, paylines.length); line++) {
         const payline = paylines[line];
-        // Column-major positioning: first symbol at column 0, row payline[0]
-        const firstPos = 0 * 3 + payline[0];
-        const firstSymbol = gridString[firstPos];
         
-        if (!['A', 'B', 'C', 'D'].includes(firstSymbol)) continue;
+        // Count occurrences of each symbol anywhere in the payline
+        const symbolCounts: { [symbol: string]: number } = {
+          'A': 0,
+          'B': 0,
+          'C': 0,
+          'D': 0
+        };
 
-        let consecutiveCount = 1;
-        for (let col = 1; col < 5; col++) {
+        // Check all positions in the payline
+        for (let col = 0; col < 5; col++) {
           const pos = col * 3 + payline[col]; // Column-major: column * 3 + row
-          if (gridString[pos] === firstSymbol) {
-            consecutiveCount++;
-          } else {
-            break;
+          const symbol = gridString[pos];
+          
+          if (['A', 'B', 'C', 'D'].includes(symbol)) {
+            symbolCounts[symbol]++;
           }
         }
 
-        if (consecutiveCount >= 3) {
+        // Find the symbol with the highest count (must be at least 3)
+        let bestSymbol = '';
+        let bestCount = 0;
+        
+        for (const symbol of ['A', 'B', 'C', 'D']) {
+          if (symbolCounts[symbol] >= 3 && symbolCounts[symbol] > bestCount) {
+            bestSymbol = symbol;
+            bestCount = symbolCounts[symbol];
+          }
+        }
+
+        if (bestCount >= 3) {
           // Get multiplier from the contract (now with caching!)
-          const multiplier = await algorandService.getPayoutMultiplier(firstSymbol, consecutiveCount, userAddress);
+          const multiplier = await algorandService.getPayoutMultiplier(bestSymbol, bestCount, userAddress);
           totalWinnings += betPerLine * multiplier;
         }
       }

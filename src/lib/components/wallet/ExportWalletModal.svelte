@@ -58,10 +58,10 @@
   <div class="card max-w-2xl w-full max-h-[90vh] overflow-y-auto">
     <!-- Header -->
     <div class="flex items-center justify-between p-6 border-b border-slate-700">
-      <h2 id="export-modal-title" class="text-xl font-semibold text-white">Export Wallet</h2>
+      <h2 id="export-modal-title" class="text-xl font-semibold text-theme">Export Wallet</h2>
       <button
         on:click={closeModal}
-        class="p-1 text-gray-400 hover:text-white transition-colors"
+        class="p-1 text-gray-400 hover:text-theme transition-colors"
       >
         <X class="w-5 h-5" />
       </button>
@@ -103,7 +103,7 @@
           <!-- Private Key Export -->
           <div class="card p-4 bg-slate-800/50">
             <div class="flex items-center justify-between mb-3">
-              <h4 class="font-medium text-white">Private Key</h4>
+              <h4 class="font-medium text-theme">Private Key</h4>
               {#if !showPrivateKey}
                 <button
                   on:click={exportPrivateKey}
@@ -151,7 +151,7 @@
           <!-- Mnemonic Export -->
           <div class="card p-4 bg-slate-800/50">
             <div class="flex items-center justify-between mb-3">
-              <h4 class="font-medium text-white">Recovery Phrase</h4>
+              <h4 class="font-medium text-theme">Recovery Phrase</h4>
               {#if !showMnemonic}
                 <button
                   on:click={exportMnemonic}

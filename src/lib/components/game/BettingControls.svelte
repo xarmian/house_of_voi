@@ -1,11 +1,13 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
-  import { Plus, Minus, Zap, DollarSign, BarChart3 } from 'lucide-svelte';
+  import { Plus, Minus, Zap, DollarSign, BarChart3, Lock } from 'lucide-svelte';
   import { bettingStore, betPerLineVOI, totalBetVOI, canAffordBet } from '$lib/stores/betting';
-  import { walletBalance, isWalletConnected, walletAddress } from '$lib/stores/wallet';
+  import { walletStore, walletBalance, isWalletConnected, isWalletGuest, walletAddress, isNewUser, hasExistingWallet } from '$lib/stores/wallet';
+  import { walletActions } from '$lib/stores/walletActions';
   import { isSpinning } from '$lib/stores/game';
   import AddFundsModal from '$lib/components/wallet/AddFundsModal.svelte';
-  import OddsAnalysis from '$lib/components/analytics/OddsAnalysis.svelte';
+  import BalanceBreakdown from '$lib/components/wallet/BalanceBreakdown.svelte';
+  import PaylinePayoutModal from '$lib/components/game/PaylinePayoutModal.svelte';
   import { BETTING_CONSTANTS, formatVOI } from '$lib/constants/betting';
   import { 
     animationPreferences, 
@@ -14,9 +16,10 @@
   import { triggerTouchFeedback } from '$lib/utils/animations';
   import { isSlotMachineOperational } from '$lib/stores/houseBalance';
   import { playButtonClick } from '$lib/services/soundService';
+  import { walletService } from '$lib/services/wallet';
   
   const dispatch = createEventDispatcher<{
-    spin: { betPerLine: number; selectedPaylines: number; totalBet: number }
+    spin: { betPerLine: number; selectedPaylines: number; totalBet: number };
   }>();
   
   export let disabled = false;
@@ -25,14 +28,31 @@
   let betInputValue = $betPerLineVOI;
   let spinButtonElement: HTMLElement;
   let showAddFundsModal = false;
-  let showOddsAnalysis = false;
+  let showPaylinePayouts = false;
+
+  // Password overlay state for locked wallets
+  let password = '';
+  let showPassword = false;
+  let passwordError = '';
+  let unlocking = false;
 
   // Subscribe to animation preferences
   $: preferences = $animationPreferences;
   $: reduceMotion = $shouldReduceAnimations;
   
+  // Detect when wallet exists but is locked
+  $: walletExistsButLocked = $hasExistingWallet && !$isWalletConnected;
+  
+  
   // Update input when store changes
   $: betInputValue = $betPerLineVOI;
+  
+  // DISABLED: Automatic validation was causing infinite loops
+  // Enhanced validation will be triggered manually when needed
+  // let validationTimeout: number;
+  // $: if ($isWalletConnected && $walletAddress && ($bettingStore.betPerLine || $bettingStore.selectedPaylines)) {
+  //   // Validation disabled to prevent excessive network requests
+  // }
   
   // Handle bet input changes
   function handleBetInput(event: Event) {
@@ -45,8 +65,8 @@
     }
   }
 
-  function toggleOddsAnalysis() {
-    // showOddsAnalysis = !showOddsAnalysis;
+  function togglePaylinePayouts() {
+    showPaylinePayouts = !showPaylinePayouts;
   }
   
   function handleSpin() {
@@ -150,6 +170,38 @@
       });
     }
   }
+
+  // Password unlock functions
+  async function handlePasswordSubmit() {
+    if (!password.trim() && !walletService.getPublicWalletData()?.isPasswordless) {
+      passwordError = 'Password is required';
+      return;
+    }
+
+    unlocking = true;
+    passwordError = '';
+
+    try {
+      await walletStore.unlock(password);
+      // Clear form on success
+      password = '';
+      showPassword = false;
+    } catch (error) {
+      passwordError = error instanceof Error ? error.message : 'Failed to unlock wallet';
+    } finally {
+      unlocking = false;
+    }
+  }
+
+  function handlePasswordKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      handlePasswordSubmit();
+    } else if (event.key === 'Escape') {
+      password = '';
+      passwordError = '';
+      showPassword = false;
+    }
+  }
   
   $: spinButtonDisabled = disabled || !$canAffordBet || !$isWalletConnected || !$bettingStore.isValidBet || !$isSlotMachineOperational;
   $: spinButtonText = $isSpinning ? 'Queue Spin' : 
@@ -160,28 +212,30 @@
                      'Spin';
 </script>
 
-<div class="betting-controls" class:compact={compact}>
+<div class="betting-controls relative" class:compact={compact}>
+  <!-- Always show betting controls structure -->
   <!-- Header -->
   {#if !compact}
-  <div class="flex items-center justify-between pb-2">
-    <div class="flex items-center gap-2 text-amber-400 mb-4">
+  <div class="flex items-center justify-between my-2 py-1 border-b border-surface-tertiary" class:blurred-background={$isNewUser || walletExistsButLocked}>
+    <div class="flex items-center gap-2 text-amber-400">
       <DollarSign class="w-5 h-5" />
       <h3 class="font-bold text-lg">Betting Controls</h3>
     </div>
     <button
-      on:click={toggleOddsAnalysis}
-      class="flex items-center gap-2 text-gray-400 hover:text-white transition-colors px-3 py-1 rounded-md hover:bg-slate-700"
-      title="Show win odds and analysis"
+      on:click={togglePaylinePayouts}
+      class="nav-item flex items-center gap-2"
+      title="Show paylines and payouts"
+      disabled={$isNewUser}
     >
       <BarChart3 class="w-4 h-4" />
-      <span class="text-sm">Win Odds</span>
+      <span class="text-sm">Paylines & Payouts</span>
     </button>
   </div>
   {/if}
 
   <!-- Main betting controls - horizontal layout for desktop -->
   {#if !compact}
-    <div class="desktop-betting-grid">
+    <div class="desktop-betting-grid" class:blurred-background={$isNewUser || walletExistsButLocked}>
       <div class="main-betting-row">
         <!-- Left side: Controls -->
         <div class="betting-controls-left">
@@ -191,25 +245,25 @@
               <span class="label-text">Paylines</span>
               <span class="label-value">{$bettingStore.selectedPaylines}/20</span>
             </div>
-            <div class="flex items-center justify-between bg-slate-800 rounded-lg border border-slate-700 p-3">
+            <div class="card p-3 flex items-center gap-3">
               <button
                 on:click={(e) => handleControlButton(() => bettingStore.decreasePaylines(), e.currentTarget)}
                 disabled={$bettingStore.selectedPaylines <= BETTING_CONSTANTS.MIN_PAYLINES || disabled}
-                class="control-button"
+                class="control-button text-theme"
                 aria-label="Decrease paylines"
               >
                 <Minus class="w-4 h-4" />
               </button>
               
               <div class="flex-1 text-center">
-                <div class="text-xl font-bold text-white">{$bettingStore.selectedPaylines}</div>
-                <div class="text-xs text-gray-400">Lines</div>
+                <div class="text-xl font-bold text-theme">{$bettingStore.selectedPaylines}</div>
+                <div class="text-xs text-theme-text opacity-70">Lines</div>
               </div>
               
               <button
                 on:click={(e) => handleControlButton(() => bettingStore.increasePaylines(), e.currentTarget)}
                 disabled={$bettingStore.selectedPaylines >= BETTING_CONSTANTS.MAX_PAYLINES || disabled}
-                class="control-button"
+                class="control-button text-theme"
                 aria-label="Increase paylines"
               >
                 <Plus class="w-4 h-4" />
@@ -226,16 +280,15 @@
             <div class="relative">
               <input
                 type="number"
-                step="0.01"
                 min={formatVOI(BETTING_CONSTANTS.MIN_BET_PER_LINE)}
                 max={formatVOI(BETTING_CONSTANTS.MAX_BET_PER_LINE)}
                 bind:value={betInputValue}
                 on:input={handleBetInput}
                 disabled={disabled}
                 class="input-field pr-12 text-center font-medium text-lg"
-                placeholder="1.00"
+                placeholder="1"
               />
-              <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 font-medium text-xs">
+              <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-theme-text opacity-70 font-medium text-xs">
                 VOI
               </div>
             </div>
@@ -251,7 +304,7 @@
                 <button
                   on:click={(e) => setQuickBet(amount, e.currentTarget)}
                   disabled={disabled}
-                  class="quick-bet-button"
+                  class="quick-bet-button text-theme"
                   class:active={$bettingStore.betPerLine === amount * 1_000_000}
                 >
                   {amount} VOI
@@ -263,9 +316,9 @@
             <button
               on:click={(e) => handleControlButton(() => bettingStore.setMaxBet(), e.currentTarget)}
               disabled={disabled}
-              class="w-full btn-secondary mt-2"
+              class="w-full btn-secondary mt-2 text-theme"
             >
-              Max Bet
+              Max Bet ({formatVOI(BETTING_CONSTANTS.MAX_BET_PER_LINE)} VOI)
             </button>
           </div>
         </div>
@@ -275,23 +328,19 @@
           <div class="bg-gradient-to-r from-voi-900/20 to-blue-900/20 border border-voi-700/30 rounded-lg p-4 h-full">
             <div class="flex flex-col justify-center h-full">
               <div class="text-center mb-3">
-                <div class="text-gray-300 font-medium mb-2">Total Bet</div>
+                <div class="text-theme-text font-medium mb-2">Total Bet</div>
                 <div class="flex items-center justify-center gap-2">
-                  <DollarSign class="w-5 h-5 text-voi-400" />
-                  <span class="text-3xl font-bold text-white">{$totalBetVOI} VOI</span>
+                  <span class="text-3xl font-bold text-theme">{$totalBetVOI} VOI</span>
                 </div>
               </div>
               
-              <div class="text-center text-sm text-gray-400 mb-3">
+              <div class="text-center text-sm text-theme-text opacity-70 mb-3">
                 {$bettingStore.selectedPaylines} lines × {$betPerLineVOI} VOI
               </div>
               
-              <!-- Balance Check -->
-              <div class="flex items-center justify-between text-sm border-t border-slate-700/50 pt-3 mb-3">
-                <span class="text-gray-400">Balance:</span>
-                <span class="font-medium" class:text-green-400={$canAffordBet} class:text-red-400={!$canAffordBet}>
-                  {formatVOI($walletBalance)} VOI
-                </span>
+              <!-- Available Credits -->
+              <div class="border-t border-surface-border pt-3 mb-3">
+                <BalanceBreakdown />
               </div>
               
               <!-- Add Funds Button -->
@@ -301,7 +350,7 @@
                   disabled={!$isWalletConnected}
                   class="btn-primary text-sm py-2 px-4"
                 >
-                  Add Funds
+                  Add Credits
                 </button>
               </div>
             </div>
@@ -311,27 +360,27 @@
     </div>
   {:else}
     <!-- Compact mobile layout (unchanged) -->
-    <div class="space-y-3">
+    <div class="space-y-3" class:blurred-background={$isNewUser || walletExistsButLocked}>
       <!-- Paylines Control -->
       <div class="control-group">
-        <div class="flex items-center justify-between bg-slate-800 rounded-lg border border-slate-700 p-2">
+        <div class="card p-2 flex items-center gap-3">
           <button
             on:click={(e) => handleControlButton(() => bettingStore.decreasePaylines(), e.currentTarget)}
             disabled={$bettingStore.selectedPaylines <= BETTING_CONSTANTS.MIN_PAYLINES || disabled}
-            class="control-button w-8 h-8"
+            class="control-button w-8 h-8 text-theme"
             aria-label="Decrease paylines"
           >
             <Minus class="w-3 h-3" />
           </button>
           
           <div class="flex-1 text-center">
-            <div class="text-sm font-medium text-white">{$bettingStore.selectedPaylines} Lines</div>
+            <div class="text-sm font-medium text-theme">{$bettingStore.selectedPaylines} Lines</div>
           </div>
           
           <button
             on:click={(e) => handleControlButton(() => bettingStore.increasePaylines(), e.currentTarget)}
             disabled={$bettingStore.selectedPaylines >= BETTING_CONSTANTS.MAX_PAYLINES || disabled}
-            class="control-button w-8 h-8"
+            class="control-button w-8 h-8 text-theme"
             aria-label="Increase paylines"
           >
             <Plus class="w-3 h-3" />
@@ -346,16 +395,15 @@
           <div class="relative">
             <input
               type="number"
-              step="0.01"
               min={formatVOI(BETTING_CONSTANTS.MIN_BET_PER_LINE)}
               max={formatVOI(BETTING_CONSTANTS.MAX_BET_PER_LINE)}
               bind:value={betInputValue}
               on:input={handleBetInput}
               disabled={disabled}
               class="input-field pr-12 text-center font-medium text-sm py-2"
-              placeholder="1.0"
+              placeholder="1"
             />
-            <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 font-medium text-xs">
+            <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-theme-text opacity-70 font-medium text-xs">
               VOI
             </div>
           </div>
@@ -366,7 +414,7 @@
               <button
                 on:click={(e) => setQuickBet(amount, e.currentTarget)}
                 disabled={disabled}
-                class="quick-bet-button text-xs py-1.5"
+                class="quick-bet-button text-xs py-1.5 text-theme"
                 class:active={$bettingStore.betPerLine === amount * 1_000_000}
               >
                 {amount}
@@ -380,15 +428,14 @@
       <div class="control-group">
         <div class="bg-gradient-to-r from-voi-900/20 to-blue-900/20 border border-voi-700/30 rounded-lg p-2">
           <div class="flex items-center justify-between">
-            <span class="text-gray-300 text-sm font-medium">Total</span>
+            <span class="text-theme-text text-sm font-medium">Total</span>
             <div class="flex items-center gap-1">
-              <DollarSign class="w-3 h-3 text-voi-400" />
-              <span class="text-lg font-bold text-white">{$totalBetVOI}</span>
-              <span class="text-xs text-gray-400">VOI</span>
+              <span class="text-lg font-bold text-theme">{$totalBetVOI}</span>
+              <span class="text-xs text-theme-text opacity-70">VOI</span>
             </div>
           </div>
           
-          <div class="text-xs text-gray-400 mt-1">
+          <div class="text-xs text-theme-text opacity-70 mt-1">
             {$bettingStore.selectedPaylines}L × {$betPerLineVOI}
           </div>
         </div>
@@ -398,7 +445,7 @@
 
   <!-- Error Messages -->
   {#if $bettingStore.errors.length > 0}
-    <div class="control-group" class:mt-4={!compact} class:mt-3={compact}>
+    <div class="control-group" class:mt-4={!compact} class:mt-3={compact} class:blurred-background={$isNewUser || walletExistsButLocked}>
       <div class="bg-red-900/20 border border-red-700/50 rounded-lg p-3">
         {#each $bettingStore.errors as error}
           <p class="text-red-400 text-sm">{error}</p>
@@ -408,7 +455,7 @@
   {/if}
   
   <!-- Spin Button -->
-  <div class="control-group" class:mt-4={!compact} class:mt-3={compact}>
+  <div class="control-group" class:mt-4={!compact} class:mt-3={compact} class:blurred-background={$isNewUser || walletExistsButLocked}>
     <button
       bind:this={spinButtonElement}
       on:click={handleSpin}
@@ -430,6 +477,93 @@
       {/if}
     </button>
   </div>
+
+  <!-- New User Overlay - only for users who don't have a wallet yet -->
+  {#if $isNewUser}
+    <div class="absolute -left-4 -right-4 -bottom-4 top-0 flex items-center justify-center z-[5] rounded-lg bg-black/20">
+      <div class="bg-surface-tertiary rounded-lg shadow-lg border border-surface-border backdrop-blur-sm text-center py-8 px-8">
+        <div class="flex items-center justify-center gap-2 text-amber-400 mb-4">
+          <DollarSign class="w-6 h-6" />
+          <h3 class="font-bold text-lg">Ready to Play!</h3>
+        </div>
+        <p class="text-theme-text text-sm mb-4">Add funds to your wallet to start spinning</p>
+        <button
+          class="px-6 py-3 bg-green-600 hover:bg-green-700 font-semibold rounded-lg transition-colors text-theme"
+          on:click={() => walletActions.triggerWalletSetup()}
+        >
+          Add Funds to Play
+        </button>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Wallet Locked Overlay - for users with existing but locked wallets -->
+  {#if walletExistsButLocked}
+    <div class="absolute -left-4 -right-4 -bottom-4 top-0 flex items-center justify-center z-[5] rounded-lg bg-black/20">
+      <div class="bg-surface-tertiary rounded-lg shadow-lg border border-surface-border backdrop-blur-sm text-center py-8 px-8 max-w-sm w-full">
+        <div class="flex items-center justify-center gap-2 text-amber-400 mb-4">
+          <Lock class="w-6 h-6" />
+          <h3 class="font-bold text-lg">Wallet Locked</h3>
+        </div>
+        <p class="text-theme-text text-sm mb-4">Enter your password to unlock and start playing</p>
+        
+        {#if passwordError}
+          <div class="p-3 bg-red-900/20 border border-red-500/30 rounded-lg mb-4">
+            <p class="text-red-400 text-sm">{passwordError}</p>
+          </div>
+        {/if}
+
+        <!-- Password input -->
+        <form on:submit|preventDefault={handlePasswordSubmit} class="space-y-3 mb-4">
+          <div class="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              bind:value={password}
+              disabled={unlocking}
+              placeholder="Enter your wallet password"
+              class="input-field w-full disabled:opacity-50"
+              autocomplete="off"
+              data-lpignore="true"
+              data-form-type="other"
+              on:keydown={handlePasswordKeydown}
+            />
+            <button
+              type="button"
+              on:click={() => showPassword = !showPassword}
+              disabled={unlocking}
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-theme-text opacity-70 hover:opacity-100 disabled:opacity-50"
+            >
+              {#if showPassword}
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L6.5 6.5m3.378 3.378a3 3 0 004.243 4.243M21.5 6.5l-15 15"></path>
+                </svg>
+              {:else}
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.543 7-1.275 4.057-5.065 7-9.543 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                </svg>
+              {/if}
+            </button>
+          </div>
+          
+          <button
+            type="submit"
+            disabled={unlocking}
+            class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-theme"
+          >
+            {#if unlocking}
+              <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            {/if}
+            <span>Unlock Wallet</span>
+          </button>
+        </form>
+        
+      </div>
+    </div>
+  {/if}
 </div>
 
 <!-- Add Funds Modal -->
@@ -440,31 +574,10 @@
   />
 {/if}
 
-<!-- Odds Analysis Modal -->
-{#if showOddsAnalysis}
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-    <div class="card max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-      <div class="p-6">
-        <div class="flex items-center justify-between mb-6">
-          <div class="flex items-center gap-3">
-            <BarChart3 class="w-6 h-6 text-voi-400" />
-            <h3 class="text-xl font-semibold text-white">Win Odds & Analysis</h3>
-          </div>
-          <button
-            on:click={() => showOddsAnalysis = false}
-            class="text-gray-400 hover:text-white text-2xl leading-none"
-          >
-            ×
-          </button>
-        </div>
-        
-        <OddsAnalysis {compact} isModal={true} />
-      </div>
-    </div>
-  </div>
-{/if}
+<!-- Payline Payout Modal -->
+<PaylinePayoutModal bind:showModal={showPaylinePayouts} />
 
-<style>
+<style lang="postcss">
   .betting-controls {
     @apply max-w-full;
   }
@@ -503,7 +616,7 @@
   }
   
   .label-text {
-    @apply text-sm font-medium text-gray-300;
+    @apply text-sm font-medium text-theme-text;
   }
   
   .label-value {
@@ -511,7 +624,7 @@
   }
   
   .control-button {
-    @apply w-10 h-10 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-all duration-200 flex items-center justify-center;
+    @apply w-10 h-10 bg-surface-secondary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-all duration-200 flex items-center justify-center;
     position: relative;
     overflow: hidden;
     transform-origin: center;
@@ -523,7 +636,18 @@
   }
   
   .input-field {
-    @apply w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:border-transparent transition-all duration-200;
+    @apply w-full px-3 py-2 bg-surface-secondary border border-surface-border rounded-lg text-theme-text placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent transition-all duration-200;
+  }
+
+  /* Hide number input spinners */
+  .input-field[type="number"]::-webkit-outer-spin-button,
+  .input-field[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .input-field[type="number"] {
+    -moz-appearance: textfield;
   }
   
   .input-field:focus {
@@ -531,7 +655,7 @@
   }
   
   .quick-bet-button {
-    @apply py-2 px-3 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-medium rounded-md transition-all duration-200;
+    @apply py-2 px-3 bg-surface-secondary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium rounded-md transition-all duration-200;
     position: relative;
     overflow: hidden;
     transform-origin: center;
@@ -558,7 +682,7 @@
   }
   
   .btn-secondary {
-    @apply px-4 py-2 bg-slate-600 hover:bg-slate-500 disabled:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-all duration-200;
+    @apply px-4 py-2 bg-surface-secondary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed font-medium rounded-lg transition-all duration-200;
     position: relative;
     overflow: hidden;
     transform-origin: center;
@@ -571,7 +695,7 @@
   }
   
   .spin-button {
-    @apply w-full py-4 px-6 bg-gradient-to-r from-voi-600 to-voi-700 hover:from-voi-700 hover:to-voi-800 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-lg rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl disabled:shadow-none;
+    @apply w-full py-4 px-6 bg-gradient-to-r from-voi-600 to-voi-700 hover:from-voi-700 hover:to-voi-800 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-100 font-bold text-lg rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl disabled:shadow-none;
     position: relative;
     overflow: hidden;
     transform-origin: center;
@@ -764,5 +888,18 @@
     .spin-button:not(:disabled):hover::before {
       transform: translateX(-100%);
     }
+  }
+
+  /* Guest mode blur effect */
+  .blurred-background {
+    @apply opacity-40 pointer-events-none;
+    filter: blur(1px) grayscale(0.5);
+    transition: all 0.3s ease-in-out;
+  }
+
+  /* Ensure overlay is positioned correctly */
+  .betting-controls.relative {
+    position: relative;
+    isolation: isolate;
   }
 </style>

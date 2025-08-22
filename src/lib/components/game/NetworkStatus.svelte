@@ -128,7 +128,7 @@
   }
   
   .value {
-    @apply text-white font-medium;
+    @apply text-theme font-medium;
   }
   
   /* Mobile optimization */

@@ -78,13 +78,13 @@
   <div class="card max-w-md w-full max-h-[90vh] overflow-y-auto">
     <!-- Header -->
     <div class="flex items-center justify-between p-6 border-b border-slate-700">
-      <h2 id="settings-modal-title" class="text-xl font-semibold text-white flex items-center gap-2">
+      <h2 id="settings-modal-title" class="text-xl font-semibold text-theme flex items-center gap-2">
         <Settings class="w-5 h-5" />
         Wallet Settings
       </h2>
       <button
         on:click={closeModal}
-        class="p-1 text-gray-400 hover:text-white transition-colors"
+        class="p-1 text-gray-400 hover:text-theme transition-colors"
       >
         <X class="w-5 h-5" />
       </button>
@@ -101,10 +101,10 @@
         >
           <div class="flex items-center gap-3">
             <div class="p-2 bg-blue-600 rounded-lg">
-              <Send class="w-5 h-5 text-white" />
+              <Send class="w-5 h-5 text-theme" />
             </div>
             <div>
-              <h3 class="font-medium text-white">Transfer Tokens</h3>
+              <h3 class="font-medium text-theme">Transfer Tokens</h3>
               <p class="text-sm text-gray-400">Send VOI to another wallet</p>
             </div>
           </div>
@@ -117,10 +117,10 @@
         >
           <div class="flex items-center gap-3">
             <div class="p-2 bg-green-600 rounded-lg">
-              <Download class="w-5 h-5 text-white" />
+              <Download class="w-5 h-5 text-theme" />
             </div>
             <div>
-              <h3 class="font-medium text-white">Export Account</h3>
+              <h3 class="font-medium text-theme">Export Account</h3>
               <p class="text-sm text-gray-400">Backup your wallet keys and recovery phrase</p>
             </div>
           </div>
@@ -133,10 +133,10 @@
         >
           <div class="flex items-center gap-3">
             <div class="p-2 bg-purple-600 rounded-lg">
-              <Upload class="w-5 h-5 text-white" />
+              <Upload class="w-5 h-5 text-theme" />
             </div>
             <div>
-              <h3 class="font-medium text-white">Import Account</h3>
+              <h3 class="font-medium text-theme">Import Account</h3>
               <p class="text-sm text-gray-400">Replace current wallet with existing account</p>
             </div>
           </div>
@@ -149,7 +149,7 @@
         >
           <div class="flex items-center gap-3">
             <div class="p-2 bg-red-600 rounded-lg">
-              <RotateCcw class="w-5 h-5 text-white" />
+              <RotateCcw class="w-5 h-5 text-theme" />
             </div>
             <div>
               <h3 class="font-medium text-red-400">Reset to New Wallet</h3>
@@ -205,7 +205,7 @@
             </button>
             <button
               on:click={confirmReset}
-              class="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-red-600/50 text-white py-2 px-4 rounded-lg transition-colors duration-200 font-medium"
+              class="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-red-600/50 text-theme py-2 px-4 rounded-lg transition-colors duration-200 font-medium"
               disabled={!canReset}
             >
               {#if isResetting}
@@ -243,11 +243,11 @@
 
 <style>
   .btn-secondary {
-    @apply px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-medium rounded-lg transition-colors duration-200;
+    @apply px-4 py-2 bg-slate-600 hover:bg-slate-500 text-theme font-medium rounded-lg transition-colors duration-200;
   }
   
   .input-field {
-    @apply px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:border-transparent;
+    @apply px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-theme placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:border-transparent;
   }
   
   .card {

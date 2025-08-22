@@ -11,6 +11,7 @@
     cleanupAnimations
   } from '$lib/stores/animations';
   import { currentSpinId } from '$lib/stores/game';
+  import { currentTheme } from '$lib/stores/theme';
   import { 
     ReelPhysicsEngine,
     DEFAULT_REEL_PHYSICS,
@@ -27,6 +28,7 @@
   let symbolGrid: HTMLElement[][] = [];
   let isMounted = false;
   let physicsEngine: ReelPhysicsEngine | null = null;
+  let gridElement: HTMLElement; // Reference to this component's grid element
   
   // Extended reel data for seamless scrolling
   let extendedReels: SlotSymbol[][] = [];
@@ -36,6 +38,7 @@
   // Subscribe to animation stores (removed reactive reelStates to prevent conflicts with physics)
   $: preferences = $animationPreferences;
   $: reduceMotion = $shouldReduceAnimations;
+  $: theme = $currentTheme;
   
   // Initialize extended reels only when grid changes (prevent recreation during spinning)
   $: if (!currentlySpinning) {
@@ -215,20 +218,20 @@
     
     // Initialize reel references
     const updateReelRefs = () => {
-      // Use more specific selectors to get exactly 5 reels
-      const gridElement = document.querySelector('.reel-grid');
+      // Use component-scoped selectors instead of global document queries
       if (gridElement) {
         reelElements = Array.from(gridElement.querySelectorAll('.reel-strip'));
         reelContainers = Array.from(gridElement.querySelectorAll('.reel-viewport'));
+        
+        // Initialize symbol grid references with component scope
+        symbolGrid = Array(5).fill(null).map((_, reelIndex) => 
+          Array.from(gridElement.querySelectorAll(`[data-reel="${reelIndex}"] .symbol-element`))
+        );
       } else {
         reelElements = [];
         reelContainers = [];
+        symbolGrid = [];
       }
-      
-      // Initialize symbol grid references
-      symbolGrid = Array(5).fill(null).map((_, reelIndex) => 
-        Array.from(document.querySelectorAll(`[data-reel="${reelIndex}"] .symbol-element`))
-      );
       
       // Elements initialized
     };
@@ -243,7 +246,6 @@
     
     // Also update on any changes
     const observer = new MutationObserver(updateReelRefs);
-    const gridElement = document.querySelector('.reel-grid');
     if (gridElement) {
       observer.observe(gridElement, {
         childList: true,
@@ -266,7 +268,7 @@
   });
 </script>
 
-<div class="reel-grid" role="application" aria-label="Slot machine reels">
+<div class="reel-grid" bind:this={gridElement} role="application" aria-label="Slot machine reels">
   {#each extendedReels as extendedReel, reelIndex}
     <div 
       class="reel-container"
@@ -332,9 +334,9 @@
     grid-template-columns: repeat(5, 1fr);
     gap: 4px;
     padding: 8px;
-    background: linear-gradient(145deg, #1e293b, #0f172a);
+    background: linear-gradient(145deg, var(--theme-surface-secondary), var(--theme-surface-primary));
     border-radius: 8px;
-    border: 2px solid #334155;
+    border: 2px solid var(--theme-surface-border);
     max-width: 600px;
     margin: 0 auto;
     position: relative;
@@ -346,7 +348,8 @@
     height: 320px; /* Fixed height for 3 visible symbols + padding */
     overflow: hidden;
     border-radius: 6px;
-    background: rgba(15, 23, 42, 0.9);
+    background: var(--theme-surface-primary);
+    border: 1px solid var(--theme-surface-border);
   }
   
   .reel-viewport {
@@ -395,8 +398,8 @@
   .reel-gradient-top {
     top: 0;
     background: linear-gradient(to bottom, 
-      rgba(15, 23, 42, 0.9) 0%, 
-      rgba(15, 23, 42, 0.6) 50%,
+      var(--theme-surface-primary) 0%, 
+      color-mix(in srgb, var(--theme-surface-primary) 60%, transparent) 50%,
       transparent 100%
     );
   }
@@ -404,8 +407,8 @@
   .reel-gradient-bottom {
     bottom: 0;
     background: linear-gradient(to top, 
-      rgba(15, 23, 42, 0.9) 0%, 
-      rgba(15, 23, 42, 0.6) 50%,
+      var(--theme-surface-primary) 0%, 
+      color-mix(in srgb, var(--theme-surface-primary) 60%, transparent) 50%,
       transparent 100%
     );
   }
@@ -425,16 +428,18 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(30, 41, 59, 0.5);
+    background: var(--theme-surface-secondary);
     border-radius: 8px;
-    border: 1px solid rgba(51, 65, 85, 0.5);
+    border: 1px solid var(--theme-surface-border);
     position: relative;
     overflow: hidden;
+    transition: all 0.3s ease;
   }
   
   .symbol-position:hover {
-    border-color: rgba(16, 185, 129, 0.5);
-    box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+    border-color: var(--theme-primary);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--theme-primary) 30%, transparent);
+    background: var(--theme-surface-hover);
   }
   
   /* Physics debug info */

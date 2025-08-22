@@ -39,19 +39,19 @@ const slotMachineABI = {
   ]
 };
 
-interface CachedPaylines {
+export interface CachedPaylines {
   data: number[][];
   timestamp: number;
 }
 
-interface CachedMultiplier {
+export interface CachedMultiplier {
   data: number;
   timestamp: number;
   symbol: string;
   count: number;
 }
 
-interface CachedReelData {
+export interface CachedReelData {
   reelData: string;
   reelLength: number;
   reelCount: number;
@@ -64,16 +64,18 @@ interface CacheStorage {
   multipliers: { [key: string]: CachedMultiplier };
   reelData: CachedReelData | null;
   odds: OddsCalculationResult | null;
+  version: string | null; // Contract version when cache was created
 }
 
 export class ContractDataCache {
   private readonly CACHE_KEY = 'voi_contract_data_cache';
-  private readonly CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+  private readonly CACHE_DURATION: number;
   private cache: CacheStorage = {
     paylines: null,
     multipliers: {},
     reelData: null,
-    odds: null
+    odds: null,
+    version: null
   };
   private client: algosdk.Algodv2;
   private appId: number;
@@ -86,6 +88,7 @@ export class ContractDataCache {
       NETWORK_CONFIG.port
     );
     this.appId = CONTRACT_CONFIG.slotMachineAppId;
+    this.CACHE_DURATION = CONTRACT_CONFIG.cacheDuration;
     this.loadFromStorage();
   }
 
@@ -103,7 +106,7 @@ export class ContractDataCache {
       }
     } catch (error) {
       console.warn('Failed to load contract data cache:', error);
-      this.cache = { paylines: null, multipliers: {}, reelData: null, odds: null };
+      this.cache = { paylines: null, multipliers: {}, reelData: null, odds: null, version: null };
     }
   }
 
@@ -161,7 +164,21 @@ export class ContractDataCache {
    * Check if cached data is valid
    */
   private isValidCache(timestamp: number): boolean {
+    // Check version first - if contract version changed, cache is invalid
+    if (this.cache.version !== CONTRACT_CONFIG.version) {
+      console.log(`🔄 Contract version changed from ${this.cache.version} to ${CONTRACT_CONFIG.version}, invalidating cache`);
+      return false;
+    }
+    
+    // Then check time-based expiration
     return Date.now() - timestamp < this.CACHE_DURATION;
+  }
+  
+  /**
+   * Update cache version to current contract version
+   */
+  private updateCacheVersion(): void {
+    this.cache.version = CONTRACT_CONFIG.version;
   }
 
   /**
@@ -300,6 +317,7 @@ export class ContractDataCache {
         data: paylines,
         timestamp: Date.now()
       };
+      this.updateCacheVersion();
       this.saveToStorage();
 
       return paylines;
@@ -344,6 +362,7 @@ export class ContractDataCache {
         ...reelData,
         timestamp: Date.now()
       };
+      this.updateCacheVersion();
       this.saveToStorage();
 
       console.log('✅ Fetched and cached reel data:', {
@@ -395,6 +414,7 @@ export class ContractDataCache {
         symbol: symbol,
         count: count
       };
+      this.updateCacheVersion();
       this.saveToStorage();
 
       return multiplier;
@@ -497,6 +517,7 @@ export class ContractDataCache {
       
       // Cache the result
       this.cache.odds = odds;
+      this.updateCacheVersion();
       this.saveToStorage();
 
       return odds;
@@ -556,11 +577,22 @@ export class ContractDataCache {
    * Clear all cached data
    */
   clearCache(): void {
-    this.cache = { paylines: null, multipliers: {}, reelData: null, odds: null };
+    this.cache = { paylines: null, multipliers: {}, reelData: null, odds: null, version: null };
     if (typeof window !== 'undefined') {
       localStorage.removeItem(this.CACHE_KEY);
     }
     console.log('🧹 Contract data cache cleared');
+  }
+  
+  /**
+   * Force refresh all cached data - useful when contract is updated
+   */
+  async forceRefresh(address: string): Promise<void> {
+    console.log('🔄 Force refreshing all contract data...');
+    this.clearCache();
+    
+    // Pre-load fresh data
+    await this.preloadContractData(address);
   }
 
   /**
@@ -572,6 +604,9 @@ export class ContractDataCache {
     multipliersCached: number; 
     oddsCached: boolean;
     cacheSize: string;
+    cacheVersion: string | null;
+    contractVersion: string;
+    cacheDuration: number;
   } {
     const stats = {
       paylinesCached: this.cache.paylines !== null,
@@ -580,7 +615,10 @@ export class ContractDataCache {
       oddsCached: this.cache.odds !== null,
       cacheSize: typeof window !== 'undefined' 
         ? `${(new Blob([JSON.stringify(this.cache)]).size / 1024).toFixed(2)} KB`
-        : '0 KB'
+        : '0 KB',
+      cacheVersion: this.cache.version,
+      contractVersion: CONTRACT_CONFIG.version,
+      cacheDuration: this.CACHE_DURATION
     };
     
     return stats;
@@ -595,10 +633,13 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   (window as any).contractCache = {
     stats: () => contractDataCache.getCacheStats(),
     clear: () => contractDataCache.clearCache(),
+    forceRefresh: (address: string) => contractDataCache.forceRefresh(address),
     preload: (address: string) => contractDataCache.preloadContractData(address),
     odds: (address: string) => contractDataCache.getWinOdds(address),
     summary: (address: string) => contractDataCache.getOddsSummary(address),
     betOdds: (address: string, betPerLine: number, selectedPaylines: number) => 
-      contractDataCache.calculateBetOdds(address, betPerLine, selectedPaylines)
+      contractDataCache.calculateBetOdds(address, betPerLine, selectedPaylines),
+    version: () => CONTRACT_CONFIG.version,
+    cacheDuration: () => CONTRACT_CONFIG.cacheDuration
   };
 }

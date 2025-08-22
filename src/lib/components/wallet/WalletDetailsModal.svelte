@@ -77,10 +77,10 @@
     <div class="bg-gradient-to-b from-slate-800 to-slate-900 rounded-2xl p-6 shadow-2xl border border-slate-700 w-full max-w-md max-h-[90vh] overflow-y-auto">
       <!-- Modal header -->
       <div class="flex items-center justify-between mb-4">
-        <h2 id="wallet-modal-title" class="text-xl font-semibold text-white">Gaming Wallet</h2>
+        <h2 id="wallet-modal-title" class="text-xl font-semibold text-theme">Gaming Wallet</h2>
         <button
           on:click={closeModal}
-          class="p-2 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-slate-700"
+          class="p-2 text-gray-400 hover:text-theme transition-colors rounded-lg hover:bg-slate-700"
           aria-label="Close wallet details"
         >
           <X class="w-5 h-5" />
@@ -117,7 +117,7 @@
       {:else if $isWalletConnected}
         <!-- Balance Display -->
         <div class="text-center mb-6">
-          <div class="text-3xl font-bold text-white mb-2">
+          <div class="text-3xl font-bold text-theme mb-2">
             {formattedBalance} VOI
           </div>
           {#if $walletStore.lastUpdated}
@@ -130,7 +130,7 @@
           <button
             on:click={refreshBalance}
             disabled={isRefreshing}
-            class="mt-2 p-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+            class="mt-2 p-2 text-gray-400 hover:text-theme transition-colors disabled:opacity-50"
             title="Refresh balance"
           >
             <RefreshCw class="w-5 h-5 {isRefreshing ? 'animate-spin' : ''}" />
@@ -142,11 +142,11 @@
           <div class="flex items-center justify-between">
             <div class="flex-1 min-w-0">
               <p class="text-sm text-gray-400 mb-1">Wallet Address</p>
-              <p class="font-mono text-sm text-white break-all">{$walletAddress}</p>
+              <p class="font-mono text-sm text-theme break-all">{$walletAddress}</p>
             </div>
             <button
               on:click={copyAddress}
-              class="ml-3 p-2 text-gray-400 hover:text-white transition-colors flex-shrink-0"
+              class="ml-3 p-2 text-gray-400 hover:text-theme transition-colors flex-shrink-0"
               title="Copy full address"
             >
               <Copy class="w-4 h-4" />
@@ -165,7 +165,7 @@
             class="btn-primary flex items-center justify-center gap-2"
           >
             <Plus class="w-4 h-4" />
-            Add Funds
+            Add Credits
           </button>
           
           <button
@@ -181,7 +181,7 @@
         <div class="mb-6">
           <button
             on:click={lockWallet}
-            class="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
+            class="w-full bg-amber-600 hover:bg-amber-700 text-theme py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
           >
             <Lock class="w-4 h-4" />
             Lock Wallet
@@ -230,10 +230,10 @@
 
 <style>
   .btn-primary {
-    @apply px-4 py-2 bg-voi-600 hover:bg-voi-700 text-white font-medium rounded-lg transition-colors duration-200;
+    @apply px-4 py-2 bg-voi-600 hover:bg-voi-700 text-theme font-medium rounded-lg transition-colors duration-200;
   }
   
   .btn-secondary {
-    @apply px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-medium rounded-lg transition-colors duration-200;
+    @apply px-4 py-2 bg-slate-600 hover:bg-slate-500 text-theme font-medium rounded-lg transition-colors duration-200;
   }
 </style>

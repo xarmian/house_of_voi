@@ -22,6 +22,7 @@ export interface QueuedSpin {
   betPerLine: number;
   selectedPaylines: number;
   totalBet: number;
+  estimatedTotalCost?: number; // Total cost including fees (for reserved balance calculation)
   
   // Blockchain details
   txId?: string;
@@ -48,6 +49,7 @@ export interface QueueState {
   spins: QueuedSpin[];
   isProcessing: boolean;
   totalPendingValue: number;
+  totalReservedBalance: number; // Total balance reserved for all pending spins (including fees)
   lastUpdated: number;
 }
 

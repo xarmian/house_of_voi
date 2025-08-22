@@ -1,5 +1,6 @@
 import { writable, derived } from 'svelte/store';
-import { walletBalance } from '$lib/stores/wallet';
+import { walletBalance, walletAddress } from '$lib/stores/wallet';
+import { reservedBalance } from '$lib/stores/queue';
 import type { BettingState, BetValidationResult, BettingLimits } from '$lib/types/betting';
 import { 
   BETTING_CONSTANTS, 
@@ -9,6 +10,9 @@ import {
   isValidBetAmount,
   isValidPaylineCount
 } from '$lib/constants/betting';
+import { balanceCalculator } from '$lib/services/balanceCalculator';
+import { validateBetSizing } from '$lib/utils/balanceUtils';
+import { get } from 'svelte/store';
 
 function createBettingStore() {
   const { subscribe, set, update } = writable<BettingState>({
@@ -44,14 +48,75 @@ function createBettingStore() {
       errors.push(`Total bet cannot exceed ${formatVOI(BETTING_CONSTANTS.MAX_TOTAL_BET)} VOI`);
     }
 
-    // Validate wallet balance
+    // Enhanced balance validation
+    const userAddress = get(walletAddress);
+    if (userAddress) {
+      // Try enhanced validation first
+      validateEnhancedBalance(betPerLine, selectedPaylines, walletBalance, userAddress)
+        .then(result => {
+          // This will be handled asynchronously, but we provide immediate feedback
+          // The UI will need to re-validate when this promise resolves
+        })
+        .catch(error => {
+          console.error('Enhanced balance validation failed:', error);
+        });
+    }
+
+    // Fallback to simple validation for immediate response
     if (totalBet > walletBalance) {
       errors.push(BETTING_ERRORS.INSUFFICIENT_BALANCE);
     }
 
-    // Warnings for high bets
-    if (totalBet > walletBalance * 0.5) {
-      warnings.push('This bet is more than 50% of your balance');
+    // Validate bet sizing
+    const betSizing = validateBetSizing(totalBet, walletBalance);
+    warnings.push(...betSizing.warnings);
+    if (!betSizing.isValid) {
+      errors.push('Bet amount too large relative to wallet balance');
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+
+  // Enhanced balance validation (async)
+  async function validateEnhancedBalance(
+    betPerLine: number, 
+    selectedPaylines: number, 
+    walletBalance: number, 
+    userAddress: string
+  ): Promise<BetValidationResult> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    try {
+      const validation = await balanceCalculator.validateSufficientBalance(
+        betPerLine, 
+        selectedPaylines, 
+        userAddress, 
+        walletBalance
+      );
+
+      if (!validation.isValid) {
+        errors.push(...validation.errors);
+      }
+
+      // Add warnings for high reserved balance
+      if (validation.requirement.pendingReserved > walletBalance * 0.6) {
+        warnings.push(
+          `High reserved balance: ${formatVOI(validation.requirement.pendingReserved)} VOI reserved for pending spins`
+        );
+      }
+
+    } catch (error) {
+      console.error('Enhanced balance validation failed:', error);
+      // Fallback to simple validation
+      const totalBet = betPerLine * selectedPaylines;
+      if (totalBet * 1.5 > walletBalance) { // 50% overhead estimate
+        errors.push(`Insufficient balance (estimated). Need ~${formatVOI(totalBet * 1.5)} VOI including fees`);
+      }
     }
 
     return {
@@ -293,6 +358,35 @@ function createBettingStore() {
       }));
     },
 
+    // Trigger enhanced validation and update store
+    async validateEnhanced() {
+      const userAddress = get(walletAddress);
+      if (!userAddress) return;
+
+      const currentBalance = get(walletBalance);
+      
+      update(state => {
+        const enhancedValidation = validateEnhancedBalance(
+          state.betPerLine, 
+          state.selectedPaylines, 
+          currentBalance, 
+          userAddress
+        );
+
+        enhancedValidation.then(result => {
+          update(currentState => ({
+            ...currentState,
+            isValidBet: result.isValid,
+            errors: [...result.errors, ...result.warnings]
+          }));
+        }).catch(error => {
+          console.error('Enhanced validation update failed:', error);
+        });
+
+        return state;
+      });
+    },
+
     // Reset to defaults
     reset() {
       set({
@@ -312,17 +406,28 @@ export const bettingStore = createBettingStore();
 // Derived stores for convenience
 export const betPerLineVOI = derived(
   bettingStore,
-  $betting => formatVOI($betting.betPerLine)
+  $betting => formatVOI($betting.betPerLine, 0)
 );
 
 export const totalBetVOI = derived(
   bettingStore,
-  $betting => formatVOI($betting.totalBet)
+  $betting => formatVOI($betting.totalBet, 0)
 );
 
 export const canAffordBet = derived(
-  [bettingStore, walletBalance],
-  ([$betting, $balance]) => $betting.totalBet <= $balance
+  [bettingStore, walletBalance, reservedBalance, walletAddress],
+  ([$betting, $balance, $reserved, $address]) => {
+    if (!$address || !$balance) return false;
+    
+    // Calculate available balance after pending spins
+    const availableBalance = $balance - ($reserved || 0);
+    
+    // Estimate total transaction cost (bet + fees)
+    const minTransactionCost = 50500 + 30000 + 28500 + 15000 + 1000000; // spin + 1 payline + box + network + buffer
+    const estimatedTotalCost = $betting.totalBet + minTransactionCost;
+    
+    return availableBalance >= estimatedTotalCost;
+  }
 );
 
 export const bettingLimits = derived(

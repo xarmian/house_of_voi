@@ -1,35 +1,44 @@
 <script lang="ts">
   import { gameStore } from '$lib/stores/game';
   import { onMount } from 'svelte';
+  import { contractDataCache } from '$lib/services/contractDataCache';
+  import { walletAddress } from '$lib/stores/wallet';
   
   export let showPaylines = false;
   export let activePaylines: number[] = [];
   
-  // Standard 20 paylines for 5x3 grid
-  const PAYLINES = [
-    [1, 1, 1, 1, 1], // Middle line
-    [0, 0, 0, 0, 0], // Top line
-    [2, 2, 2, 2, 2], // Bottom line
-    [0, 1, 2, 1, 0], // V shape
-    [2, 1, 0, 1, 2], // Inverted V
-    [0, 0, 1, 0, 0], // Top-center peak
-    [2, 2, 1, 2, 2], // Bottom-center valley
-    [1, 0, 1, 2, 1], // M shape
-    [1, 2, 1, 0, 1], // W shape
-    [0, 1, 1, 1, 2], // Ascending
-    [2, 1, 1, 1, 0], // Descending
-    [0, 1, 2, 2, 2], // Step up
-    [2, 1, 0, 0, 0], // Step down
-    [1, 1, 0, 1, 1], // Dip up
-    [1, 1, 2, 1, 1], // Dip down
-    [0, 2, 0, 2, 0], // Zigzag up
-    [2, 0, 2, 0, 2], // Zigzag down
-    [1, 2, 2, 2, 1], // Bottom arc
-    [1, 0, 0, 0, 1], // Top arc
-    [0, 1, 0, 1, 2]  // Custom pattern
-  ];
+  let paylines: number[][] = [];
+  let loading = true;
+  let error: string | null = null;
   
-  $: visiblePaylines = showPaylines ? PAYLINES.slice(0, Math.max(...activePaylines) + 1) : [];
+  
+  async function loadPaylines() {
+    if (!$walletAddress) {
+      error = 'Wallet not connected - Machine out of order';
+      loading = false;
+      return;
+    }
+
+    try {
+      loading = true;
+      error = null;
+      paylines = await contractDataCache.getPaylines($walletAddress);
+    } catch (err) {
+      console.error('Error loading paylines:', err);
+      error = 'Failed to load paylines from contract - Machine out of order';
+    } finally {
+      loading = false;
+    }
+  }
+
+  $: visiblePaylines = showPaylines && !loading && !error 
+    ? paylines.slice(0, Math.max(...activePaylines) + 1) 
+    : [];
+
+  // Load paylines when wallet connects or component mounts
+  $: if ($walletAddress) {
+    loadPaylines();
+  }
   
   function getPaylineColor(index: number): string {
     const colors = [
@@ -64,31 +73,43 @@
 
 {#if showPaylines}
   <div class="payline-overlay">
-    <svg class="payline-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-      {#each visiblePaylines as payline, index}
-        {#if activePaylines.includes(index)}
-          <path
-            d={getPaylinePath(payline, index)}
-            stroke={getPaylineColor(index)}
-            stroke-width="0.8"
-            fill="none"
-            opacity="0.8"
-            class="payline-path active"
-          />
-          <!-- Payline number -->
-          <text
-            x="2"
-            y={5 + (index * 3)}
-            fill={getPaylineColor(index)}
-            font-size="2.5"
-            font-weight="bold"
-            class="payline-number"
-          >
-            {index + 1}
-          </text>
-        {/if}
-      {/each}
-    </svg>
+    {#if error}
+      <div class="error-overlay">
+        <div class="error-message">
+          {error}
+        </div>
+      </div>
+    {:else if loading}
+      <div class="loading-overlay">
+        <div class="loading-spinner"></div>
+      </div>
+    {:else}
+      <svg class="payline-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+        {#each visiblePaylines as payline, index}
+          {#if activePaylines.includes(index)}
+            <path
+              d={getPaylinePath(payline, index)}
+              stroke={getPaylineColor(index)}
+              stroke-width="0.8"
+              fill="none"
+              opacity="0.8"
+              class="payline-path active"
+            />
+            <!-- Payline number -->
+            <text
+              x="2"
+              y={5 + (index * 3)}
+              fill={getPaylineColor(index)}
+              font-size="2.5"
+              font-weight="bold"
+              class="payline-number"
+            >
+              {index + 1}
+            </text>
+          {/if}
+        {/each}
+      </svg>
+    {/if}
   </div>
 {/if}
 
@@ -118,6 +139,34 @@
   .payline-number {
     text-shadow: 0 0 2px currentColor;
   }
+
+  .error-overlay, .loading-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.8);
+    border-radius: 8px;
+    z-index: 10;
+  }
+
+  .error-message {
+    color: #ef4444;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+    padding: 8px;
+  }
+
+  .loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid #374151;
+    border-top: 2px solid #10b981;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
   
   @keyframes payline-dash {
     to {
@@ -128,5 +177,11 @@
   @keyframes payline-glow {
     from { opacity: 0.6; }
     to { opacity: 1; }
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>

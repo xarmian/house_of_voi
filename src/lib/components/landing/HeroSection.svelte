@@ -22,7 +22,7 @@
         in:fly={{ y: 30, duration: 800, easing: cubicOut }}
         class="mb-8"
       >
-        <h1 class="text-6xl md:text-8xl font-bold text-white mb-4 leading-tight">
+        <h1 class="text-6xl md:text-8xl font-bold text-theme mb-4 leading-tight">
           House of 
           <span class="text-transparent bg-clip-text bg-gradient-to-r from-voi-400 to-voi-600 text-glow">
             Voi
@@ -66,7 +66,7 @@
       >
         <button
           on:click={playGame}
-          class="group relative inline-flex items-center gap-3 bg-gradient-to-r from-voi-600 to-voi-700 hover:from-voi-700 hover:to-voi-800 text-white font-bold py-6 px-10 rounded-xl text-xl transition-all duration-300 transform hover:scale-105 hover:shadow-2xl hover:shadow-voi-500/25 min-h-[44px] touch-manipulation"
+          class="group relative inline-flex items-center gap-3 bg-gradient-to-r from-voi-600 to-voi-700 hover:from-voi-700 hover:to-voi-800 text-theme font-bold py-6 px-10 rounded-xl text-xl transition-all duration-300 transform hover:scale-105 hover:shadow-2xl hover:shadow-voi-500/25 min-h-[44px] touch-manipulation"
         >
           <span>Play in the House of Voi</span>
           <ChevronRight class="w-6 h-6 transition-transform group-hover:translate-x-1" />
@@ -87,19 +87,19 @@
       >
         <div class="card p-6 backdrop-blur-sm bg-slate-800/50 border border-slate-700/50">
           <div class="text-3xl mb-3">🎰</div>
-          <h3 class="text-lg font-semibold text-white mb-2">5×3 Slot Grid</h3>
+          <h3 class="text-lg font-semibold text-theme mb-2">5×3 Slot Grid</h3>
           <p class="text-gray-400 text-sm">Classic slot machine with 5 reels and 3 rows</p>
         </div>
         
         <div class="card p-6 backdrop-blur-sm bg-slate-800/50 border border-slate-700/50">
           <div class="text-3xl mb-3">📈</div>
-          <h3 class="text-lg font-semibold text-white mb-2">20 Paylines</h3>
+          <h3 class="text-lg font-semibold text-theme mb-2">20 Paylines</h3>
           <p class="text-gray-400 text-sm">Multiple ways to win with up to 20 paylines</p>
         </div>
         
         <div class="card p-6 backdrop-blur-sm bg-slate-800/50 border border-slate-700/50">
           <div class="text-3xl mb-3">⚡</div>
-          <h3 class="text-lg font-semibold text-white mb-2">Instant Claims</h3>
+          <h3 class="text-lg font-semibold text-theme mb-2">Instant Claims</h3>
           <p class="text-gray-400 text-sm">Claim your winnings instantly on the blockchain</p>
         </div>
       </div>

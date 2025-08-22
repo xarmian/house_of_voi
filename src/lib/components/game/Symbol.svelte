@@ -8,6 +8,7 @@
     shouldReduceAnimations 
   } from '$lib/stores/animations';
   import { triggerTouchFeedback } from '$lib/utils/animations';
+  import { currentTheme } from '$lib/stores/theme';
   
   export let symbol: SlotSymbol;
   export let size: 'small' | 'medium' | 'large' = 'medium';
@@ -29,6 +30,7 @@
   // Subscribe to animation preferences
   $: preferences = $animationPreferences;
   $: reduceMotion = $shouldReduceAnimations;
+  $: theme = $currentTheme;
   
   $: sizeClass = {
     small: 'w-8 h-8',
@@ -131,7 +133,7 @@
   on:keydown={(e) => e.key === 'Enter' && handleClick()}
   role="button"
   tabindex={position ? 0 : -1}
-  style="--symbol-color: {symbol?.color || '#6b7280'}; --glow-color: {symbol?.glowColor || '#9ca3af'}; --animation-delay: {animationDelay}ms;"
+  style="--symbol-color: {symbol?.color || theme.primary}; --glow-color: {symbol?.glowColor || theme.secondary}; --theme-primary: {theme.primary}; --theme-secondary: {theme.secondary}; --animation-delay: {animationDelay}ms;"
   aria-label="{symbol?.displayName || 'Symbol'}{isWinning ? ' - Winning symbol!' : ''}"
 >
   <!-- Symbol image -->
@@ -240,7 +242,7 @@
   }
   
   .symbol-container.clickable:focus {
-    outline: 2px solid var(--glow-color, #10b981);
+    outline: 2px solid var(--theme-primary);
     outline-offset: 2px;
   }
   
@@ -427,7 +429,7 @@
   
   .win-highlight.primary {
     inset: -2px;
-    background: radial-gradient(circle, var(--glow-color, #10b981) 0%, transparent 70%);
+    background: radial-gradient(circle, var(--theme-primary) 0%, transparent 70%);
     opacity: 0.8;
     animation: win-glow-primary 1.5s ease-in-out infinite;
     z-index: 1;
@@ -435,7 +437,7 @@
   
   .win-highlight.secondary {
     inset: -4px;
-    background: linear-gradient(45deg, transparent, var(--glow-color, #10b981), transparent);
+    background: linear-gradient(45deg, transparent, var(--theme-secondary), transparent);
     opacity: 0.6;
     animation: win-glow-secondary 2s ease-in-out infinite;
     z-index: 0;
@@ -453,7 +455,7 @@
   
   .win-highlight.legacy {
     inset: -2px;
-    background: linear-gradient(45deg, transparent, var(--glow-color, #10b981), transparent);
+    background: linear-gradient(45deg, transparent, var(--theme-primary), transparent);
     opacity: 0.6;
     animation: win-pulse 1s ease-in-out infinite;
     z-index: 1;
@@ -613,7 +615,7 @@
     }
     
     .symbol-container.winning {
-      outline: 2px solid var(--glow-color, #10b981);
+      outline: 2px solid var(--theme-primary);
       outline-offset: 2px;
     }
     
@@ -626,13 +628,13 @@
   /* High contrast mode */
   @media (prefers-contrast: high) {
     .win-highlight {
-      border: 2px solid var(--glow-color, #10b981);
+      border: 2px solid var(--theme-primary);
       background: none;
     }
     
     .win-multiplier {
       border: 2px solid currentColor;
-      background: var(--glow-color, #10b981);
+      background: var(--theme-primary);
     }
   }
   

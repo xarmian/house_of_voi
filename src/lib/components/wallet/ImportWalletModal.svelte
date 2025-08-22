@@ -6,12 +6,24 @@
   const dispatch = createEventDispatcher();
   
   let mnemonic = '';
+  let password = '';
+  let confirmPassword = '';
   let acknowledged = false;
   let isImporting = false;
   let importError = '';
   
   async function importWallet() {
-    if (!mnemonic.trim() || !acknowledged) {
+    if (!mnemonic.trim() || !acknowledged || !password) {
+      return;
+    }
+    
+    if (password !== confirmPassword) {
+      importError = 'Passwords do not match';
+      return;
+    }
+    
+    if (password.length < 4) {
+      importError = 'Password must be at least 4 characters';
       return;
     }
     
@@ -19,7 +31,7 @@
     importError = '';
     
     try {
-      await walletStore.importWallet(mnemonic.trim());
+      await walletStore.importWallet(mnemonic.trim(), password);
       dispatch('success');
       closeModal();
     } catch (error) {
@@ -48,7 +60,7 @@
   }
   
   $: isValidMnemonic = validateMnemonic(mnemonic);
-  $: canImport = isValidMnemonic && acknowledged && !isImporting;
+  $: canImport = isValidMnemonic && acknowledged && password && password === confirmPassword && !isImporting;
 </script>
 
 <!-- Modal Overlay -->
@@ -62,10 +74,10 @@
   <div class="card max-w-2xl w-full max-h-[90vh] overflow-y-auto">
     <!-- Header -->
     <div class="flex items-center justify-between p-6 border-b border-slate-700">
-      <h2 id="import-modal-title" class="text-xl font-semibold text-white">Import Wallet</h2>
+      <h2 id="import-modal-title" class="text-xl font-semibold text-theme">Import Wallet</h2>
       <button
         on:click={closeModal}
-        class="p-1 text-gray-400 hover:text-white transition-colors"
+        class="p-1 text-gray-400 hover:text-theme transition-colors"
       >
         <X class="w-5 h-5" />
       </button>
@@ -110,6 +122,44 @@
             <CheckCircle class="w-4 h-4" />
             Valid recovery phrase format
           </p>
+        {/if}
+      </div>
+      
+      <!-- Password Input -->
+      <div class="space-y-3">
+        <label for="password-input" class="block text-sm font-medium text-gray-300">
+          Set Wallet Password
+        </label>
+        <input
+          id="password-input"
+          type="password"
+          bind:value={password}
+          placeholder="Enter a password to secure your wallet"
+          class="w-full input-field"
+          class:border-red-500={password && password.length < 4}
+          autocomplete="off"
+        />
+        {#if password && password.length < 4}
+          <p class="text-red-400 text-sm">Password must be at least 4 characters</p>
+        {/if}
+      </div>
+      
+      <!-- Confirm Password Input -->
+      <div class="space-y-3">
+        <label for="confirm-password-input" class="block text-sm font-medium text-gray-300">
+          Confirm Password
+        </label>
+        <input
+          id="confirm-password-input"
+          type="password"
+          bind:value={confirmPassword}
+          placeholder="Confirm your password"
+          class="w-full input-field"
+          class:border-red-500={confirmPassword && password !== confirmPassword}
+          autocomplete="off"
+        />
+        {#if confirmPassword && password !== confirmPassword}
+          <p class="text-red-400 text-sm">Passwords do not match</p>
         {/if}
       </div>
       

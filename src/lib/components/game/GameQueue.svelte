@@ -36,7 +36,7 @@
       case SpinStatus.READY_TO_CLAIM:
         return AlertCircle;
       case SpinStatus.CLAIMING:
-        return RefreshCw;
+        return Check; // Same icon as completed
       case SpinStatus.COMPLETED:
         return Check;
       case SpinStatus.FAILED:
@@ -61,11 +61,8 @@
         }
         return 'text-yellow-400';
       case SpinStatus.CLAIMING:
-        // For losing spins being auto-claimed, use neutral blue color
-        if (spin && typeof spin.winnings === 'number' && spin.winnings === 0) {
-          return 'text-blue-400';
-        }
-        return 'text-orange-400';
+        // Always show as completed (green) - claiming is silent
+        return 'text-green-400';
       case SpinStatus.COMPLETED:
         return 'text-green-400';
       case SpinStatus.FAILED:
@@ -96,11 +93,8 @@
         }
         return 'Ready to Claim';
       case SpinStatus.CLAIMING:
-        // For losing spins being auto-claimed, show neutral status to keep it silent
-        if (spin && typeof spin.winnings === 'number' && spin.winnings === 0) {
-          return 'Processing...';
-        }
-        return 'Claiming...';
+        // Always show completed - claim failures are usually bots claiming first (which is good!)
+        return 'Completed';
       case SpinStatus.COMPLETED:
         return 'Completed';
       case SpinStatus.FAILED:
@@ -123,14 +117,6 @@
     return new Date(timestamp).toLocaleDateString();
   }
   
-  function handleRetrySpin(spin: QueuedSpin) {
-    // Play button click sound for retry
-    playButtonClick().catch(() => {
-      // Ignore sound errors
-    });
-    
-    queueStore.retrySpin(spin.id);
-  }
   
   async function handleClaimSpin(spin: QueuedSpin) {
     console.log('🎯 Manual claim triggered for spin:', spin.id);
@@ -140,11 +126,7 @@
       // Ignore sound errors
     });
     
-    // Update status to claiming
-    queueStore.updateSpin({
-      id: spin.id,
-      status: SpinStatus.CLAIMING
-    });
+    // Let the blockchain service handle status updates - don't manually set CLAIMING here
     
     try {
       // Import and use the queue processor to submit claim
@@ -266,8 +248,8 @@
   <!-- Header -->
   <div class="queue-header">
     <div class="flex items-center gap-2">
-      <Clock class="w-5 h-5 text-gray-400" />
-      <h3 class="text-lg font-semibold text-white">Game Queue</h3>
+      <Clock class="w-5 h-5 text-theme-text opacity-70" />
+      <h3 class="text-lg font-semibold text-theme">Game Queue</h3>
       {#if $queueStats.pendingSpins > 0}
         <span class="pending-badge">{$queueStats.pendingSpins}</span>
       {/if}
@@ -277,7 +259,7 @@
       {#if $queueStats.totalSpins > 0}
         <button
           on:click={clearCompleted}
-          class="text-xs text-gray-400 hover:text-white transition-colors"
+          class="text-xs text-theme-text opacity-70 hover:opacity-100 transition-colors"
         >
           Clear
         </button>
@@ -335,7 +317,7 @@
     <div class="claim-banner" in:fly={{ y: -20, duration: 300 }}>
       <div class="flex items-center gap-2">
         <AlertCircle class="w-4 h-4 text-yellow-400" />
-        <span class="text-sm font-medium text-white">
+        <span class="text-sm font-medium text-theme">
           {readyToClaimWinners.length} winning spin{readyToClaimWinners.length > 1 ? 's' : ''} ready to claim
         </span>
       </div>
@@ -367,7 +349,7 @@
         >
           <!-- Status Icon -->
           <div class="status-icon {getStatusColor(spin.status)}">
-            {#if [SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING, SpinStatus.CLAIMING].includes(spin.status)}
+            {#if [SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(spin.status)}
               <svelte:component this={getStatusIcon(spin.status)} class="w-4 h-4 animate-spin" />
             {:else}
               <svelte:component this={getStatusIcon(spin.status)} class="w-4 h-4" />
@@ -375,7 +357,7 @@
           </div>
 
           <!-- Info Button -->
-          {#if spin.txId || spin.claimTxId || spin.commitmentRound || spin.outcomeRound}
+          {#if spin.txId || spin.claimTxId || spin.commitmentRound || spin.outcomeRound || spin.status === SpinStatus.FAILED}
             <button 
               class="info-button"
               on:click|stopPropagation={() => openSpinDetails(spin)}
@@ -439,9 +421,7 @@
                     Claim
                   </button>
                 {:else if spin.status === SpinStatus.READY_TO_CLAIM && spin.isAutoClaimInProgress && spin.winnings > 0}
-                  <div class="text-xs text-blue-400 font-medium" style="margin-top: 0.25rem;">
-                    Auto-claiming...
-                  </div>
+                  <!-- Remove auto-claiming message - claiming happens silently -->
                 {:else if spin.status === SpinStatus.READY_TO_CLAIM && spin.winnings === 0}
                   <!-- For losing spins, show processing status -->
                   <div class="text-xs text-blue-400 font-medium" style="margin-top: 0.25rem;">
@@ -476,9 +456,7 @@
                 </div>
               {/if}
             {:else if spin.status === SpinStatus.READY_TO_CLAIM && spin.isAutoClaimInProgress}
-              <div class="text-xs text-blue-400 font-medium">
-                Auto-claiming...
-              </div>
+              <!-- Remove auto-claiming message - claiming happens silently -->
             {:else if spin.status === SpinStatus.CLAIMING && spin.error}
               <!-- Only show retry for winning spins -->
               {#if typeof spin.winnings !== 'number' || spin.winnings > 0}
@@ -489,23 +467,12 @@
                   Retry Claim
                 </button>
               {/if}
-            {:else if spin.status === SpinStatus.FAILED && spin.retryCount < 3}
-              <button
-                on:click={() => handleRetrySpin(spin)}
-                class="retry-button"
-              >
-                Retry
-              </button>
             {:else if [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(spin.status)}
               <!-- Show processing indicator for active spins -->
               <div class="processing-indicator">
-                <div class="text-xs text-gray-400">
+                <div class="text-xs text-theme-text opacity-70">
                   Bet: {formatVOI(spin.totalBet)} VOI
                 </div>
-              </div>
-            {:else if [SpinStatus.FAILED, SpinStatus.EXPIRED].includes(spin.status)}
-              <div class="loss-amount text-red-400">
-                -{formatVOI(spin.totalBet)} VOI
               </div>
             {/if}
           </div>
@@ -710,19 +677,19 @@
 
 <style>
   .game-queue {
-    @apply bg-slate-800/50 border border-slate-700/50 overflow-hidden;
+    @apply bg-surface-tertiary rounded-lg shadow-lg border border-surface-border backdrop-blur-sm overflow-hidden;
   }
   
   .queue-header {
-    @apply flex items-center justify-between p-4 border-b border-slate-700/50;
+    @apply flex items-center justify-between p-4 border-b border-surface-border;
   }
   
   .pending-badge {
-    @apply bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full;
+    @apply bg-blue-600 text-theme text-xs font-bold px-2 py-1 rounded-full;
   }
   
   .queue-stats {
-    @apply grid grid-cols-4 gap-3 p-3 bg-slate-700/30;
+    @apply grid grid-cols-4 gap-3 p-3 bg-surface-tertiary;
   }
   
   .stat {
@@ -730,24 +697,24 @@
   }
   
   .stat-value {
-    @apply text-sm font-bold text-white;
+    @apply text-sm font-bold text-theme;
   }
   
   .stat-label {
-    @apply text-xs text-gray-400;
+    @apply text-xs text-theme-text opacity-70;
     margin-top: 0.25rem;
   }
   
   .queue-tabs {
-    @apply flex border-b border-slate-700/50;
+    @apply flex border-b border-surface-border;
   }
   
   .tab {
-    @apply flex-1 py-3 px-4 text-sm font-medium text-gray-400 hover:text-white transition-colors;
+    @apply flex-1 py-3 px-4 text-sm font-medium text-theme-text opacity-70 hover:opacity-100 transition-colors;
   }
   
   .tab.active {
-    @apply text-white bg-slate-700/50 border-b-2 border-voi-500;
+    @apply text-theme bg-surface-hover border-b-2 border-theme-primary;
   }
   
   .claim-banner {
@@ -755,7 +722,7 @@
   }
   
   .claim-all-button {
-    @apply bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-semibold px-3 py-1 rounded-md transition-colors;
+    @apply bg-yellow-600 hover:bg-yellow-700 text-theme text-xs font-semibold px-3 py-1 rounded-md transition-colors;
   }
   
   .spin-list {
@@ -763,7 +730,7 @@
   }
   
   .spin-item {
-    @apply flex items-center gap-3 p-3 border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors;
+    @apply flex items-center gap-3 p-3 border-b border-surface-border hover:bg-surface-hover transition-colors;
   }
   
   .spin-item:last-child {
@@ -791,15 +758,15 @@
   }
   
   .spin-meta {
-    @apply flex items-center gap-2 text-xs text-gray-400 mb-1;
+    @apply flex items-center gap-2 text-xs text-theme-text opacity-70 mb-1;
   }
   
   .bet-amount {
-    @apply font-semibold text-white;
+    @apply font-semibold text-theme;
   }
   
   .paylines, .timestamp {
-    @apply text-gray-500;
+    @apply text-theme-text opacity-50;
   }
   
   .status-text {
@@ -827,11 +794,11 @@
   }
   
   .claim-button {
-    @apply bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-semibold px-3 py-1 rounded-md transition-colors;
+    @apply bg-yellow-600 hover:bg-yellow-700 text-theme text-xs font-semibold px-3 py-1 rounded-md transition-colors;
   }
   
   .retry-button {
-    @apply bg-gray-600 hover:bg-gray-700 text-white text-xs font-semibold px-3 py-1 rounded-md transition-colors;
+    @apply bg-surface-secondary hover:bg-surface-hover text-theme font-medium rounded-lg transition-colors duration-200 text-xs px-3 py-1;
   }
   
   .processing-indicator {
@@ -847,11 +814,11 @@
   }
   
   .empty-title {
-    @apply text-lg font-semibold text-white mb-2;
+    @apply text-lg font-semibold text-theme mb-2;
   }
   
   .empty-description {
-    @apply text-sm text-gray-400;
+    @apply text-sm text-theme-text opacity-70;
   }
   
   /* Custom scrollbar */
@@ -882,7 +849,7 @@
   }
   
   .stat-card {
-    @apply bg-slate-700/30 rounded-lg p-3 flex items-center gap-3;
+    @apply bg-surface-tertiary rounded-lg shadow-lg border border-surface-border backdrop-blur-sm p-3 flex items-center gap-3;
   }
   
   .stat-card.wide {
@@ -898,11 +865,11 @@
   }
   
   .stat-title {
-    @apply text-xs text-gray-400 font-medium;
+    @apply text-xs text-theme-text opacity-70 font-medium;
   }
   
   .stat-value {
-    @apply text-lg font-bold text-white;
+    @apply text-lg font-bold text-theme;
     margin-top: 0.25rem;
   }
   
@@ -918,7 +885,7 @@
 
   /* Info Button */
   .info-button {
-    @apply flex-shrink-0 p-1 rounded-full bg-gray-600/50 hover:bg-gray-500/70 text-gray-300 hover:text-white transition-all duration-200 opacity-60 hover:opacity-100;
+    @apply flex-shrink-0 p-1 rounded-full bg-surface-secondary hover:bg-surface-hover text-theme-text opacity-60 hover:opacity-100 transition-all duration-200;
   }
 
   /* Modal Styles */
@@ -927,19 +894,19 @@
   }
 
   .modal-content {
-    @apply bg-slate-800 border border-slate-600 rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden;
+    @apply bg-surface-primary border border-surface-border rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden;
   }
 
   .modal-header {
-    @apply flex items-center justify-between p-4 border-b border-slate-600;
+    @apply flex items-center justify-between p-4 border-b border-surface-border;
   }
 
   .modal-title {
-    @apply text-lg font-semibold text-white;
+    @apply text-lg font-semibold text-theme;
   }
 
   .modal-close {
-    @apply p-1 rounded-lg hover:bg-slate-700 text-gray-400 hover:text-white transition-colors;
+    @apply p-1 rounded-lg hover:bg-surface-hover text-theme-text opacity-70 hover:opacity-100 transition-colors;
   }
 
   .modal-body {
@@ -951,7 +918,7 @@
   }
 
   .detail-section-title {
-    @apply text-sm font-semibold text-gray-300 mb-3;
+    @apply text-sm font-semibold text-theme-text mb-3;
   }
 
   .detail-grid {
@@ -967,23 +934,23 @@
   }
 
   .detail-label {
-    @apply text-xs text-gray-400 font-medium;
+    @apply text-xs text-theme-text opacity-70 font-medium;
   }
 
   .detail-value {
-    @apply text-sm text-white font-medium;
+    @apply text-sm text-theme font-medium;
   }
 
   .tx-link-container {
-    @apply flex items-center justify-between gap-3 bg-slate-700/50 rounded-md p-2;
+    @apply flex items-center justify-between gap-3 bg-surface-tertiary rounded-lg shadow-lg border border-surface-border backdrop-blur-sm p-2;
   }
 
   .tx-id {
-    @apply text-xs text-gray-300;
+    @apply text-xs text-theme-text;
   }
 
   .explorer-link {
-    @apply text-xs bg-voi-600 hover:bg-voi-700 text-white px-3 py-1 rounded-md transition-colors font-medium;
+    @apply text-xs bg-voi-600 hover:bg-voi-700 text-theme px-3 py-1 rounded-md transition-colors font-medium;
   }
 
   .error-message {

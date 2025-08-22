@@ -60,10 +60,10 @@
   <div class="card max-w-lg w-full max-h-[90vh] overflow-y-auto">
     <!-- Header -->
     <div class="flex items-center justify-between p-6 border-b border-slate-700">
-      <h2 id="modal-title" class="text-xl font-semibold text-white">Add Funds to Wallet</h2>
+      <h2 id="modal-title" class="text-xl font-semibold text-theme">Add Credits to Account</h2>
       <button
         on:click={closeModal}
-        class="p-1 text-gray-400 hover:text-white transition-colors"
+        class="p-1 text-gray-400 hover:text-theme transition-colors"
       >
         <X class="w-5 h-5" />
       </button>
@@ -74,7 +74,7 @@
       <button
         class="flex-1 py-3 px-6 text-center transition-colors"
         class:bg-slate-700={activeTab === 'transfer'}
-        class:text-white={activeTab === 'transfer'}
+        class:text-theme={activeTab === 'transfer'}
         class:text-gray-400={activeTab !== 'transfer'}
         on:click={() => activeTab = 'transfer'}
       >
@@ -83,7 +83,7 @@
       <button
         class="flex-1 py-3 px-6 text-center transition-colors"
         class:bg-slate-700={activeTab === 'buy'}
-        class:text-white={activeTab === 'buy'}
+        class:text-theme={activeTab === 'buy'}
         class:text-gray-400={activeTab !== 'buy'}
         on:click={() => activeTab = 'buy'}
       >
@@ -133,7 +133,7 @@
           
           <!-- Instructions -->
           <div class="space-y-3">
-            <h4 class="font-medium text-white">How to add funds:</h4>
+            <h4 class="font-medium text-theme">How to add funds:</h4>
             <ol class="list-decimal list-inside space-y-2 text-sm text-gray-400">
               <li>Copy the wallet address above or scan the QR code</li>
               <li>Send VOI tokens from your main wallet or exchange</li>
@@ -155,13 +155,13 @@
         <div class="space-y-6">
           <div class="text-center">
             <CreditCard class="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 class="text-lg font-semibold text-white mb-2">Buy VOI with Card</h3>
+            <h3 class="text-lg font-semibold text-theme mb-2">Buy VOI with Card</h3>
             <p class="text-gray-400">Purchase VOI directly with your debit card or Apple Pay</p>
           </div>
           
           <!-- Coming Soon Notice -->
           <div class="p-6 bg-gradient-to-r from-voi-900/20 to-blue-900/20 border border-voi-700/30 rounded-lg text-center">
-            <h4 class="text-lg font-semibold text-white mb-2">Coming Soon</h4>
+            <h4 class="text-lg font-semibold text-theme mb-2">Coming Soon</h4>
             <p class="text-gray-400 mb-4">
               Direct VOI purchases with debit card and Apple Pay will be available in the next update.
             </p>
@@ -175,7 +175,7 @@
           
           <!-- Alternative Options -->
           <div>
-            <h4 class="font-medium text-white mb-3">In the meantime:</h4>
+            <h4 class="font-medium text-theme mb-3">In the meantime:</h4>
             <ul class="space-y-2 text-sm text-gray-400">
               <li>• Purchase VOI on supported exchanges</li>
               <li>• Transfer from your main VOI wallet</li>

@@ -23,6 +23,7 @@
   import WinCelebration from './WinCelebration.svelte';
   import LoadingOverlay from '../ui/LoadingOverlay.svelte';
   import { soundService, playSpinStart, playReelStop, playWinSound, playLoss } from '$lib/services/soundService';
+  import { themeStore, currentTheme } from '$lib/stores/theme';
   
   // References to ReelGrid components for direct function calls
   let desktopReelGrid: ReelGrid;
@@ -36,7 +37,24 @@
       }
     });
   }
+
+  // Theme switching function
+  let isThemeChanging = false;
+  function handleThemeClick(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Add visual feedback
+    isThemeChanging = true;
+    setTimeout(() => {
+      isThemeChanging = false;
+    }, 500);
+    
+    themeStore.nextTheme();
+  }
+
   import { PUBLIC_DEBUG_MODE } from '$env/static/public';
+  
   
   export let disabled = false;
   export let compact = false;
@@ -50,6 +68,11 @@
   // Loss feedback state
   let showLossFeedback = false;
   let lossAmount = 0;
+  
+  // Transaction failure feedback state
+  let showFailureFeedback = false;
+  let failureMessage = 'Transaction failed, please try again';
+  let failureFeedbackTimeout: NodeJS.Timeout | null = null;
   
   // Continuous spinning management
   let spinningInterval: NodeJS.Timeout | null = null;
@@ -110,7 +133,7 @@
 
     // @ts-ignore
     document.addEventListener('replay-spin', handleReplayEvent);
-
+    
     return () => {
       // @ts-ignore
       document.removeEventListener('replay-spin', handleReplayEvent);
@@ -154,10 +177,16 @@
     startContinuousSpinning(spinId);
   }
 
-  function startContinuousSpinning(spinId: string) {
-    // ANIMATION GUARD: Don't start if another spin is already active
+  async function startContinuousSpinning(spinId: string) {
+    // SWITCHING SPINS: If we're switching to a different spin, stop the previous one's sound
     if ($currentSpinId && $currentSpinId !== spinId && $isSpinning) {
-      return;
+      console.log(`Switching from spin ${$currentSpinId} to ${spinId} - stopping previous sound`);
+      await soundService.forceStopWithVerification('spin-loop', 2);
+    }
+
+    // SOUND GUARD: Don't restart sound if this spin is already playing
+    if ($currentSpinId === spinId && $isSpinning) {
+      return; // Same spin already spinning, don't restart sound
     }
 
     // CLEANUP: Clear any existing animation interval
@@ -166,13 +195,16 @@
       spinningInterval = null;
     }
     
-    // Start looping spin sound
-    soundService.playLoopingSound('spin-loop', {
-      fadeIn: 0.2,
-      volume: 0.6
-    }).catch(() => {
-      // Ignore sound errors
-    });
+    // Start looping spin sound (only if we're not already playing for this spin)
+    if ($currentSpinId !== spinId || !$isSpinning) {
+      console.log(`Starting spin-loop sound for spin ${spinId}`);
+      soundService.playLoopingSound('spin-loop', {
+        fadeIn: 0.2,
+        volume: 0.6
+      }).catch(() => {
+        // Ignore sound errors
+      });
+    }
     
     // Start the initial spin animation in game store
     gameStore.startSpin(spinId);
@@ -181,10 +213,62 @@
     callAllReelGrids('startSpin', spinId);
   }
 
+  async function handleFailedSpin(spin: any) {
+    console.log(`🛑 Handling failed spin: ${spin.id} (${spin.status})`);
+    
+    // Show failure feedback to user
+    const errorMessage = spin.error || 'Transaction failed, please try again';
+    triggerFailureFeedback(errorMessage);
+    
+    // Stop spinning interval
+    if (spinningInterval) {
+      clearInterval(spinningInterval);
+      spinningInterval = null;
+    }
+    
+    // Stop spin-loop audio (same as successful spins)
+    const soundStopped = await soundService.forceStopWithVerification('spin-loop', 3);
+    if (!soundStopped) {
+      console.warn('Failed to stop spin-loop sound after failed spin');
+    }
+    
+    // Play reel stop sound to indicate spin has ended
+    setTimeout(() => {
+      playReelStop().catch(() => {
+        // Ignore sound errors
+      });
+    }, 100);
+    
+    // Stop reel animations completely
+    callAllReelGrids('stopSpin');
+    
+    // Reset game state
+    gameStore.reset();
+  }
+
   function handleQueueUpdate(queueState: any) {
+    // Check if the current spinning spin has failed
+    if ($currentSpinId && queueState.spins && queueState.spins.length > 0) {
+      const currentSpin = queueState.spins.find((spin: any) => spin.id === $currentSpinId);
+      
+      // If the current spin just failed or expired, properly end the spin
+      if (currentSpin && [SpinStatus.FAILED, SpinStatus.EXPIRED].includes(currentSpin.status)) {
+        handleFailedSpin(currentSpin);
+        return; // Don't continue with other processing
+      }
+    }
+    
     // If there are no spins at all, make sure we're not spinning
     if (!queueState.spins || queueState.spins.length === 0) {
       if ($isSpinning || $waitingForOutcome) {
+        // Use the same proper cleanup as failed spins
+        console.log(`🛑 Queue is empty - ending any active spin`);
+        soundService.forceStopWithVerification('spin-loop', 3).then(soundStopped => {
+          if (!soundStopped) {
+            console.warn('Failed to stop spin-loop sound after queue empty');
+          }
+        });
+        callAllReelGrids('stopSpin');
         gameStore.reset();
         if (spinningInterval) {
           clearInterval(spinningInterval);
@@ -253,27 +337,32 @@
       }
     }
     
-    if (pendingSpins.length > 0 && !$currentSpinId && userSessionStarted && !isReplayMode) {
-      const mostRecentPending = pendingSpins[pendingSpins.length - 1];
-      
-      // Only animate if user has started a spin this session AND we're not in replay mode
-      // This prevents auto-animation for restored spins and after replays
-      startContinuousSpinning(mostRecentPending.id);
-    } else if (pendingSpins.length === 0 && processingSpins.length === 0 && $currentSpinId) {
+    // REMOVED: Automatic spin starting logic that caused duplicate sounds
+    // The spin should only start from handleSpin when user initiates it
+    // This prevents the queue update from restarting sounds unnecessarily
+    
+    if (pendingSpins.length === 0 && processingSpins.length === 0 && $currentSpinId) {
       // No pending or processing spins but we still have a current spin ID - check if it should be cleared
       const currentSpin = queueState.spins.find((spin: any) => spin.id === $currentSpinId);
       if (!currentSpin || [SpinStatus.COMPLETED, SpinStatus.FAILED, SpinStatus.EXPIRED].includes(currentSpin.status)) {
-        // Current spin is done, reset the display
-        gameStore.reset();
-        if (spinningInterval) {
-          clearInterval(spinningInterval);
-          spinningInterval = null;
+        // Failed/expired spins should have been handled earlier by handleFailedSpin
+        // This section mainly handles completed spins that weren't displayed yet
+        if (currentSpin && [SpinStatus.FAILED, SpinStatus.EXPIRED].includes(currentSpin.status)) {
+          // This should have been caught earlier, but handle it just in case
+          handleFailedSpin(currentSpin);
+        } else {
+          // Current spin is done (completed), reset the display
+          gameStore.reset();
+          if (spinningInterval) {
+            clearInterval(spinningInterval);
+            spinningInterval = null;
+          }
         }
       }
     }
   }
 
-  function displayOutcome(spin: any) {
+  async function displayOutcome(spin: any) {
     // CRITICAL STATE COORDINATION CHECK: Only display if this spin is current
     if (!spin.outcome || $currentSpinId !== spin.id) {
       return;
@@ -292,10 +381,11 @@
       spinningInterval = null;
     }
     
-    // Stop the spinning loop sound with fade out
-    soundService.stopLoopingSound('spin-loop', { fadeOut: 0.3 }).catch(() => {
-      // Ignore sound errors
-    });
+    // Stop the spinning loop sound with verification (same as replays)
+    const soundStopped = await soundService.forceStopWithVerification('spin-loop', 3);
+    if (!soundStopped) {
+      console.warn('Failed to stop spin-loop sound after normal spin');
+    }
     
     // Play reel stop sound (only once, not from each ReelGrid)
     setTimeout(() => {
@@ -345,13 +435,36 @@
   
   function checkForWins(outcome: string[][]) {
     // Simple win detection for demonstration
-    // Check for three in a row on first payline
+    // Check for any 3+ matching symbols on first payline
     const firstRow = outcome.map(reel => reel[0]);
-    const isWin = ['A', 'B', 'C', 'D'].includes(firstRow[0]) && firstRow.slice(0, 3).every(symbol => symbol === firstRow[0]);
     
-    if (isWin) {
-      const symbol = firstRow[0];
-      const multiplier = { 'A': 100, 'B': 50, 'C': 25, 'D': 10 }[symbol] || 1;
+    // Count occurrences of each symbol
+    const symbolCounts: { [symbol: string]: number } = {
+      'A': 0,
+      'B': 0,
+      'C': 0,
+      'D': 0
+    };
+    
+    firstRow.forEach(symbol => {
+      if (['A', 'B', 'C', 'D'].includes(symbol)) {
+        symbolCounts[symbol]++;
+      }
+    });
+    
+    // Find the symbol with the highest count (must be at least 3)
+    let bestSymbol = '';
+    let bestCount = 0;
+    
+    for (const symbol of ['A', 'B', 'C', 'D']) {
+      if (symbolCounts[symbol] >= 3 && symbolCounts[symbol] > bestCount) {
+        bestSymbol = symbol;
+        bestCount = symbolCounts[symbol];
+      }
+    }
+    
+    if (bestCount >= 3) {
+      const multiplier = { 'A': 100, 'B': 50, 'C': 25, 'D': 10 }[bestSymbol] || 1;
       const amount = $bettingStore.betPerLine * multiplier;
       
       return {
@@ -452,6 +565,28 @@
     }, 2000);
   }
 
+  function triggerFailureFeedback(message: string = 'Transaction failed, please try again') {
+    // Clear any existing failure feedback timeout
+    if (failureFeedbackTimeout) {
+      clearTimeout(failureFeedbackTimeout);
+      failureFeedbackTimeout = null;
+    }
+    
+    // Don't show failure feedback if we're showing win celebration
+    if (showWinCelebration) {
+      return;
+    }
+    
+    failureMessage = message;
+    showFailureFeedback = true;
+    
+    // Auto-hide failure feedback after 3 seconds
+    failureFeedbackTimeout = setTimeout(() => {
+      showFailureFeedback = false;
+      failureFeedbackTimeout = null;
+    }, 3000);
+  }
+
   async function handleReplaySpin(replayData: { spin: any; outcome: string[][]; winnings: number; betAmount: number }) {
     const replayId = replayData.spin.id;
     
@@ -461,18 +596,29 @@
       return;
     }
     
-    // Prevent overlapping replays
+    // Cancel any existing replay and start new one
     if (isReplayMode) {
-      console.warn('Replay already in progress, ignoring new replay request');
-      return;
+      console.log('⚠️ Canceling existing replay to start new one');
+      // Cancel existing replay timeouts
+      replayTimeouts.forEach(timeout => clearTimeout(timeout));
+      replayTimeouts = [];
+      // Force stop any ongoing animations
+      callAllReelGrids('stopSpin');
+      callAllReelGrids('setFinalPositions', [['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_']], 'cancel-previous');
+      gameStore.reset();
     }
     
-    // Mark this replay as processed GLOBALLY
+    // Mark this replay as processed GLOBALLY (temporarily to prevent immediate duplicates)
     GLOBAL_PROCESSED_REPLAYS.add(replayId);
     
     // Mark that user has initiated a replay (allows animations)
     userSessionStarted = true;
     isReplayMode = true; // Prevent queue auto-start during replay
+    
+    // Remove from global set after a short delay to allow future replays of same spin
+    setTimeout(() => {
+      GLOBAL_PROCESSED_REPLAYS.delete(replayId);
+    }, 1000); // Allow re-replay after 1 second
     
     console.log(`=== REPLAY: Starting replay sequence for ${replayId} ===`);
     
@@ -578,8 +724,7 @@
           // Clear replay mode flag to allow normal operation
           isReplayMode = false;
           
-          // Remove this replay from GLOBAL processed set (allow future replays of same spin)
-          GLOBAL_PROCESSED_REPLAYS.delete(replayId);
+          // Global deduplication already cleared earlier
           
           // Remove completed timeouts from tracking
           replayTimeouts = replayTimeouts.filter(t => t !== startTimeout && t !== outcomeTimeout && t !== celebrationTimeout && t !== cleanupTimeout);
@@ -594,13 +739,23 @@
   }
 </script>
 
-<div class="slot-machine-container h-full">
+<!-- Reactive theme styles -->
+<div class="slot-machine-container h-full" 
+     style="--theme-primary: {$currentTheme.primary}; --theme-secondary: {$currentTheme.secondary}; --theme-lights: {$currentTheme.lights};">
+
   <!-- Desktop: Vertical Layout -->
   <div class="hidden lg:block">
     <!-- Slot Machine Frame -->
     <div class="slot-machine-frame mb-4">
       <!-- Outer decorative border with casino lights -->
-      <div class="casino-border">
+      <div class="casino-border" 
+           class:theme-changing={isThemeChanging}
+           role="button" 
+           tabindex="0"
+           aria-label="Change slot machine theme"
+           title="Click to change theme: {$currentTheme.displayName}"
+           on:click={handleThemeClick}
+           on:keydown={(e) => e.key === 'Enter' && handleThemeClick(e)}>
         <div class="casino-lights"></div>
       </div>
       
@@ -636,7 +791,14 @@
       <!-- Slot Machine Frame - Fixed size -->
       <div class="flex-shrink-0 slot-machine-frame mb-3">
         <!-- Outer decorative border with casino lights -->
-        <div class="casino-border">
+        <div class="casino-border" 
+             class:theme-changing={isThemeChanging}
+             role="button" 
+             tabindex="0"
+             aria-label="Change slot machine theme"
+             title="Click to change theme: {$currentTheme.displayName}"
+             on:click={handleThemeClick}
+             on:keydown={(e) => e.key === 'Enter' && handleThemeClick(e)}>
           <div class="casino-lights"></div>
         </div>
         
@@ -680,7 +842,14 @@
         <!-- Slot Machine Frame -->
         <div class="slot-machine-frame">
           <!-- Outer decorative border with casino lights -->
-          <div class="casino-border">
+          <div class="casino-border" 
+               class:theme-changing={isThemeChanging}
+               role="button" 
+               tabindex="0"
+               aria-label="Change slot machine theme"
+               title="Click to change theme: {$currentTheme.displayName}"
+               on:click={handleThemeClick}
+               on:keydown={(e) => e.key === 'Enter' && handleThemeClick(e)}>
             <div class="casino-lights"></div>
           </div>
           
@@ -725,29 +894,29 @@
 
   <!-- Development Test Controls -->
   {#if PUBLIC_DEBUG_MODE === 'true'}
-    <div class="fixed bottom-4 right-4 bg-black/80 text-white p-4 rounded-lg text-sm z-50">
+    <div class="fixed bottom-4 right-4 card text-theme-text p-4 rounded-lg text-sm z-50">
       <div class="font-bold mb-2">Test Win Animations</div>
       <div class="flex flex-col gap-2">
         <button 
-          class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-xs"
+          class="status-success px-3 py-1 rounded text-xs"
           on:click={() => triggerWinCelebration({ amount: 5000000, level: 'small' }, 'test-small')}
         >
           Small Win
         </button>
         <button 
-          class="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs"
+          class="btn-primary px-3 py-1 rounded text-xs"
           on:click={() => triggerWinCelebration({ amount: 25000000, level: 'medium' }, 'test-medium')}
         >
           Medium Win
         </button>
         <button 
-          class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-xs"
+          class="bg-surface-secondary hover:bg-surface-hover text-theme font-medium rounded-lg transition-colors duration-200 px-3 py-1 text-xs"
           on:click={() => triggerWinCelebration({ amount: 75000000, level: 'large' }, 'test-large')}
         >
           Large Win
         </button>
         <button 
-          class="bg-yellow-600 hover:bg-yellow-700 px-3 py-1 rounded text-xs"
+          class="status-warning px-3 py-1 rounded text-xs"
           on:click={() => triggerWinCelebration({ amount: 150000000, level: 'jackpot' }, 'test-jackpot')}
         >
           Jackpot
@@ -761,13 +930,32 @@
     <div class="fixed inset-0 flex items-center justify-center pointer-events-none z-40" 
          in:fly={{ y: -50, duration: 400 }}
          out:fade={{ duration: 300 }}>
-      <div class="bg-red-900/90 border border-red-600 rounded-lg px-6 py-4 shadow-2xl">
+      <div class="bg-surface-primary border border-red-500 rounded-lg px-6 py-4 shadow-2xl">
         <div class="text-center">
           <div class="text-red-300 text-lg font-bold mb-1">
             Better luck next time!
           </div>
           <div class="text-red-400 text-xl font-bold">
             -{formatVOI(lossAmount)} VOI
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+  
+  <!-- Transaction Failure Feedback Overlay -->
+  {#if showFailureFeedback}
+    <div class="fixed inset-0 flex items-center justify-center pointer-events-none z-50" 
+         in:fly={{ y: -50, duration: 400 }}
+         out:fade={{ duration: 300 }}>
+      <div class="bg-surface-primary border-2 border-red-600 rounded-lg px-8 py-6 shadow-2xl max-w-md">
+        <div class="text-center">
+          <div class="text-red-500 text-3xl mb-3">⚠️</div>
+          <div class="text-red-400 text-xl font-bold mb-2">
+            Transaction Failed
+          </div>
+          <div class="text-red-300 text-sm">
+            {failureMessage}
           </div>
         </div>
       </div>
@@ -785,8 +973,8 @@
   
   <!-- Maintenance Overlay - only show after initial balance check completes -->
   {#if !$isSlotMachineOperational && showMaintenanceOverlay && hasInitialBalanceCheckCompleted && !$isLoadingHouseBalance}
-    <div class="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-xl">
-      <div class="bg-gradient-to-br from-orange-900/90 to-red-900/90 border border-orange-600 rounded-lg p-8 max-w-md mx-4 shadow-2xl">
+    <div class="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-40 rounded-xl">
+      <div class="bg-surface-primary border border-surface-border rounded-lg shadow-xl bg-gradient-to-br from-orange-900/90 to-red-900/90 border-orange-600 p-8 max-w-md mx-4 shadow-2xl">
         <div class="text-center">
           <!-- Maintenance Icon -->
           <div class="mb-4">
@@ -808,7 +996,7 @@
           
           <!-- Close Button -->
           <button 
-            class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 shadow-lg"
+            class="bg-surface-secondary hover:bg-surface-hover text-theme font-medium rounded-lg transition-colors duration-200 py-3 px-6 shadow-lg"
             on:click={() => showMaintenanceOverlay = false}
           >
             Close
@@ -829,6 +1017,7 @@
     position: relative;
   }
 
+
   /* Enhanced Slot Machine Frame Styling */
   .slot-machine-frame {
     @apply relative;
@@ -836,13 +1025,33 @@
   }
 
   .casino-border {
-    @apply absolute -inset-4 rounded-2xl;
+    @apply absolute -inset-4 rounded-2xl cursor-pointer;
     background: linear-gradient(45deg, 
-      #7c3aed 0%, #a855f7 25%, #7c3aed 50%, #a855f7 75%, #7c3aed 100%);
+      var(--theme-primary) 0%, var(--theme-secondary) 25%, var(--theme-primary) 50%, var(--theme-secondary) 75%, var(--theme-primary) 100%);
     background-size: 200% 200%;
     animation: shimmer 3s ease-in-out infinite;
     padding: 3px;
     border-radius: 20px;
+    transition: all 0.3s ease;
+  }
+
+  .casino-border:hover {
+    transform: scale(1.02);
+    filter: brightness(1.1);
+  }
+
+  .casino-border:active {
+    transform: scale(0.98);
+  }
+
+  .casino-border.theme-changing {
+    animation: theme-change-pulse 0.5s ease-out;
+  }
+
+  @keyframes theme-change-pulse {
+    0% { transform: scale(1); filter: brightness(1); }
+    50% { transform: scale(1.05); filter: brightness(1.3); }
+    100% { transform: scale(1); filter: brightness(1); }
   }
 
   .casino-lights {
@@ -850,7 +1059,7 @@
     background: repeating-linear-gradient(
       0deg,
       transparent 0px,
-      rgba(168, 85, 247, 0.3) 2px,
+      var(--theme-lights) 2px,
       transparent 4px,
       transparent 20px
     );
@@ -860,16 +1069,16 @@
   .machine-body {
     @apply relative rounded-xl p-3;
     background: linear-gradient(145deg, 
-      #1e293b 0%, 
-      #334155 25%, 
-      #475569 50%, 
-      #334155 75%, 
-      #1e293b 100%);
-    border: 2px solid #475569;
+      var(--theme-surface-primary) 0%, 
+      var(--theme-surface-secondary) 25%, 
+      var(--theme-surface-tertiary) 50%, 
+      var(--theme-surface-secondary) 75%, 
+      var(--theme-surface-primary) 100%);
+    border: 2px solid var(--theme-surface-border);
     box-shadow: 
       inset 0 2px 4px rgba(255, 255, 255, 0.1),
       inset 0 -2px 4px rgba(0, 0, 0, 0.3),
-      0 0 20px rgba(16, 185, 129, 0.1);
+      0 0 20px var(--theme-lights);
   }
 
   .chrome-frame {
@@ -888,21 +1097,22 @@
 
   .inner-frame {
     @apply rounded-md p-2;
-    background: radial-gradient(ellipse at center, #0f172a 0%, #1e293b 100%);
-    border: 2px inset #374151;
+    background: radial-gradient(ellipse at center, var(--theme-bg-from) 0%, var(--theme-surface-primary) 100%);
+    border: 2px inset var(--theme-surface-border);
     box-shadow: 
       inset 0 0 10px rgba(0, 0, 0, 0.8),
-      0 0 5px rgba(16, 185, 129, 0.3);
+      0 0 5px var(--theme-lights);
   }
 
   .game-grid {
     @apply relative rounded border-2;
-    background: linear-gradient(180deg, #000000 0%, #1a1a1a 100%);
-    border-color: #4b5563;
+    background: linear-gradient(180deg, var(--theme-bg-from) 0%, var(--theme-surface-primary) 100%);
+    border-color: var(--theme-surface-border);
     box-shadow: 
       inset 0 2px 4px rgba(0, 0, 0, 0.6),
-      0 0 10px rgba(16, 185, 129, 0.2);
+      0 0 10px var(--theme-lights);
   }
+
 
   /* Animations */
   @keyframes shimmer {

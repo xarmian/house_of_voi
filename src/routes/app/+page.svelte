@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import { walletStore } from '$lib/stores/wallet';
   import { contractDataCache } from '$lib/services/contractDataCache';
-  import WalletDisplay from '$lib/components/wallet/WalletDisplay.svelte';
+  import { currentTheme } from '$lib/stores/theme';
+  import WalletManager from '$lib/components/wallet/WalletManager.svelte';
   import SlotMachine from '$lib/components/game/SlotMachine.svelte';
   import GameQueue from '$lib/components/game/GameQueue.svelte';
   import GameHeader from '$lib/components/game/GameHeader.svelte';
@@ -13,9 +14,19 @@
   
   let hasPreloadedCache = false;
 
-  onMount(async () => {
-    await walletStore.initialize();
+  // Generate dynamic background style based on current theme - using background-image instead of background
+  $: backgroundStyle = $currentTheme?.background?.via 
+    ? `background-image: linear-gradient(${$currentTheme.background.direction}, ${$currentTheme.background.from}, ${$currentTheme.background.via}, ${$currentTheme.background.to});`
+    : $currentTheme?.background 
+    ? `background-image: linear-gradient(${$currentTheme.background.direction}, ${$currentTheme.background.from}, ${$currentTheme.background.to});`
+    : 'background-image: linear-gradient(to bottom right, #0f172a, #1e293b, #0f172a);';
     
+  // Add text color for contrast when needed
+  $: textStyle = $currentTheme?.textColor ? `color: ${$currentTheme.textColor};` : '';
+  
+  $: combinedStyle = backgroundStyle + (textStyle ? ' ' + textStyle : '');
+
+  onMount(async () => {
     // Pre-load contract data after wallet is initialized - but only once per session
     const unsubscribe = walletStore.subscribe(async (state) => {
       if (state.account && !state.isLocked && !hasPreloadedCache) {
@@ -38,7 +49,7 @@
   <title>Game - House of Voi</title>
 </svelte:head>
 
-<main class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+<main class="min-h-screen transition-all duration-700 ease-in-out" style={combinedStyle}>
   <div class="max-w-7xl mx-auto px-4 py-2 lg:py-2">
     <!-- Desktop Layout: Horizontal -->
     <div class="hidden lg:block min-h-screen">
@@ -48,15 +59,15 @@
       </div>
       
       <!-- Main content grid -->
-      <div class="grid grid-cols-12 gap-4 items-start">
+      <div class="grid grid-cols-12 gap-6 items-start">
         <!-- Main game area -->
-        <div class="col-span-8">
-          <SlotMachine disabled={!$walletStore.isConnected} />
+        <div class="col-span-8 relative">
+          <SlotMachine disabled={false} />
         </div>
         
         <!-- Right sidebar: Wallet and Queue - aligned with game status bar -->
-        <div class="col-span-4 space-y-4">
-          <WalletDisplay />
+        <div class="col-span-4 space-y-4 relative">
+          <WalletManager />
           <GameQueue maxHeight="calc(100vh - 20rem)" />
         </div>
       </div>
@@ -68,7 +79,7 @@
       <div class="flex-shrink-0 px-2 py-1 safe-area-left safe-area-right mb-2">
         <div class="flex items-center justify-between gap-2">
           <div class="flex-1">
-            <WalletDisplay compact={true} />
+            <WalletManager compact={true} />
           </div>
           <div class="flex-shrink-0">
             <SoundSettingsIcon />
@@ -78,7 +89,7 @@
       
       <!-- Main game area - allows natural scrolling -->
       <div class="flex-1 flex flex-col px-2 pb-2 safe-area-left safe-area-right">
-        <SlotMachine disabled={!$walletStore.isConnected} compact={true} />
+        <SlotMachine disabled={false} compact={true} />
       </div>
     </div>
   </div>

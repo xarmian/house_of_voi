@@ -126,7 +126,7 @@
       <div class="modal-header">
         <div class="flex items-center gap-3">
           <Volume2 class="w-6 h-6 text-voi-400" />
-          <h2 id="sound-settings-title" class="text-xl font-semibold text-white">Sound Settings</h2>
+          <h2 id="sound-settings-title" class="text-xl font-semibold text-theme">Sound Settings</h2>
         </div>
         <button
           class="close-button"
@@ -264,7 +264,7 @@
   }
 
   .close-button {
-    @apply p-2 rounded-lg hover:bg-slate-700 text-gray-400 hover:text-white transition-colors;
+    @apply p-2 rounded-lg hover:bg-slate-700 text-gray-400 hover:text-theme transition-colors;
   }
 
   .modal-body {
@@ -280,7 +280,7 @@
   }
 
   .setting-title {
-    @apply font-semibold text-white;
+    @apply font-semibold text-theme;
   }
 
   .setting-description {
@@ -345,11 +345,11 @@
   }
 
   .test-button {
-    @apply px-3 py-1 text-xs font-medium bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-gray-300 hover:text-white rounded-md transition-colors;
+    @apply px-3 py-1 text-xs font-medium bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-gray-300 hover:text-theme rounded-md transition-colors;
   }
 
   .reset-button {
-    @apply w-full px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-slate-800;
+    @apply w-full px-4 py-3 bg-gray-700 hover:bg-gray-600 text-theme font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-slate-800;
   }
 
   /* Custom scrollbar */

@@ -4,9 +4,9 @@ export const BETTING_CONSTANTS = {
   MIN_PAYLINES: 1,
   
   // Maximum values
-  MAX_BET_PER_LINE: 10_000_000, // 10 VOI per line
+  MAX_BET_PER_LINE: 100_000_000, // 10 VOI per line
   MAX_PAYLINES: 20,
-  MAX_TOTAL_BET: 50_000_000, // 50 VOI
+  MAX_TOTAL_BET: 2000_000_000, // 2000 VOI
   
   // Default values
   DEFAULT_BET_PER_LINE: 1_000_000, // 1 VOI
@@ -30,7 +30,7 @@ export const BETTING_ERRORS = {
 } as const;
 
 // Utility functions
-export function formatVOI(microVOI: number, decimals = 2): string {
+export function formatVOI(microVOI: number, decimals = 0): string {
   return (microVOI / 1_000_000).toFixed(decimals);
 }
 
