@@ -43,6 +43,9 @@
   // Detect when wallet exists but is locked
   $: walletExistsButLocked = $hasExistingWallet && !$isWalletConnected;
   
+  // Check if the locked wallet is passwordless
+  $: isPasswordlessWallet = walletExistsButLocked && walletService.getPublicWalletData()?.isPasswordless;
+  
   
   // Update input when store changes
   $: betInputValue = $betPerLineVOI;
@@ -505,61 +508,65 @@
           <Lock class="w-6 h-6" />
           <h3 class="font-bold text-lg">Wallet Locked</h3>
         </div>
-        <p class="text-theme-text text-sm mb-4">Enter your password to unlock and start playing</p>
-        
-        {#if passwordError}
-          <div class="p-3 bg-red-900/20 border border-red-500/30 rounded-lg mb-4">
-            <p class="text-red-400 text-sm">{passwordError}</p>
-          </div>
-        {/if}
+        {#if isPasswordlessWallet}
+          <p class="text-theme-text text-sm mb-4">Your wallet is currently locked</p>
+        {:else}
+          <p class="text-theme-text text-sm mb-4">Enter your password to unlock and start playing</p>
+          
+          {#if passwordError}
+            <div class="p-3 bg-red-900/20 border border-red-500/30 rounded-lg mb-4">
+              <p class="text-red-400 text-sm">{passwordError}</p>
+            </div>
+          {/if}
 
-        <!-- Password input -->
-        <form on:submit|preventDefault={handlePasswordSubmit} class="space-y-3 mb-4">
-          <div class="relative">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              bind:value={password}
-              disabled={unlocking}
-              placeholder="Enter your wallet password"
-              class="input-field w-full disabled:opacity-50"
-              autocomplete="off"
-              data-lpignore="true"
-              data-form-type="other"
-              on:keydown={handlePasswordKeydown}
-            />
+          <!-- Password input -->
+          <form on:submit|preventDefault={handlePasswordSubmit} class="space-y-3 mb-4">
+            <div class="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                bind:value={password}
+                disabled={unlocking}
+                placeholder="Enter your wallet password"
+                class="input-field w-full disabled:opacity-50"
+                autocomplete="off"
+                data-lpignore="true"
+                data-form-type="other"
+                on:keydown={handlePasswordKeydown}
+              />
+              <button
+                type="button"
+                on:click={() => showPassword = !showPassword}
+                disabled={unlocking}
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-theme-text opacity-70 hover:opacity-100 disabled:opacity-50"
+              >
+                {#if showPassword}
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L6.5 6.5m3.378 3.378a3 3 0 004.243 4.243M21.5 6.5l-15 15"></path>
+                  </svg>
+                {:else}
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.543 7-1.275 4.057-5.065 7-9.543 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                  </svg>
+                {/if}
+              </button>
+            </div>
+            
             <button
-              type="button"
-              on:click={() => showPassword = !showPassword}
+              type="submit"
               disabled={unlocking}
-              class="absolute right-2 top-1/2 -translate-y-1/2 text-theme-text opacity-70 hover:opacity-100 disabled:opacity-50"
+              class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-theme"
             >
-              {#if showPassword}
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L6.5 6.5m3.378 3.378a3 3 0 004.243 4.243M21.5 6.5l-15 15"></path>
-                </svg>
-              {:else}
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.543 7-1.275 4.057-5.065 7-9.543 7-4.477 0-8.268-2.943-9.542-7z"></path>
+              {#if unlocking}
+                <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               {/if}
+              <span>Unlock Wallet</span>
             </button>
-          </div>
-          
-          <button
-            type="submit"
-            disabled={unlocking}
-            class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-theme"
-          >
-            {#if unlocking}
-              <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-            {/if}
-            <span>Unlock Wallet</span>
-          </button>
-        </form>
+          </form>
+        {/if}
         
       </div>
     </div>
