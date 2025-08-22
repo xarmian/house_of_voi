@@ -237,7 +237,7 @@
           <button
             type="button"
             on:click={handleCreateWallet}
-            disabled={isLoading || !password || !confirmPassword}
+            disabled={isLoading || password !== confirmPassword}
             class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-theme rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
           >
             {#if isLoading}
