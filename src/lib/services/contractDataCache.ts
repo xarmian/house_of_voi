@@ -9,6 +9,12 @@ import { oddsCalculator, type OddsCalculationResult } from './oddsCalculator';
 // Import the actual ABI from SlotMachineClient like React component does
 import { APP_SPEC as SlotMachineAppSpec } from '../../clients/SlotMachineClient.js';
 
+// Create a read-only account for contract calls
+const readOnlyAccount = {
+  addr: 'H7W63MIQJMYBOEYPM5NJEGX3P54H54RZIV2G3OQ2255AULG6U74BE5KFC4',
+  sk: new Uint8Array(0) // Empty private key for read-only
+};
+
 // Slot Machine ABI for ulujs - use the real ABI like React component
 const slotMachineABI = {
   name: "Slot Machine",
@@ -185,12 +191,6 @@ export class ContractDataCache {
    * Fetch paylines directly from contract
    */
   private async fetchPaylinesFromContract(address: string): Promise<number[][]> {
-    // Create a read-only account for contract calls
-    const readOnlyAccount = {
-      addr: address,
-      sk: new Uint8Array(0) // Empty private key for read-only
-    };
-
     // Create Ulujs CONTRACT instance
     const ci = new CONTRACT(
       this.appId,
@@ -227,11 +227,6 @@ export class ContractDataCache {
     reelCount: number;
     windowLength: number;
   }> {
-    // Create a read-only account for contract calls
-    const readOnlyAccount = {
-      addr: address,
-      sk: new Uint8Array(0) // Empty private key for read-only
-    };
 
     // Create Ulujs CONTRACT instance
     const ci = new CONTRACT(
@@ -270,12 +265,6 @@ export class ContractDataCache {
    * Fetch payout multiplier directly from contract
    */
   private async fetchMultiplierFromContract(symbol: string, count: number, address: string): Promise<number> {
-    // Create a read-only account for contract calls
-    const readOnlyAccount = {
-      addr: address,
-      sk: new Uint8Array(0) // Empty private key for read-only
-    };
-
     // Create Ulujs CONTRACT instance
     const ci = new CONTRACT(
       this.appId,
