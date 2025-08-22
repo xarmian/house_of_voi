@@ -65,12 +65,18 @@ export interface CachedReelData {
   timestamp: number;
 }
 
+interface CacheVersions {
+  contractVersion: number | null; // contract_version from global state
+  deploymentVersion: number | null; // deployment_version from global state  
+  publicVersion: string | null; // PUBLIC_CONTRACT_VERSION from env
+}
+
 interface CacheStorage {
   paylines: CachedPaylines | null;
   multipliers: { [key: string]: CachedMultiplier };
   reelData: CachedReelData | null;
   odds: OddsCalculationResult | null;
-  version: string | null; // Contract version when cache was created
+  versions: CacheVersions | null; // All version information when cache was created
 }
 
 export class ContractDataCache {
@@ -81,11 +87,12 @@ export class ContractDataCache {
     multipliers: {},
     reelData: null,
     odds: null,
-    version: null
+    versions: null
   };
   private client: algosdk.Algodv2;
   private appId: number;
   private isPreloading = false; // Prevent concurrent preload operations
+  private sessionVersions: CacheVersions | null = null; // Cache versions for current session
 
   constructor() {
     this.client = new algosdk.Algodv2(
@@ -95,13 +102,16 @@ export class ContractDataCache {
     );
     this.appId = CONTRACT_CONFIG.slotMachineAppId;
     this.CACHE_DURATION = CONTRACT_CONFIG.cacheDuration;
-    this.loadFromStorage();
+    // Load from storage asynchronously (fire and forget)
+    this.loadFromStorage().catch(error => {
+      console.warn('Failed to load cache from storage:', error);
+    });
   }
 
   /**
    * Load cached data from localStorage
    */
-  private loadFromStorage(): void {
+  private async loadFromStorage(): Promise<void> {
     if (typeof window === 'undefined') return;
 
     try {
@@ -109,10 +119,16 @@ export class ContractDataCache {
       if (cached) {
         this.cache = JSON.parse(cached);
         this.cleanupExpired();
+        
+        // Validate cached versions against current contract versions
+        if (this.cache.versions && !(await this.validateCachedVersions())) {
+          console.log('🔄 Cached versions are outdated, clearing cache');
+          this.clearCache();
+        }
       }
     } catch (error) {
       console.warn('Failed to load contract data cache:', error);
-      this.cache = { paylines: null, multipliers: {}, reelData: null, odds: null, version: null };
+      this.cache = { paylines: null, multipliers: {}, reelData: null, odds: null, versions: null };
     }
   }
 
@@ -167,24 +183,127 @@ export class ContractDataCache {
   }
 
   /**
-   * Check if cached data is valid
+   * Fetch contract_version and deployment_version from contract global state
+   */
+  private async fetchContractVersions(): Promise<{ contractVersion: number; deploymentVersion: number }> {
+    try {
+      // Get application information directly from algosdk
+      const appInfo = await this.client.getApplicationByID(this.appId).do();
+      const globalState = appInfo.params['global-state'] || [];
+      
+      let contractVersion = 0;
+      let deploymentVersion = 0;
+      
+      // Decode global state to find contract_version and deployment_version
+      for (const item of globalState) {
+        const keyBytes = new Uint8Array(atob(item.key).split('').map(c => c.charCodeAt(0)));
+        const key = new TextDecoder().decode(keyBytes);
+        
+        if (key === 'contract_version') {
+          contractVersion = item.value.uint || 0;
+        } else if (key === 'deployment_version') {
+          deploymentVersion = item.value.uint || 0;
+        }
+      }
+      
+      return { contractVersion, deploymentVersion };
+    } catch (error) {
+      console.error('Failed to fetch contract versions from global state:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if cached data is valid (time-based and version-based)
    */
   private isValidCache(timestamp: number): boolean {
-    // Check version first - if contract version changed, cache is invalid
-    if (this.cache.version !== CONTRACT_CONFIG.version) {
-      console.log(`🔄 Contract version changed from ${this.cache.version} to ${CONTRACT_CONFIG.version}, invalidating cache`);
+    // Check time-based expiration first (fast check)
+    if (Date.now() - timestamp >= this.CACHE_DURATION) {
       return false;
     }
-    
-    // Then check time-based expiration
-    return Date.now() - timestamp < this.CACHE_DURATION;
+
+    // If no versions cached, cache is invalid
+    if (!this.cache.versions) {
+      console.log('🔄 No cached versions found, invalidating cache');
+      return false;
+    }
+
+    // Check if PUBLIC_CONTRACT_VERSION changed (this is the only version we can check synchronously)
+    const currentPublicVersion = CONTRACT_CONFIG.version;
+    if (this.cache.versions.publicVersion !== currentPublicVersion) {
+      console.log(`🔄 Public contract version changed from ${this.cache.versions.publicVersion} to ${currentPublicVersion}, invalidating cache`);
+      return false;
+    }
+
+    // Cache is valid (contract versions will be checked when updating cache)
+    return true;
   }
   
   /**
-   * Update cache version to current contract version
+   * Validate cached versions against current contract versions
    */
-  private updateCacheVersion(): void {
-    this.cache.version = CONTRACT_CONFIG.version;
+  private async validateCachedVersions(): Promise<boolean> {
+    if (!this.cache.versions) {
+      return false;
+    }
+
+    try {
+      const { contractVersion, deploymentVersion } = await this.fetchContractVersions();
+      const currentPublicVersion = CONTRACT_CONFIG.version;
+      const cached = this.cache.versions;
+
+      // Check if contract_version changed
+      if (cached.contractVersion !== contractVersion) {
+        console.log(`🔄 Contract version changed from ${cached.contractVersion} to ${contractVersion}, invalidating cache`);
+        return false;
+      }
+
+      // Check if deployment_version changed
+      if (cached.deploymentVersion !== deploymentVersion) {
+        console.log(`🔄 Deployment version changed from ${cached.deploymentVersion} to ${deploymentVersion}, invalidating cache`);
+        return false;
+      }
+
+      // Check if PUBLIC_CONTRACT_VERSION changed
+      if (cached.publicVersion !== currentPublicVersion) {
+        console.log(`🔄 Public contract version changed from ${cached.publicVersion} to ${currentPublicVersion}, invalidating cache`);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error validating cached versions:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Ensure session versions are loaded (fetch once per session)
+   */
+  private async ensureSessionVersions(): Promise<void> {
+    if (!this.sessionVersions) {
+      try {
+        const { contractVersion, deploymentVersion } = await this.fetchContractVersions();
+        this.sessionVersions = {
+          contractVersion,
+          deploymentVersion,
+          publicVersion: CONTRACT_CONFIG.version
+        };
+      } catch (error) {
+        console.error('Failed to fetch session versions:', error);
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Update cache versions to current contract and public versions
+   */
+  private async updateCacheVersion(): Promise<void> {
+    await this.ensureSessionVersions();
+    if (this.sessionVersions) {
+      this.cache.versions = { ...this.sessionVersions };
+    }
   }
 
   /**
@@ -306,7 +425,6 @@ export class ContractDataCache {
         data: paylines,
         timestamp: Date.now()
       };
-      this.updateCacheVersion();
       this.saveToStorage();
 
       return paylines;
@@ -351,7 +469,6 @@ export class ContractDataCache {
         ...reelData,
         timestamp: Date.now()
       };
-      this.updateCacheVersion();
       this.saveToStorage();
 
       console.log('✅ Fetched and cached reel data:', {
@@ -403,7 +520,6 @@ export class ContractDataCache {
         symbol: symbol,
         count: count
       };
-      this.updateCacheVersion();
       this.saveToStorage();
 
       return multiplier;
@@ -438,6 +554,9 @@ export class ContractDataCache {
     console.log('🚀 Pre-loading contract data...');
     
     try {
+      // Update cache versions once at the beginning
+      await this.updateCacheVersion();
+      
       // Pre-load paylines and reel data in parallel
       await Promise.all([
         this.getPaylines(address),
@@ -506,7 +625,6 @@ export class ContractDataCache {
       
       // Cache the result
       this.cache.odds = odds;
-      this.updateCacheVersion();
       this.saveToStorage();
 
       return odds;
@@ -566,7 +684,8 @@ export class ContractDataCache {
    * Clear all cached data
    */
   clearCache(): void {
-    this.cache = { paylines: null, multipliers: {}, reelData: null, odds: null, version: null };
+    this.cache = { paylines: null, multipliers: {}, reelData: null, odds: null, versions: null };
+    this.sessionVersions = null; // Clear session versions too
     if (typeof window !== 'undefined') {
       localStorage.removeItem(this.CACHE_KEY);
     }
@@ -593,8 +712,10 @@ export class ContractDataCache {
     multipliersCached: number; 
     oddsCached: boolean;
     cacheSize: string;
-    cacheVersion: string | null;
-    contractVersion: string;
+    cachedContractVersion: number | null;
+    cachedDeploymentVersion: number | null;
+    cachedPublicVersion: string | null;
+    currentPublicVersion: string;
     cacheDuration: number;
   } {
     const stats = {
@@ -605,8 +726,10 @@ export class ContractDataCache {
       cacheSize: typeof window !== 'undefined' 
         ? `${(new Blob([JSON.stringify(this.cache)]).size / 1024).toFixed(2)} KB`
         : '0 KB',
-      cacheVersion: this.cache.version,
-      contractVersion: CONTRACT_CONFIG.version,
+      cachedContractVersion: this.cache.versions?.contractVersion || null,
+      cachedDeploymentVersion: this.cache.versions?.deploymentVersion || null,
+      cachedPublicVersion: this.cache.versions?.publicVersion || null,
+      currentPublicVersion: CONTRACT_CONFIG.version,
       cacheDuration: this.CACHE_DURATION
     };
     
