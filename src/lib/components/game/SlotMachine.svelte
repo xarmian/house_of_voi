@@ -64,6 +64,8 @@
   let winAmount = 0;
   let winLevel: 'small' | 'medium' | 'large' | 'jackpot' = 'small';
   let winningSymbols: SlotSymbol[] = [];
+  let celebrationGridOutcome: string[][] | null = null;
+  let celebrationSelectedPaylines: number = 1;
   
   // Loss feedback state
   let showLossFeedback = false;
@@ -417,7 +419,9 @@
         // Use actual winnings from blockchain
         triggerWinCelebration({
           amount: spin.winnings,
-          level: winLevel
+          level: winLevel,
+          gridOutcome: spin.outcome,
+          selectedPaylines: spin.selectedPaylines || $bettingStore.selectedPaylines
         }, spin.id);
       } else {
         // Show loss feedback immediately (but only once per spin and not on initial mount)
@@ -504,7 +508,99 @@
     return symbols;
   }
 
-  function triggerWinCelebration(win: { amount: number; level: 'small' | 'medium' | 'large' | 'jackpot' }, spinId?: string) {
+  function generateTestWinData(level: 'small' | 'medium' | 'large' | 'jackpot') {
+    // Use all 20 paylines so detection can find wins on any of them
+    const selectedPaylines = 20;
+    
+    // Use standard payline patterns (all 20 paylines)
+    const standardPaylines = [
+      [1, 1, 1, 1, 1], // 0: Middle row
+      [0, 0, 0, 0, 0], // 1: Top row
+      [2, 2, 2, 2, 2], // 2: Bottom row
+      [0, 1, 2, 1, 0], // 3: V shape
+      [2, 1, 0, 1, 2], // 4: ^ shape
+      [0, 0, 1, 2, 2], // 5: Diagonal down
+      [2, 2, 1, 0, 0], // 6: Diagonal up
+      [1, 0, 1, 2, 1], // 7: Zigzag
+      [1, 2, 1, 0, 1], // 8: Zigzag reverse
+      [0, 1, 0, 1, 0], // 9: Up-down pattern
+      [2, 1, 2, 1, 2], // 10: Down-up pattern
+      [0, 1, 1, 1, 0], // 11: Inverted V
+      [2, 1, 1, 1, 2], // 12: W shape
+      [1, 0, 0, 0, 1], // 13: U shape
+      [1, 2, 2, 2, 1], // 14: Inverted U
+      [0, 0, 1, 0, 0], // 15: Top dip
+      [2, 2, 1, 2, 2], // 16: Bottom dip
+      [1, 0, 2, 0, 1], // 17: Diamond
+      [1, 2, 0, 2, 1], // 18: Inverted diamond
+      [0, 2, 1, 0, 2], // 19: Scattered
+    ];
+    
+    // Randomly select 3 paylines from all 20 available paylines - all 3 will be winning
+    const winningPaylineIndices = [];
+    while (winningPaylineIndices.length < 3) {
+      const randomIndex = Math.floor(Math.random() * 20);
+      if (!winningPaylineIndices.includes(randomIndex)) {
+        winningPaylineIndices.push(randomIndex);
+      }
+    }
+    
+    // Generate base grid with random symbols
+    const symbols = ['A', 'B', 'C', 'D'];
+    const gridOutcome: string[][] = [];
+    
+    // Initialize 5x3 grid (5 reels, 3 rows each)
+    for (let col = 0; col < 5; col++) {
+      gridOutcome[col] = [];
+      for (let row = 0; row < 3; row++) {
+        gridOutcome[col][row] = symbols[Math.floor(Math.random() * symbols.length)];
+      }
+    }
+    
+    // Place unique winning symbols on ONLY the 3 selected paylines
+    winningPaylineIndices.forEach((paylineIndex, winIndex) => {
+      const payline = standardPaylines[paylineIndex];
+      
+      // Use different symbols for each winning payline to avoid cross-contamination
+      const symbolOptions = ['A', 'B', 'C', 'D'];
+      const winningSymbol = symbolOptions[winIndex]; // Different symbol for each winning line
+      
+      // Place winning symbols on this specific payline only
+      const winCount = 3; // Always use exactly 3 symbols to be safe
+      for (let i = 0; i < winCount; i++) {
+        const col = i;
+        const row = payline[col];
+        gridOutcome[col][row] = winningSymbol;
+      }
+      
+    });
+    
+    // Calculate win amounts based on level
+    const baseAmounts = {
+      small: 5000000,     // 5 VOI
+      medium: 25000000,   // 25 VOI
+      large: 75000000,    // 75 VOI
+      jackpot: 150000000  // 150 VOI
+    };
+    
+    // Add some randomness to the amount
+    const baseAmount = baseAmounts[level];
+    const amount = baseAmount + Math.floor(Math.random() * baseAmount * 0.5);
+    
+    return {
+      amount,
+      level,
+      gridOutcome,
+      selectedPaylines
+    };
+  }
+
+  function triggerWinCelebration(win: { 
+    amount: number; 
+    level: 'small' | 'medium' | 'large' | 'jackpot'; 
+    gridOutcome?: string[][];
+    selectedPaylines?: number;
+  }, spinId?: string) {
     // Clear any existing celebration timeout to prevent conflicts
     if (celebrationTimeout) {
       clearTimeout(celebrationTimeout);
@@ -524,6 +620,11 @@
     winAmount = win.amount;
     winLevel = win.level;
     winningSymbols = generateWinningSymbols(win.level);
+    celebrationGridOutcome = win.gridOutcome || null;
+    
+    // Store the selectedPaylines from win data (for both real spins and tests)
+    celebrationSelectedPaylines = win.selectedPaylines || $bettingStore.selectedPaylines;
+    
     showWinCelebration = true;
     
     // Auto-hide celebration after duration
@@ -703,7 +804,9 @@
             
             triggerWinCelebration({
               amount: replayData.winnings,
-              level: winLevel
+              level: winLevel,
+              gridOutcome: replayData.outcome,
+              selectedPaylines: replayData.spin.selectedPaylines || $bettingStore.selectedPaylines
             }, replayAnimationId);
           } else {
             triggerLossFeedback({
@@ -888,8 +991,11 @@
   <WinCelebration 
     bind:isVisible={showWinCelebration}
     {winAmount}
+    betAmount={$bettingStore.betPerLine * $bettingStore.selectedPaylines}
     {winLevel}
     {winningSymbols}
+    gridOutcome={celebrationGridOutcome}
+    selectedPaylines={celebrationSelectedPaylines}
   />
 
   <!-- Development Test Controls -->
@@ -899,25 +1005,49 @@
       <div class="flex flex-col gap-2">
         <button 
           class="status-success px-3 py-1 rounded text-xs"
-          on:click={() => triggerWinCelebration({ amount: 5000000, level: 'small' }, 'test-small')}
+          on:click={() => {
+            const testData = generateTestWinData('small');
+            // Update game grid to show the test outcome
+            gameStore.completeSpin('test-small', testData.gridOutcome);
+            // Show celebration with test data
+            triggerWinCelebration(testData, 'test-small');
+          }}
         >
           Small Win
         </button>
         <button 
           class="btn-primary px-3 py-1 rounded text-xs"
-          on:click={() => triggerWinCelebration({ amount: 25000000, level: 'medium' }, 'test-medium')}
+          on:click={() => {
+            const testData = generateTestWinData('medium');
+            // Update game grid to show the test outcome
+            gameStore.completeSpin('test-medium', testData.gridOutcome);
+            // Show celebration with test data
+            triggerWinCelebration(testData, 'test-medium');
+          }}
         >
           Medium Win
         </button>
         <button 
           class="bg-surface-secondary hover:bg-surface-hover text-theme font-medium rounded-lg transition-colors duration-200 px-3 py-1 text-xs"
-          on:click={() => triggerWinCelebration({ amount: 75000000, level: 'large' }, 'test-large')}
+          on:click={() => {
+            const testData = generateTestWinData('large');
+            // Update game grid to show the test outcome
+            gameStore.completeSpin('test-large', testData.gridOutcome);
+            // Show celebration with test data
+            triggerWinCelebration(testData, 'test-large');
+          }}
         >
           Large Win
         </button>
         <button 
           class="status-warning px-3 py-1 rounded text-xs"
-          on:click={() => triggerWinCelebration({ amount: 150000000, level: 'jackpot' }, 'test-jackpot')}
+          on:click={() => {
+            const testData = generateTestWinData('jackpot');
+            // Update game grid to show the test outcome
+            gameStore.completeSpin('test-jackpot', testData.gridOutcome);
+            // Show celebration with test data
+            triggerWinCelebration(testData, 'test-jackpot');
+          }}
         >
           Jackpot
         </button>
