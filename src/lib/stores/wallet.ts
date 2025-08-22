@@ -416,6 +416,39 @@ function createWalletStore() {
       });
     },
 
+    async changePassword(newPassword: string) {
+      if (!browser) return;
+      
+      let currentAccount: WalletAccount | null = null;
+      
+      update(state => {
+        currentAccount = state.account;
+        return { ...state, isLoading: true, error: null };
+      });
+      
+      try {
+        if (!currentAccount) {
+          throw new Error('No wallet account available');
+        }
+        
+        // Re-encrypt wallet with new password
+        await walletService.changeWalletPassword(currentAccount, newPassword);
+        
+        update(state => ({
+          ...state,
+          isLoading: false,
+          error: null
+        }));
+      } catch (error) {
+        update(state => ({
+          ...state,
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Failed to change password'
+        }));
+        throw error;
+      }
+    },
+
     // Balance change event management - delegated to balanceManager
     onBalanceChange(listener: (event: BalanceChangeEventDetail) => void): () => void {
       return balanceManager.onBalanceChange(listener);

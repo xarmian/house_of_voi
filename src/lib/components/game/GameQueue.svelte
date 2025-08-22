@@ -3,6 +3,7 @@
   import { fly, fade } from 'svelte/transition';
   import { Clock, RefreshCw, TrendingUp, TrendingDown, X, Check, AlertCircle, Loader, Info } from 'lucide-svelte';
   import { queueStore, queueStats, pendingSpins, readyToClaim, recentSpins } from '$lib/stores/queue';
+  import { currentSpinId } from '$lib/stores/game';
   import { formatVOI } from '$lib/constants/betting';
   import { SpinStatus } from '$lib/types/queue';
   import type { QueuedSpin } from '$lib/types/queue';
@@ -338,6 +339,7 @@
         <div 
           class="spin-item"
           class:spin-item-clickable={spin.status === SpinStatus.COMPLETED && spin.outcome}
+          class:spin-item-current={$currentSpinId === spin.id}
           title={spin.status === SpinStatus.COMPLETED && spin.outcome ? "Click to replay this spin" : ""}
           on:click={() => {
             if (spin.status === SpinStatus.COMPLETED && spin.outcome) {
@@ -747,6 +749,22 @@
   .spin-item-clickable:hover {
     border-left-color: rgba(16, 185, 129, 0.5);
     transform: translateX(2px);
+  }
+
+  .spin-item-current {
+    @apply bg-voi-900/30 border-l-4 border-l-voi-500;
+    position: relative;
+    animation: currentSpinPulse 2s ease-in-out infinite;
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+  }
+
+  @keyframes currentSpinPulse {
+    0%, 100% {
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 30px rgba(16, 185, 129, 0.5);
+    }
   }
 
   .status-icon {

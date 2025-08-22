@@ -370,6 +370,16 @@ export class WalletService {
     }
   }
 
+  /**
+   * Change wallet password by re-encrypting with new password
+   */
+  async changeWalletPassword(account: WalletAccount, newPassword: string): Promise<void> {
+    if (!browser) return;
+    
+    // Simply re-store the wallet with the new password
+    await this.storeWallet(account, newPassword);
+  }
+
 }
 
 export const walletService = new WalletService();

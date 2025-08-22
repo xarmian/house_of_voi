@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { walletStore } from '$lib/stores/wallet';
-  import { Send, Download, Upload, RotateCcw, X, AlertTriangle, Settings } from 'lucide-svelte';
+  import { Send, Download, Upload, RotateCcw, X, AlertTriangle, Settings, Key } from 'lucide-svelte';
   import ExportWalletModal from './ExportWalletModal.svelte';
   import ImportWalletModal from './ImportWalletModal.svelte';
   import TransferTokensModal from './TransferTokensModal.svelte';
@@ -11,9 +11,15 @@
   let showExportWallet = false;
   let showImportWallet = false;
   let showTransferTokens = false;
+  let showChangePassword = false;
   let showResetConfirmation = false;
   let resetConfirmationText = '';
   let isResetting = false;
+  let isChangingPassword = false;
+  let newPassword = '';
+  let confirmPassword = '';
+  let showPassword = false;
+  let passwordChangeError = '';
   
   function closeModal() {
     dispatch('close');
@@ -35,6 +41,10 @@
   
   function openTransferTokens() {
     showTransferTokens = true;
+  }
+  
+  function openChangePassword() {
+    showChangePassword = true;
   }
   
   function openResetConfirmation() {
@@ -62,6 +72,41 @@
   function handleWalletImported() {
     showImportWallet = false;
     dispatch('walletChanged');
+  }
+  
+  async function handlePasswordChange() {
+    passwordChangeError = '';
+    
+    if (newPassword !== confirmPassword) {
+      passwordChangeError = 'Passwords do not match';
+      return;
+    }
+    
+    if (newPassword.trim() !== '' && newPassword.length < 4) {
+      passwordChangeError = 'Password must be at least 4 characters or empty for no password';
+      return;
+    }
+    
+    isChangingPassword = true;
+    try {
+      await walletStore.changePassword(newPassword);
+      showChangePassword = false;
+      newPassword = '';
+      confirmPassword = '';
+      passwordChangeError = '';
+    } catch (error) {
+      console.error('Failed to change password:', error);
+      passwordChangeError = error instanceof Error ? error.message : 'Failed to change password';
+    } finally {
+      isChangingPassword = false;
+    }
+  }
+  
+  function cancelPasswordChange() {
+    showChangePassword = false;
+    newPassword = '';
+    confirmPassword = '';
+    passwordChangeError = '';
   }
   
   $: canReset = resetConfirmationText === 'RESET MY WALLET' && !isResetting;
@@ -93,7 +138,7 @@
     <!-- Content -->
     <div class="p-6 space-y-4">
       
-      {#if !showResetConfirmation}
+      {#if !showResetConfirmation && !showChangePassword}
         <!-- Transfer Tokens -->
         <button
           on:click={openTransferTokens}
@@ -142,6 +187,22 @@
           </div>
         </button>
         
+        <!-- Change Password -->
+        <button
+          on:click={openChangePassword}
+          class="w-full p-4 bg-slate-800/50 hover:bg-slate-700/50 rounded-lg transition-colors text-left"
+        >
+          <div class="flex items-center gap-3">
+            <div class="p-2 bg-orange-600 rounded-lg">
+              <Key class="w-5 h-5 text-theme" />
+            </div>
+            <div>
+              <h3 class="font-medium text-theme">Change Password</h3>
+              <p class="text-sm text-gray-400">Update your wallet password or remove it</p>
+            </div>
+          </div>
+        </button>
+        
         <!-- Reset to New Wallet -->
         <button
           on:click={openResetConfirmation}
@@ -158,7 +219,7 @@
           </div>
         </button>
         
-      {:else}
+      {:else if showResetConfirmation}
         <!-- Reset Confirmation -->
         <div class="space-y-4">
           <div class="p-4 bg-red-900/30 border border-red-700 rounded-lg">
@@ -216,6 +277,106 @@
             </button>
           </div>
         </div>
+        
+      {:else if showChangePassword}
+        <!-- Change Password Form -->
+        <div class="space-y-4">
+          <div class="p-4 bg-orange-900/20 border border-orange-500/30 rounded-lg">
+            <h3 class="font-semibold text-orange-400 mb-2">Change Wallet Password</h3>
+            <p class="text-orange-300 text-sm">
+              Enter a new password to secure your wallet, or leave empty to remove password protection.
+            </p>
+          </div>
+          
+          {#if passwordChangeError}
+            <div class="p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
+              <p class="text-red-400 text-sm">{passwordChangeError}</p>
+            </div>
+          {/if}
+          
+          <div class="space-y-4">
+            <div class="space-y-2">
+              <label for="new-password" class="block text-sm font-medium text-gray-300">
+                New Password <span class="text-gray-500">(leave empty for no password)</span>
+              </label>
+              <div class="relative">
+                <input
+                  id="new-password"
+                  type={showPassword ? 'text' : 'password'}
+                  bind:value={newPassword}
+                  disabled={isChangingPassword}
+                  placeholder="Enter new password or leave empty"
+                  class="w-full input-field pr-10"
+                  autocomplete="new-password"
+                />
+                <button
+                  type="button"
+                  on:click={() => showPassword = !showPassword}
+                  disabled={isChangingPassword}
+                  class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300 disabled:opacity-50"
+                >
+                  {#if showPassword}
+                    👁️
+                  {:else}
+                    🔒
+                  {/if}
+                </button>
+              </div>
+            </div>
+            
+            <div class="space-y-2">
+              <label for="confirm-new-password" class="block text-sm font-medium text-gray-300">
+                Confirm New Password
+              </label>
+              <input
+                id="confirm-new-password"
+                type={showPassword ? 'text' : 'password'}
+                bind:value={confirmPassword}
+                disabled={isChangingPassword}
+                placeholder={newPassword.trim() === '' ? "Leave empty to confirm no password" : "Confirm your new password"}
+                class="w-full input-field"
+                autocomplete="new-password"
+              />
+            </div>
+          </div>
+          
+          <!-- Security warning -->
+          {#if newPassword.trim() === ''}
+            <div class="p-3 bg-amber-900/20 border border-amber-500/30 rounded-lg">
+              <p class="text-amber-400 text-sm font-medium mb-1">⚠️ No Password Security</p>
+              <p class="text-amber-300 text-xs">
+                Your wallet will be stored with minimal encryption. Anyone with access to your device can access your funds.
+              </p>
+            </div>
+          {:else}
+            <div class="p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+              <p class="text-blue-400 text-sm">
+                💡 Your wallet will be encrypted with this password. You'll need it every time you access your wallet.
+              </p>
+            </div>
+          {/if}
+          
+          <div class="flex gap-3">
+            <button
+              on:click={cancelPasswordChange}
+              class="flex-1 btn-secondary"
+              disabled={isChangingPassword}
+            >
+              Cancel
+            </button>
+            <button
+              on:click={handlePasswordChange}
+              class="flex-1 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-600/50 text-theme py-2 px-4 rounded-lg transition-colors duration-200 font-medium"
+              disabled={isChangingPassword || newPassword !== confirmPassword}
+            >
+              {#if isChangingPassword}
+                <div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto"></div>
+              {:else}
+                Change Password
+              {/if}
+            </button>
+          </div>
+        </div>
       {/if}
     </div>
   </div>
@@ -240,6 +401,7 @@
     on:close={() => showTransferTokens = false}
   />
 {/if}
+
 
 <style>
   .btn-secondary {
