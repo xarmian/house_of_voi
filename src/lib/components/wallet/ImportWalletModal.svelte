@@ -22,11 +22,6 @@
       return;
     }
     
-    if (password.length < 4) {
-      importError = 'Password must be at least 4 characters';
-      return;
-    }
-    
     isImporting = true;
     importError = '';
     
@@ -60,7 +55,7 @@
   }
   
   $: isValidMnemonic = validateMnemonic(mnemonic);
-  $: canImport = isValidMnemonic && acknowledged && password && password === confirmPassword && !isImporting;
+  $: canImport = isValidMnemonic && acknowledged && password === confirmPassword && !isImporting;
 </script>
 
 <!-- Modal Overlay -->

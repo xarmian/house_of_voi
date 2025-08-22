@@ -34,10 +34,6 @@
       error = 'Passwords do not match';
       return;
     }
-    if (password.trim() !== '' && password.length < 4) {
-      error = 'Password must be at least 4 characters or empty for no password';
-      return;
-    }
     if (!mnemonic.trim()) {
       error = 'Please enter your recovery phrase';
       return;
@@ -359,7 +355,7 @@
           <button
             type="button"
             on:click={handleImportWallet}
-            disabled={isLoading || !password || !confirmPassword || !mnemonic.trim()}
+            disabled={isLoading || password !== confirmPassword || !mnemonic.trim()}
             class="px-4 py-2 bg-green-600 hover:bg-green-700 text-theme rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
           >
             {#if isLoading}
