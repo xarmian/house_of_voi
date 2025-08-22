@@ -95,6 +95,11 @@
   // Track if we're in replay mode to prevent queue auto-start
   let isReplayMode = false;
   
+  // Payline overlay visibility with auto-fade
+  let showPaylineOverlay = false;
+  let paylineTimeout: NodeJS.Timeout | null = null;
+  let lastSelectedPaylines = $bettingStore.selectedPaylines;
+  
   // GLOBAL deduplication to prevent multiple SlotMachine instances from processing same replay
   const GLOBAL_PROCESSED_REPLAYS = globalThis.GLOBAL_PROCESSED_REPLAYS || (globalThis.GLOBAL_PROCESSED_REPLAYS = new Set<string>());
 
@@ -105,6 +110,33 @@
   // Loading state
   $: currentLoadingState = $loadingStates[0]; // Get the first loading state
   $: isLoading = $loadingStates.length > 0;
+  
+  // Reactive statement to handle payline changes
+  $: {
+    if ($bettingStore.selectedPaylines !== lastSelectedPaylines) {
+      const previousPaylines = lastSelectedPaylines;
+      lastSelectedPaylines = $bettingStore.selectedPaylines;
+      
+      // Clear existing timeout
+      if (paylineTimeout) {
+        clearTimeout(paylineTimeout);
+        paylineTimeout = null;
+      }
+      
+      // Show paylines if more than 1, OR if dropping from 2+ to 1 (to show the single payline)
+      if ($bettingStore.selectedPaylines > 1 || (previousPaylines > 1 && $bettingStore.selectedPaylines === 1)) {
+        showPaylineOverlay = true;
+        
+        // Set timeout to fade out after 3 seconds
+        paylineTimeout = setTimeout(() => {
+          showPaylineOverlay = false;
+          paylineTimeout = null;
+        }, 3000);
+      } else {
+        showPaylineOverlay = false;
+      }
+    }
+  }
   
   onMount(() => {
     // Use setTimeout to avoid reactive update conflicts
@@ -149,6 +181,7 @@
     if (spinningInterval) clearInterval(spinningInterval);
     if (celebrationTimeout) clearTimeout(celebrationTimeout);
     if (lossFeedbackTimeout) clearTimeout(lossFeedbackTimeout);
+    if (paylineTimeout) clearTimeout(paylineTimeout);
     // Clear all replay timeouts
     replayTimeouts.forEach(timeout => clearTimeout(timeout));
     replayTimeouts = [];
@@ -873,11 +906,35 @@
               <!-- Reel Grid -->
               <ReelGrid bind:this={desktopReelGrid} grid={$currentGrid} isSpinning={$isSpinning} />
               
-              <!-- Payline Overlay -->
-              <PaylineOverlay 
-                showPaylines={$bettingStore.selectedPaylines > 1}
-                activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
-              />
+              <!-- Always visible payline numbers -->
+              <div class="payline-numbers">
+                {#if $bettingStore.selectedPaylines > 1}
+                  <svg class="payline-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    {#each Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i) as index}
+                      <text
+                        x="2"
+                        y={5 + (index * 3)}
+                        fill="#10b981"
+                        font-size="2.5"
+                        font-weight="bold"
+                        class="payline-number"
+                      >
+                        {index + 1}
+                      </text>
+                    {/each}
+                  </svg>
+                {/if}
+              </div>
+              
+              <!-- Fading payline paths overlay -->
+              {#if showPaylineOverlay}
+                <div transition:fade={{ duration: 500 }}>
+                  <PaylineOverlay 
+                    showPaylines={true}
+                    activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
+                  />
+                </div>
+              {/if}
             </div>
           </div>
         </div>
@@ -916,11 +973,35 @@
                 <!-- Reel Grid -->
                 <ReelGrid bind:this={mobileReelGrid1} grid={$currentGrid} isSpinning={$isSpinning} />
                 
-                <!-- Payline Overlay -->
-                <PaylineOverlay 
-                  showPaylines={$bettingStore.selectedPaylines > 1}
-                  activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
-                />
+                <!-- Always visible payline numbers -->
+                <div class="payline-numbers">
+                  {#if $bettingStore.selectedPaylines > 1}
+                    <svg class="payline-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+                      {#each Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i) as index}
+                        <text
+                          x="2"
+                          y={5 + (index * 3)}
+                          fill="#10b981"
+                          font-size="2.5"
+                          font-weight="bold"
+                          class="payline-number"
+                        >
+                          {index + 1}
+                        </text>
+                      {/each}
+                    </svg>
+                  {/if}
+                </div>
+                
+                <!-- Fading payline paths overlay -->
+                {#if showPaylineOverlay}
+                  <div transition:fade={{ duration: 500 }}>
+                    <PaylineOverlay 
+                      showPaylines={true}
+                      activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
+                    />
+                  </div>
+                {/if}
               </div>
             </div>
           </div>
@@ -967,11 +1048,35 @@
                   <!-- Reel Grid -->
                   <ReelGrid bind:this={mobileReelGrid2} grid={$currentGrid} isSpinning={$isSpinning} />
                   
-                  <!-- Payline Overlay -->
-                  <PaylineOverlay 
-                    showPaylines={$bettingStore.selectedPaylines > 1}
-                    activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
-                  />
+                  <!-- Always visible payline numbers -->
+                  <div class="payline-numbers">
+                    {#if $bettingStore.selectedPaylines > 1}
+                      <svg class="payline-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        {#each Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i) as index}
+                          <text
+                            x="2"
+                            y={5 + (index * 3)}
+                            fill="#10b981"
+                            font-size="2.5"
+                            font-weight="bold"
+                            class="payline-number"
+                          >
+                            {index + 1}
+                          </text>
+                        {/each}
+                      </svg>
+                    {/if}
+                  </div>
+                  
+                  <!-- Fading payline paths overlay -->
+                  {#if showPaylineOverlay}
+                    <div transition:fade={{ duration: 500 }}>
+                      <PaylineOverlay 
+                        showPaylines={true}
+                        activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
+                      />
+                    </div>
+                  {/if}
                 </div>
               </div>
             </div>
@@ -1263,6 +1368,23 @@
       opacity: 0.8;
       transform: scale(1.02);
     }
+  }
+
+  /* Payline numbers styling */
+  .payline-numbers {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 6;
+  }
+  
+  .payline-numbers .payline-svg {
+    width: 100%;
+    height: 100%;
+  }
+  
+  .payline-numbers .payline-number {
+    text-shadow: 0 0 2px currentColor;
   }
 
   /* Responsive adjustments for mobile */
