@@ -363,7 +363,7 @@ function createWalletStore() {
         
         // Clear existing wallet first
         walletService.clearWallet();
-        stopBalanceRefresh();
+        stopBalanceMonitoring();
         
         // Store the imported wallet with password
         await walletService.storeWallet(account, password);
