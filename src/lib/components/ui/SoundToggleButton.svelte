@@ -106,12 +106,6 @@
     {:else}
       <VolumeX class={compact ? 'w-4 h-4' : 'w-5 h-5'} />
     {/if}
-    
-    {#if !compact}
-      <span class="button-text">
-        {isEnabled ? 'Sound On' : 'Sound Off'}
-      </span>
-    {/if}
   </button>
 
   <!-- Volume slider (appears on hover/click) -->

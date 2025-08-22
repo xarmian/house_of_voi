@@ -8,6 +8,7 @@
   import GameQueue from '$lib/components/game/GameQueue.svelte';
   import GameHeader from '$lib/components/game/GameHeader.svelte';
   import SoundSettingsIcon from '$lib/components/ui/SoundSettingsIcon.svelte';
+  import VoiRadioPlayer from '$lib/components/app/VoiRadioPlayer.svelte';
   
   // Import odds test utility for development
   import '$lib/utils/testOddsWithRealData';
@@ -93,4 +94,7 @@
       </div>
     </div>
   </div>
+  
+  <!-- VOI Radio Player - Fixed position, visible on all layouts -->
+  <VoiRadioPlayer />
 </main>

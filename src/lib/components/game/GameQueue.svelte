@@ -17,6 +17,10 @@
   let showSpinDetailsModal = false;
   let selectedSpin: QueuedSpin | null = null;
   
+  // Track which spin is being replayed
+  let replayingSpinId: string | null = null;
+  let replayTimeout: NodeJS.Timeout | null = null;
+  
   onMount(() => {
     // Auto-refresh disabled - the queue processor handles all updates
     // Removed empty interval that was wasting CPU cycles
@@ -24,7 +28,19 @@
   
   onDestroy(() => {
     // Cleanup not needed anymore
+    if (replayTimeout) {
+      clearTimeout(replayTimeout);
+    }
   });
+  
+  // Clear replaying spin when a new current spin appears
+  $: if ($currentSpinId && replayingSpinId && $currentSpinId !== replayingSpinId) {
+    replayingSpinId = null;
+    if (replayTimeout) {
+      clearTimeout(replayTimeout);
+      replayTimeout = null;
+    }
+  }
   
   function getStatusIcon(status: SpinStatus) {
     switch (status) {
@@ -178,6 +194,20 @@
     playButtonClick().catch(() => {
       // Ignore sound errors
     });
+    
+    // Clear any existing replay timeout
+    if (replayTimeout) {
+      clearTimeout(replayTimeout);
+    }
+    
+    // Set this as the replaying spin
+    replayingSpinId = spin.id;
+    
+    // Clear the replaying spin after 5 seconds
+    replayTimeout = setTimeout(() => {
+      replayingSpinId = null;
+      replayTimeout = null;
+    }, 5000);
     
     // Dispatch custom event to parent component with replay data
     const event = new CustomEvent('replay-spin', {
@@ -339,7 +369,7 @@
         <div 
           class="spin-item"
           class:spin-item-clickable={spin.status === SpinStatus.COMPLETED && spin.outcome}
-          class:spin-item-current={$currentSpinId === spin.id}
+          class:spin-item-current={$currentSpinId === spin.id || replayingSpinId === spin.id}
           title={spin.status === SpinStatus.COMPLETED && spin.outcome ? "Click to replay this spin" : ""}
           on:click={() => {
             if (spin.status === SpinStatus.COMPLETED && spin.outcome) {
