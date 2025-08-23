@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { fly, fade } from 'svelte/transition';
-  import { Clock, RefreshCw, TrendingUp, TrendingDown, X, Check, AlertCircle, Loader, Info } from 'lucide-svelte';
-  import { queueStore, queueStats, pendingSpins, readyToClaim, recentSpins } from '$lib/stores/queue';
+  import { Clock, RefreshCw, TrendingUp, TrendingDown, X, Check, Loader, Info } from 'lucide-svelte';
+  import { queueStore, queueStats, pendingSpins, recentSpins } from '$lib/stores/queue';
   import { currentSpinId } from '$lib/stores/game';
   import { formatVOI } from '$lib/constants/betting';
   import { SpinStatus } from '$lib/types/queue';
@@ -20,6 +20,9 @@
   // Track which spin is being replayed
   let replayingSpinId: string | null = null;
   let replayTimeout: NodeJS.Timeout | null = null;
+  
+  // Track spins that have been shown as "Completed" to prevent reverting to "Submitting"
+  let completedSpins = new Set<string>();
   
   onMount(() => {
     // Auto-refresh disabled - the queue processor handles all updates
@@ -42,84 +45,86 @@
     }
   }
   
-  function getStatusIcon(status: SpinStatus) {
+  function getStatusIcon(status: SpinStatus, spin?: QueuedSpin) {
+    // If this spin was previously completed, keep showing checkmark
+    if (spin && completedSpins.has(spin.id)) {
+      return Check;
+    }
+    
     switch (status) {
       case SpinStatus.PENDING:
-        return Clock;
       case SpinStatus.SUBMITTING:
       case SpinStatus.WAITING:
       case SpinStatus.PROCESSING:
         return Loader;
       case SpinStatus.READY_TO_CLAIM:
-        return AlertCircle;
       case SpinStatus.CLAIMING:
-        return Check; // Same icon as completed
       case SpinStatus.COMPLETED:
         return Check;
       case SpinStatus.FAILED:
       case SpinStatus.EXPIRED:
         return X;
       default:
-        return Clock;
+        return Loader;
     }
   }
   
   function getStatusColor(status: SpinStatus, spin?: QueuedSpin): string {
+    // If this spin was previously completed, keep showing green
+    if (spin && completedSpins.has(spin.id)) {
+      return 'text-green-400';
+    }
+    
     switch (status) {
       case SpinStatus.PENDING:
-        return 'text-gray-400';
       case SpinStatus.SUBMITTING:
       case SpinStatus.WAITING:
       case SpinStatus.PROCESSING:
         return 'text-blue-400';
       case SpinStatus.READY_TO_CLAIM:
-        if (spin && (spin.claimRetryCount || 0) >= 3) {
-          return 'text-purple-400'; // Different color for manual claim required
-        }
-        return 'text-yellow-400';
       case SpinStatus.CLAIMING:
-        // Always show as completed (green) - claiming is silent
-        return 'text-green-400';
       case SpinStatus.COMPLETED:
         return 'text-green-400';
       case SpinStatus.FAILED:
       case SpinStatus.EXPIRED:
         return 'text-red-400';
       default:
-        return 'text-gray-400';
+        return 'text-blue-400';
     }
   }
   
   function getStatusText(status: SpinStatus, spin?: QueuedSpin): string {
+    // Defensive logic: once a spin has been shown as "Completed", never revert to "Submitting"
+    if (spin && (
+      status === SpinStatus.READY_TO_CLAIM || 
+      status === SpinStatus.CLAIMING || 
+      status === SpinStatus.COMPLETED
+    )) {
+      completedSpins.add(spin.id);
+      return 'Completed';
+    }
+    
+    // If this spin was previously completed, keep showing "Completed"
+    if (spin && completedSpins.has(spin.id)) {
+      return 'Completed';
+    }
+    
     switch (status) {
       case SpinStatus.PENDING:
-        return 'Queued';
       case SpinStatus.SUBMITTING:
-        return 'Submitting...';
+        return 'Submitting';
       case SpinStatus.WAITING:
-        return 'Confirming...';
       case SpinStatus.PROCESSING:
-        return 'Processing...';
+        return 'Confirming';
       case SpinStatus.READY_TO_CLAIM:
-        if (spin && (spin.claimRetryCount || 0) >= 3) {
-          return 'Manual Claim Required';
-        }
-        // For losing spins, show "Processing..." instead of "Ready to Claim"
-        if (spin && typeof spin.winnings === 'number' && spin.winnings === 0) {
-          return 'Processing...';
-        }
-        return 'Ready to Claim';
       case SpinStatus.CLAIMING:
-        // Always show completed - claim failures are usually bots claiming first (which is good!)
-        return 'Completed';
       case SpinStatus.COMPLETED:
         return 'Completed';
       case SpinStatus.FAILED:
-        return 'Failed';
       case SpinStatus.EXPIRED:
-        return 'Expired';
+        return 'Failed';
       default:
-        return status;
+        return 'Submitting';
     }
   }
   
@@ -134,58 +139,6 @@
     return new Date(timestamp).toLocaleDateString();
   }
   
-  
-  async function handleClaimSpin(spin: QueuedSpin) {
-    console.log('🎯 Manual claim triggered for spin:', spin.id);
-    
-    // Play button click sound for claim
-    playButtonClick().catch(() => {
-      // Ignore sound errors
-    });
-    
-    // Let the blockchain service handle status updates - don't manually set CLAIMING here
-    
-    try {
-      // Import and use the queue processor to submit claim
-      const { queueProcessor } = await import('$lib/services/queueProcessor');
-      await queueProcessor.submitClaim(spin);
-    } catch (error) {
-      console.error('❌ Manual claim failed:', error);
-      // Revert status back to ready to claim
-      queueStore.updateSpin({
-        id: spin.id,
-        status: SpinStatus.READY_TO_CLAIM,
-        data: {
-          error: `Claim failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-        }
-      });
-    }
-  }
-
-  async function handleRetryClaim(spin: QueuedSpin) {
-    console.log('🔄 Retrying claim for spin:', spin.id);
-    
-    // Play button click sound for retry claim
-    playButtonClick().catch(() => {
-      // Ignore sound errors
-    });
-    
-    // Clear the error and reset claim retry state, then immediately claim again
-    queueStore.updateSpin({
-      id: spin.id,
-      status: SpinStatus.READY_TO_CLAIM,
-      data: {
-        error: undefined,
-        claimRetryCount: 0,
-        lastClaimRetry: undefined
-      }
-    });
-    
-    // Wait a moment, then trigger claim again
-    setTimeout(() => {
-      handleClaimSpin(spin);
-    }, 100);
-  }
 
   function handleReplaySpin(spin: QueuedSpin) {
     console.log('🎮 Replaying spin:', spin.id);
@@ -260,7 +213,17 @@
     });
     
     // Convert back to array and sort by timestamp
-    return Array.from(spinMap.values()).sort((a, b) => b.timestamp - a.timestamp);
+    const spins = Array.from(spinMap.values()).sort((a, b) => b.timestamp - a.timestamp);
+    
+    // Cleanup completedSpins Set to prevent memory leaks
+    const currentSpinIds = new Set(spins.map(s => s.id));
+    completedSpins.forEach(id => {
+      if (!currentSpinIds.has(id)) {
+        completedSpins.delete(id);
+      }
+    });
+    
+    return spins;
   })();
   $: displaySpins = selectedTab === 'recent' ? allRecentSpins : [];
   
@@ -268,11 +231,6 @@
   $: largestWin = Math.max(0, ...$queueStats.totalSpins > 0 ? allRecentSpins.filter(s => s.winnings).map(s => s.winnings!) : [0]);
   $: totalWins = allRecentSpins.filter(s => s.winnings && s.winnings > 0).length;
   $: winRate = $queueStats.totalSpins > 0 ? (totalWins / $queueStats.totalSpins) * 100 : 0;
-  
-  // Filter ready to claim spins to only include winning spins (winnings > 0)
-  $: readyToClaimWinners = $readyToClaim.filter(spin => 
-    typeof spin.winnings === 'number' && spin.winnings > 0
-  );
 </script>
 
 <div class="game-queue card">
@@ -343,23 +301,6 @@
     </button>
   </div>
   
-  <!-- Ready to Claim Banner - Only show for winning spins -->
-  {#if readyToClaimWinners.length > 0}
-    <div class="claim-banner" in:fly={{ y: -20, duration: 300 }}>
-      <div class="flex items-center gap-2">
-        <AlertCircle class="w-4 h-4 text-yellow-400" />
-        <span class="text-sm font-medium text-theme">
-          {readyToClaimWinners.length} winning spin{readyToClaimWinners.length > 1 ? 's' : ''} ready to claim
-        </span>
-      </div>
-      <button
-        on:click={() => readyToClaimWinners.forEach(spin => handleClaimSpin(spin))}
-        class="claim-all-button"
-      >
-        Claim Winnings
-      </button>
-    </div>
-  {/if}
   
   <!-- Content -->
   {#if selectedTab === 'recent'}
@@ -368,11 +309,11 @@
       {#each displaySpins as spin (spin.id)}
         <div 
           class="spin-item"
-          class:spin-item-clickable={spin.status === SpinStatus.COMPLETED && spin.outcome}
+          class:spin-item-clickable={[SpinStatus.READY_TO_CLAIM, SpinStatus.CLAIMING, SpinStatus.COMPLETED].includes(spin.status) && spin.outcome}
           class:spin-item-current={$currentSpinId === spin.id || replayingSpinId === spin.id}
-          title={spin.status === SpinStatus.COMPLETED && spin.outcome ? "Click to replay this spin" : ""}
+          title={[SpinStatus.READY_TO_CLAIM, SpinStatus.CLAIMING, SpinStatus.COMPLETED].includes(spin.status) && spin.outcome ? "Click to replay this spin" : ""}
           on:click={() => {
-            if (spin.status === SpinStatus.COMPLETED && spin.outcome) {
+            if ([SpinStatus.READY_TO_CLAIM, SpinStatus.CLAIMING, SpinStatus.COMPLETED].includes(spin.status) && spin.outcome) {
               handleReplaySpin(spin);
             }
           }}
@@ -380,11 +321,11 @@
           out:fade={{ duration: 150 }}
         >
           <!-- Status Icon -->
-          <div class="status-icon {getStatusColor(spin.status)}">
-            {#if [SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(spin.status)}
-              <svelte:component this={getStatusIcon(spin.status)} class="w-4 h-4 animate-spin" />
+          <div class="status-icon {getStatusColor(spin.status, spin)}">
+            {#if [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(spin.status) && !completedSpins.has(spin.id)}
+              <svelte:component this={getStatusIcon(spin.status, spin)} class="w-4 h-4 animate-spin" />
             {:else}
-              <svelte:component this={getStatusIcon(spin.status)} class="w-4 h-4" />
+              <svelte:component this={getStatusIcon(spin.status, spin)} class="w-4 h-4" />
             {/if}
           </div>
 
@@ -409,19 +350,13 @@
             
             <div class="status-text {getStatusColor(spin.status, spin)}">
               {getStatusText(spin.status, spin)}
-              {#if spin.status === SpinStatus.READY_TO_CLAIM && (spin.claimRetryCount || 0) >= 3}
-                <span class="retry-info">• Auto-claim failed {spin.claimRetryCount} times</span>
-              {/if}
-              {#if spin.error && spin.status === SpinStatus.READY_TO_CLAIM && !spin.isAutoClaimInProgress}
-                <span class="error-text">• {spin.error}</span>
-              {/if}
             </div>
           </div>
           
           <!-- Result / Actions -->
           <div class="spin-result">
-            {#if spin.status === SpinStatus.COMPLETED && typeof spin.winnings === 'number'}
-              <!-- Show final winnings for completed spins -->
+            {#if (spin.status === SpinStatus.READY_TO_CLAIM || spin.status === SpinStatus.CLAIMING || spin.status === SpinStatus.COMPLETED) && typeof spin.winnings === 'number'}
+              <!-- Show win/loss amount for completed spins -->
               {#if spin.winnings > 0}
                 <div class="win-amount text-green-400">
                   +{formatVOI(spin.winnings)} VOI
@@ -431,50 +366,6 @@
                   Loss
                 </div>
               {/if}
-            {:else if (spin.status === SpinStatus.READY_TO_CLAIM || spin.status === SpinStatus.CLAIMING || spin.status === SpinStatus.COMPLETED) && typeof spin.winnings === 'number'}
-              <!-- Show win/loss amount immediately when outcome is known -->
-              <div class="result-display">
-                {#if spin.winnings > 0}
-                  <div class="win-amount text-green-400">
-                    +{formatVOI(spin.winnings)} VOI
-                  </div>
-                {:else}
-                  <div class="loss-amount text-red-400">
-                    Loss
-                  </div>
-                {/if}
-                {#if spin.status === SpinStatus.READY_TO_CLAIM && !spin.isAutoClaimInProgress && spin.winnings > 0}
-                  <!-- Only show claim button for winning spins -->
-                  <button
-                    on:click={() => handleClaimSpin(spin)}
-                    class="claim-button"
-                    style="margin-top: 0.25rem;"
-                  >
-                    Claim
-                  </button>
-                {:else if spin.status === SpinStatus.READY_TO_CLAIM && spin.isAutoClaimInProgress && spin.winnings > 0}
-                  <!-- Remove auto-claiming message - claiming happens silently -->
-                {:else if spin.status === SpinStatus.READY_TO_CLAIM && spin.winnings === 0}
-                  <!-- For losing spins, show processing status -->
-                  <div class="text-xs text-blue-400 font-medium" style="margin-top: 0.25rem;">
-                  </div>
-                {/if}
-              </div>
-            {:else if spin.status === SpinStatus.READY_TO_CLAIM && !spin.isAutoClaimInProgress}
-              <!-- Only show claim button if we don't know the winnings yet, or if it's a winning spin -->
-              {#if typeof spin.winnings !== 'number' || spin.winnings > 0}
-                <button
-                  on:click={() => handleClaimSpin(spin)}
-                  class="claim-button"
-                >
-                  Claim
-                </button>
-              {:else}
-                <div class="text-xs text-blue-400 font-medium">
-                </div>
-              {/if}
-            {:else if spin.status === SpinStatus.READY_TO_CLAIM && spin.isAutoClaimInProgress}
-              <!-- Remove auto-claiming message - claiming happens silently -->
             {:else if [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(spin.status)}
               <!-- Show processing indicator for active spins -->
               <div class="processing-indicator">
@@ -725,13 +616,6 @@
     @apply text-theme bg-surface-hover border-b-2 border-theme-primary;
   }
   
-  .claim-banner {
-    @apply flex items-center justify-between p-3 bg-yellow-900/20 border-b border-yellow-700/50;
-  }
-  
-  .claim-all-button {
-    @apply bg-yellow-600 hover:bg-yellow-700 text-theme text-xs font-semibold px-3 py-1 rounded-md transition-colors;
-  }
   
   .spin-list {
     @apply overflow-y-auto;
@@ -797,13 +681,6 @@
     @apply text-sm font-medium;
   }
   
-  .error-text {
-    @apply text-red-400 text-xs;
-  }
-  
-  .retry-info {
-    @apply text-purple-400 text-xs;
-  }
   
   .spin-result {
     @apply flex-shrink-0 text-right;
@@ -817,9 +694,6 @@
     @apply text-sm font-semibold;
   }
   
-  .claim-button {
-    @apply bg-yellow-600 hover:bg-yellow-700 text-theme text-xs font-semibold px-3 py-1 rounded-md transition-colors;
-  }
   
   .retry-button {
     @apply bg-surface-secondary hover:bg-surface-hover text-theme font-medium rounded-lg transition-colors duration-200 text-xs px-3 py-1;
