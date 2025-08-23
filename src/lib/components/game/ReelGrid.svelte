@@ -18,6 +18,8 @@
     calculateSymbolPositions
   } from '$lib/utils/reelPhysics';
   import { initializeAnimations } from '$lib/utils/animations';
+  import { getDeterministicReelSymbol, getSymbol } from '$lib/constants/symbols';
+  import { contractDataCache } from '$lib/services/contractDataCache';
   import SymbolComponent from './Symbol.svelte';
   
   export let grid: SlotSymbol[][];
@@ -33,49 +35,28 @@
   // Extended reel data for seamless scrolling
   let extendedReels: SlotSymbol[][] = [];
   const VISIBLE_SYMBOLS = 3;
-  const EXTENDED_SYMBOLS = 30; // More symbols for smooth scrolling (increased buffer)
+  const EXTENDED_SYMBOLS = 100; // Use ALL contract symbols - this was the issue!
+  
+  // Contract reel data - the TRUE layout from blockchain
+  let contractReelData: string = '';
+  let contractReels: string[][] = []; // 5 reels, each with 100 symbols
   
   // Subscribe to animation stores (removed reactive reelStates to prevent conflicts with physics)
   $: preferences = $animationPreferences;
   $: reduceMotion = $shouldReduceAnimations;
   $: theme = $currentTheme;
   
-  // Initialize extended reels only when grid changes (prevent recreation during spinning)
-  $: if (!currentlySpinning) {
-    extendedReels = grid.map(reel => {
-      // Ensure we have a valid reel with symbols
-      if (!reel || reel.length === 0) {
-        console.warn('Empty or invalid reel detected, using fallback');
-        return [];
-      }
-      
-      // Create extended reel with buffer symbols for seamless wrapping
+  // Initialize extended reels using ALL contract symbols (1:1 mapping)
+  // Only rebuild when we don't have extended reels yet, not on every spin end
+  $: if (!currentlySpinning && contractReels.length > 0 && extendedReels.length === 0) {
+    extendedReels = contractReels.map((contractReel, reelIndex) => {
       const extended: SlotSymbol[] = [];
       
-      // Add buffer at the start (last few symbols from original reel)
-      const bufferStart = 5;
-      for (let i = 0; i < bufferStart; i++) {
-        const symbol = reel[reel.length - bufferStart + i];
-        if (symbol) {
-          extended.push(symbol);
-        }
-      }
-      
-      // Add main symbols (repeat the original reel multiple times)
-      for (let i = 0; i < EXTENDED_SYMBOLS - bufferStart * 2; i++) {
-        const symbol = reel[i % reel.length];
-        if (symbol) {
-          extended.push(symbol);
-        }
-      }
-      
-      // Add buffer at the end (first few symbols from original reel)
-      const bufferEnd = 5;
-      for (let i = 0; i < bufferEnd; i++) {
-        const symbol = reel[i % reel.length];
-        if (symbol) {
-          extended.push(symbol);
-        }
+      // Use ALL 100 contract symbols directly - no truncation!
+      for (let i = 0; i < contractReel.length; i++) {
+        const symbolChar = contractReel[i];
+        const symbol = getSymbol(symbolChar); // Convert character to SlotSymbol
+        extended.push(symbol);
       }
       
       return extended;
@@ -85,6 +66,32 @@
   // Track spinning state to avoid multiple triggers
   let currentlySpinning = false;
   let processingSpinId: string | null = null;
+  
+  // Function to fetch and parse real reel data from contract
+  async function fetchContractReelData() {
+    try {
+      // For contractDataCache, we need a placeholder address
+      const placeholderAddress = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+      const reelData = await contractDataCache.getReelData(placeholderAddress);
+      
+      contractReelData = reelData.reelData;
+      
+      // Parse 500-character string into 5 reels of 100 symbols each
+      contractReels = [];
+      for (let reelIndex = 0; reelIndex < 5; reelIndex++) {
+        const startPos = reelIndex * 100;
+        const endPos = startPos + 100;
+        const reelSymbols = contractReelData.slice(startPos, endPos).split('');
+        contractReels.push(reelSymbols);
+      }
+      
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to fetch contract reel data:', error);
+      return false;
+    }
+  }
   
   // COMPLETELY REMOVE REACTIVE STATEMENTS - Use direct function calls instead
   let lastProcessedSpinId: string | null = null;
@@ -99,16 +106,70 @@
     lastProcessedSpinId = spinId;
     currentlySpinning = true;
     
-    // Calculate target positions within safe zone (avoiding buffer areas)
-    const bufferSymbols = 5;
+    // SAFETY FIX: Calculate target positions within safe zone with better bounds
+    const bufferSymbols = 5; // Match original buffer size to prevent gaps
     const safeZoneSymbols = EXTENDED_SYMBOLS - bufferSymbols * 2;
-    const targetPositions = Array(5).fill(0).map(() => 
-      (bufferSymbols + Math.floor(Math.random() * safeZoneSymbols)) * 100
-    );
+    const minPosition = bufferSymbols * 100;
+    const maxPosition = (EXTENDED_SYMBOLS - bufferSymbols) * 100;
+    
+    const targetPositions = Array(5).fill(0).map(() => {
+      const randomPosition = minPosition + Math.floor(Math.random() * safeZoneSymbols) * 100;
+      // Ensure position is within absolute bounds
+      return Math.max(minPosition, Math.min(randomPosition, maxPosition));
+    });
     
     physicsEngine.startSpin(targetPositions);
   }
   
+  export function startQuickDeceleration(finalGrid?: string[][]) {
+    if (!finalGrid) return;
+    
+    physicsEngine?.stopAllReels();
+    
+    // Calculate target positions
+    const targetPositions = finalGrid.map((outcomeReel, reelIndex) => {
+      const contractReel = contractReels[reelIndex];
+      if (!contractReel) return 0;
+      
+      for (let pos = 0; pos < contractReel.length - 2; pos++) {
+        if (contractReel[pos] === outcomeReel[0] && 
+            contractReel[pos + 1] === outcomeReel[1] && 
+            contractReel[pos + 2] === outcomeReel[2]) {
+          return pos * 102; // Convert symbol position to pixels (100px + 2px gap)
+        }
+      }
+      return 0;
+    });
+    
+    // Smooth CSS transition to final positions
+    reelElements.forEach((element, index) => {
+      if (element && reelContainers[index]) {
+        // Add smooth transition
+        element.style.transition = 'transform 0.8s ease-out';
+        
+        // Move to target position
+        const targetPos = targetPositions[index] || 0;
+        element.style.transform = `translate3d(0, ${-targetPos}px, 0)`;
+        
+        // Clear blur immediately to prevent lingering blur effect
+        reelContainers[index].style.filter = '';
+        reelContainers[index].style.perspective = '';
+      }
+    });
+    
+    // Set currentlySpinning = false after transition starts
+    setTimeout(() => {
+      currentlySpinning = false;
+      
+      // Remove transitions after animation completes
+      reelElements.forEach((element) => {
+        if (element) {
+          element.style.transition = '';
+        }
+      });
+    }, 100);
+  }
+
   export function stopSpin() {
     if (!physicsEngine || !currentlySpinning) return;
     
@@ -128,6 +189,20 @@
   export function setFinalPositions(finalGrid: string[][], spinId?: string) {
     if (!physicsEngine || !reelElements.length) return;
     
+    // PREVENT CLEANUP INTERFERENCE: Don't process cleanup calls that would show blanks
+    const isBlankGrid = finalGrid.every(reel => 
+      reel.every(symbol => symbol === '_')
+    );
+    
+    if (isBlankGrid && (spinId === 'cleanup' || spinId === 'cancel-previous' || spinId === 'force-stop')) {
+      return;
+    }
+    
+    // PREVENT DOUBLE POSITIONING: If startQuickDeceleration already handled this, skip
+    if (!isBlankGrid && spinId && !spinId.includes('replay')) {
+      return;
+    }
+    
     // DUPLICATE PROTECTION: Prevent repeated calls for same outcome
     if (spinId && lastProcessedOutcomeSpinId === spinId) {
       return;
@@ -136,16 +211,34 @@
     
     // COMPLETELY stop physics animation and any callbacks
     physicsEngine.stopAllReels();
-    currentlySpinning = false;
     
-    // Clear any visual effects and reset to default position
+    // CRITICAL: Don't set currentlySpinning = false yet - 
+    // this prevents reactive statements from interfering
+    
+    // Calculate correct positions based on finalGrid
+    const targetPositions = finalGrid.map((outcomeReel, reelIndex) => {
+      const contractReel = contractReels[reelIndex];
+      if (!contractReel) return 0;
+      
+      // Find the outcome sequence in contract reel
+      for (let pos = 0; pos < contractReel.length - 2; pos++) {
+        if (contractReel[pos] === outcomeReel[0] && 
+            contractReel[pos + 1] === outcomeReel[1] && 
+            contractReel[pos + 2] === outcomeReel[2]) {
+          return pos * 102; // Convert symbol position to pixels (100px + 2px gap)
+        }
+      }
+      return 0; // Fallback to start if not found
+    });
+    
+    
+    // Set reels to calculated positions
     reelElements.forEach((element, reelIndex) => {
       if (element && reelContainers[reelIndex]) {
-        // Reset to default position (0px) - let Svelte handle the symbol display
-        const transform = `translate3d(0, 0px, 0)`;
-        element.style.transform = transform;
+        const targetPos = targetPositions[reelIndex] || 0;
+        element.style.transform = `translate3d(0, ${-targetPos}px, 0)`;
         
-        // Clear all visual effects
+        // Clear visual effects
         reelContainers[reelIndex].style.filter = '';
         reelContainers[reelIndex].style.perspective = '';
         reelContainers[reelIndex].style.boxShadow = '';
@@ -156,8 +249,18 @@
       }
     });
     
-    // The grid prop should now contain the correct symbols from the game store
-    // Svelte will automatically re-render the correct symbols
+    // Set currentlySpinning = false immediately, then re-apply transforms after any interference
+    currentlySpinning = false;
+    
+    // Re-apply transforms after interference
+    setTimeout(() => {
+      reelElements.forEach((element, reelIndex) => {
+        if (element) {
+          const targetPos = targetPositions[reelIndex] || 0;
+          element.style.transform = `translate3d(0, ${-targetPos}px, 0)`;
+        }
+      });
+    }, 200);
   }
   
   // Removed complex visual update system - physics engine handles everything
@@ -184,25 +287,38 @@
     // Direct DOM updates only during active spinning
     states.forEach((state, index) => {
       if (reelElements[index] && state.isSpinning) {
-        const translateY = -state.currentPosition;
+        // SAFETY FIX: Validate position before applying transform to prevent visual glitches
+        const position = state.currentPosition;
+        const maxAllowedPosition = EXTENDED_SYMBOLS * 100; // Total reel height
+        const minAllowedPosition = -1000; // Allow some negative positioning
+        
+        // Clamp position to safe bounds to prevent extreme jumps
+        const safePosition = Math.max(minAllowedPosition, Math.min(position, maxAllowedPosition));
+        const translateY = -safePosition;
         const transform = `translate3d(0, ${translateY}px, 0)`;
         
         reelElements[index].style.transform = transform;
         
-        // Apply visual effects only during spinning
+        // Apply visual effects only during spinning with velocity-based blur
         if (reelContainers[index]) {
-          reelContainers[index].style.filter = `blur(${Math.min(Math.abs(state.velocity) / 500, 2)}px)`;
+          const blur = Math.min(Math.abs(state.velocity) / 500, 2);
+          reelContainers[index].style.filter = blur > 0.1 ? `blur(${blur}px)` : '';
+        }
+        
+        // Debug logging for position tracking (only for first reel to avoid spam)
+        if (index === 0 && state.easingPhase === 'outcome_deceleration') {
         }
       }
     });
   }
   
-  onMount(() => {
+  onMount(async () => {
     // Initialize animations system
     initializeAnimations();
-    // Don't start performance monitoring by default - it runs at 60fps continuously!
-    // Only enable during actual performance debugging
-    // startPerformanceOptimization();
+    
+    // Fetch real contract reel data FIRST
+    console.log('🔄 Fetching contract reel data...');
+    await fetchContractReelData();
     
     // Initialize unified physics-based animation system
     physicsEngine = new ReelPhysicsEngine(

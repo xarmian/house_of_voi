@@ -147,8 +147,12 @@ export const SLOT_SYMBOLS: Record<string, SlotSymbol> = {
 // Use the main symbols directly (no more placeholders needed)
 export const PLACEHOLDER_SYMBOLS: Record<string, SlotSymbol> = SLOT_SYMBOLS;
 
-// Get symbol by ID with fallback to random decorative symbol
+// Get symbol by ID with fallback to decorative symbol
 export function getSymbol(id: string): SlotSymbol {
+  // Handle underscore (blank) as a specific decorative symbol to avoid randomness
+  if (id === '_') {
+    return SLOT_SYMBOLS['x']; // Always map blank to 'x' for consistency
+  }
   return SLOT_SYMBOLS[id] || getRandomDecorativeSymbol();
 }
 

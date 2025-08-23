@@ -4,7 +4,7 @@ export interface ReelAnimationState {
   spinDirection: 'up' | 'down';
   blur: number;
   offset: number;
-  easingPhase: 'acceleration' | 'constant' | 'deceleration' | 'settling';
+  easingPhase: 'acceleration' | 'constant' | 'deceleration' | 'settling' | 'quick_deceleration' | 'slow_spin' | 'outcome_deceleration';
   // Physics properties for realistic spinning
   velocity: number;
   acceleration: number;

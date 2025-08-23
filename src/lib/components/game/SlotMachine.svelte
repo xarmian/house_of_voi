@@ -195,6 +195,19 @@
   function handleSpin(event: CustomEvent) {
     const { betPerLine, selectedPaylines, totalBet } = event.detail;
     
+    // CRITICAL: Cancel any active replay timers to prevent interference
+    if (replayTimeouts.length > 0) {
+      console.log(`🚫 Canceling ${replayTimeouts.length} replay timers for new real spin`);
+      replayTimeouts.forEach(timeout => clearTimeout(timeout));
+      replayTimeouts = [];
+      
+      // Also stop any replay mode
+      isReplayMode = false;
+      
+      // Force stop any lingering replay animations
+      callAllReelGrids('stopSpin');
+    }
+    
     // Mark that user has initiated a spin this session
     userSessionStarted = true;
     
@@ -416,58 +429,64 @@
       spinningInterval = null;
     }
     
-    // Stop the spinning loop sound with verification (same as replays)
-    const soundStopped = await soundService.forceStopWithVerification('spin-loop', 3);
-    if (!soundStopped) {
-      console.warn('Failed to stop spin-loop sound after normal spin');
-    }
+    // SMOOTH TRANSITION: Start quick deceleration to actual outcome
+    callAllReelGrids('startQuickDeceleration', spin.outcome);
     
-    // Play reel stop sound (only once, not from each ReelGrid)
-    setTimeout(() => {
-      playReelStop().catch(() => {
-        // Ignore sound errors
-      });
-    }, 100);
-    
-    // DIRECTLY stop ReelGrid physics animation and set final positions
-    callAllReelGrids('setFinalPositions', spin.outcome, spin.id);
-    
-    // Complete the spin with actual outcome
-    gameStore.completeSpin(spin.id, spin.outcome);
-    
-    // Only trigger celebrations if this is not the initial mount and we haven't already celebrated this spin
-    if (!isInitialMount && lastCelebratedSpinId !== spin.id) {
-      // Check if we have actual winnings from blockchain first
-      if (spin.winnings > 0) {
-        // Determine win level and play appropriate sound
-        const winLevel = spin.winnings >= 100000000 ? 'jackpot' : 
-                         spin.winnings >= 50000000 ? 'large' : 
-                         spin.winnings >= 20000000 ? 'medium' : 'small';
-        
-        // Play win sound
-        playWinSound(winLevel).catch(() => {
+    // Wait a moment for deceleration to take effect before stopping
+    setTimeout(async () => {
+      // Stop the spinning loop sound with verification
+      const soundStopped = await soundService.forceStopWithVerification('spin-loop', 3);
+      if (!soundStopped) {
+        console.warn('Failed to stop spin-loop sound after normal spin');
+      }
+      
+      // Play reel stop sound (only once, not from each ReelGrid)
+      setTimeout(() => {
+        playReelStop().catch(() => {
           // Ignore sound errors
         });
-        
-        // Use actual winnings from blockchain
-        triggerWinCelebration({
-          amount: spin.winnings,
-          level: winLevel,
-          gridOutcome: spin.outcome,
-          selectedPaylines: spin.selectedPaylines || $bettingStore.selectedPaylines
-        }, spin.id);
-      } else {
-        // Show loss feedback immediately (but only once per spin and not on initial mount)
-        if (lastLossFeedbackSpinId !== spin.id && !isInitialMount) {
-          // Play loss sound (subtle, non-abrasive)
-          playLoss().catch(() => {
+      }, 100);
+      
+      // DIRECTLY stop ReelGrid physics animation and set final positions
+      callAllReelGrids('setFinalPositions', spin.outcome, spin.id);
+      
+      // Complete the spin with actual outcome
+      gameStore.completeSpin(spin.id, spin.outcome);
+      
+      // Only trigger celebrations if this is not the initial mount and we haven't already celebrated this spin
+      if (!isInitialMount && lastCelebratedSpinId !== spin.id) {
+        // Check if we have actual winnings from blockchain first
+        if (spin.winnings > 0) {
+          // Determine win level and play appropriate sound
+          const winLevel = spin.winnings >= 100000000 ? 'jackpot' : 
+                           spin.winnings >= 50000000 ? 'large' : 
+                           spin.winnings >= 20000000 ? 'medium' : 'small';
+          
+          // Play win sound
+          playWinSound(winLevel).catch(() => {
             // Ignore sound errors
           });
           
-          triggerLossFeedback(spin);
+          // Use actual winnings from blockchain
+          triggerWinCelebration({
+            amount: spin.winnings,
+            level: winLevel,
+            gridOutcome: spin.outcome,
+            selectedPaylines: spin.selectedPaylines || $bettingStore.selectedPaylines
+          }, spin.id);
+        } else {
+          // Show loss feedback immediately (but only once per spin and not on initial mount)
+          if (lastLossFeedbackSpinId !== spin.id && !isInitialMount) {
+            // Play loss sound (subtle, non-abrasive)
+            playLoss().catch(() => {
+              // Ignore sound errors
+            });
+            
+            triggerLossFeedback(spin);
+          }
         }
       }
-    }
+    }, 1500); // Wait longer for smooth deceleration to outcome
   }
   
   function checkForWins(outcome: string[][]) {

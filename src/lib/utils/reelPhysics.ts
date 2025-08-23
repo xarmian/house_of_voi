@@ -2,9 +2,9 @@ import type { ReelAnimationState, ReelPhysicsConfig } from '$lib/types/animation
 
 // Default physics configuration for realistic slot machine feel
 export const DEFAULT_REEL_PHYSICS: ReelPhysicsConfig = {
-  acceleration: 2500,        // px/s²
-  maxVelocity: [2500, 3000, 3500, 2800, 3200], // px/s - varied speeds for each reel
-  deceleration: 1800,       // px/s²
+  acceleration: 1250,        // px/s² (reduced by half)
+  maxVelocity: [1250, 1500, 1750, 1400, 1600], // px/s - varied speeds for each reel (reduced by half)
+  deceleration: 900,        // px/s² (reduced by half)
   friction: 0.95,           // velocity dampening per frame
   bounceAmplitude: 8,       // px
   bounceFrequency: 4,       // Hz
@@ -15,7 +15,7 @@ export const DEFAULT_REEL_PHYSICS: ReelPhysicsConfig = {
 // Symbol height in pixels (used for position calculations)
 const SYMBOL_HEIGHT = 100;
 const VISIBLE_SYMBOLS = 3;
-const TOTAL_SYMBOLS = 30; // Extended reel for seamless scrolling (increased buffer)
+const TOTAL_SYMBOLS = 100; // Match contract reel length - this was the issue!
 
 export class ReelPhysicsEngine {
   private config: ReelPhysicsConfig;
@@ -96,8 +96,35 @@ export class ReelPhysicsEngine {
     state.acceleration = this.config.acceleration;
     state.targetPosition = targetPosition;
     state.velocity = 0; // Start from rest
+    
+    // CRITICAL FIX: Reset spin direction for each new spin to prevent direction/velocity mismatches
+    state.spinDirection = this.getSpinDirection(reelIndex);
+    
     // Reset current position to create continuous spin
     state.currentPosition = state.currentPosition % (SYMBOL_HEIGHT * TOTAL_SYMBOLS);
+  }
+
+  // Quick deceleration to specific target positions (outcome)
+  startQuickDeceleration(targetPositions: number[]) {
+    console.log('🎯 Physics: Starting deceleration to targets:', targetPositions);
+    
+    // Don't shutdown - keep animation running but start decelerating to targets
+    this.reelStates.forEach((state, index) => {
+      if (state.isSpinning && index < targetPositions.length) {
+        const targetPos = targetPositions[index];
+        console.log(`🎯 Reel ${index}: Current=${state.currentPosition.toFixed(0)}px → Target=${targetPos}px (distance=${Math.abs(targetPos - state.currentPosition).toFixed(0)}px)`);
+        
+        state.easingPhase = 'outcome_deceleration';
+        state.targetPosition = targetPos;
+        
+        // Calculate initial deceleration based on distance to target
+        const distanceToTarget = Math.abs(state.targetPosition - state.currentPosition);
+        const direction = state.spinDirection === 'up' ? -1 : 1;
+        
+        // Start with aggressive deceleration, will be adjusted dynamically
+        state.acceleration = -this.config.deceleration * 2 * direction;
+      }
+    });
   }
 
   // Stop all reels completely
@@ -189,35 +216,85 @@ export class ReelPhysicsEngine {
         break;
 
       case 'constant':
-        // Maintain constant velocity
+        // Maintain constant velocity for continuous spinning
         state.velocity = state.maxVelocity * direction;
         
-        // Calculate distance to target
-        const distanceToTarget = Math.abs(state.targetPosition - state.currentPosition);
-        const stoppingDistance = (state.velocity * state.velocity) / (2 * this.config.deceleration);
-        
-        // Start deceleration when close to target
-        if (distanceToTarget <= stoppingDistance + SYMBOL_HEIGHT * 2) {
-          state.easingPhase = 'deceleration';
-          state.acceleration = -this.config.deceleration * direction;
-        }
+        // NOTE: No automatic deceleration - reels spin continuously until stopAllReels() is called
+        // This prevents premature stopping and allows for indefinite spinning while waiting for outcomes
         break;
 
       case 'deceleration':
-        // Decelerate towards target
-        state.velocity += state.acceleration * deltaTime * direction;
+        // CRITICAL FIX: Prevent natural deceleration during continuous spinning
+        // Reset back to constant velocity if we accidentally entered deceleration
+        state.easingPhase = 'constant';
+        state.velocity = state.maxVelocity * direction;
+        state.acceleration = 0;
+        break;
+
+      case 'quick_deceleration':
+        // Quick deceleration before outcome display
+        state.velocity += state.acceleration * deltaTime;
         
-        // Apply friction for more realistic slowdown
-        state.velocity *= state.friction;
+        // Apply friction for smoother slowdown
+        state.velocity *= 0.98;
         
-        // Check if close enough to target to start settling
-        const nearTarget = Math.abs(state.targetPosition - state.currentPosition) < SYMBOL_HEIGHT / 2;
-        const slowEnough = Math.abs(state.velocity) < 50;
-        
-        if (nearTarget && slowEnough) {
-          state.easingPhase = 'settling';
-          state.velocity = 0;
+        // Stop decelerating when we reach a slow speed (don't fully stop)
+        const targetSlowSpeed = state.maxVelocity * 0.15; // 15% of max speed
+        if (Math.abs(state.velocity) <= targetSlowSpeed) {
+          state.velocity = targetSlowSpeed * direction;
+          state.acceleration = 0;
+          state.easingPhase = 'slow_spin'; // New phase for slow spinning
         }
+        break;
+
+      case 'outcome_deceleration':
+        // SYMBOL-BASED APPROACH: Work with absolute symbol positions (0-99)
+        const currentSymbolPos = Math.floor(state.currentPosition / SYMBOL_HEIGHT) % TOTAL_SYMBOLS;
+        const targetSymbolPos = Math.floor(state.targetPosition / SYMBOL_HEIGHT) % TOTAL_SYMBOLS;
+        
+        // Calculate shortest symbol distance (wrapping around the 100-symbol reel)
+        let symbolDistance = targetSymbolPos - currentSymbolPos;
+        if (symbolDistance > TOTAL_SYMBOLS / 2) {
+          symbolDistance -= TOTAL_SYMBOLS; // Wrap backward
+        } else if (symbolDistance < -TOTAL_SYMBOLS / 2) {
+          symbolDistance += TOTAL_SYMBOLS; // Wrap forward  
+        }
+        
+        console.log(`🎯 Reel ${this.reelStates.indexOf(state)}: currentSymbol=${currentSymbolPos}, targetSymbol=${targetSymbolPos}, symbolDistance=${symbolDistance}`);
+        
+        // If at the right symbol position, snap to exact pixel target
+        if (symbolDistance === 0) {
+          console.log(`📍 Reel ${this.reelStates.indexOf(state)}: REACHED target symbol, snapping to exact position`);
+          state.currentPosition = state.targetPosition;
+          state.velocity = 0;
+          state.easingPhase = 'settling';
+          break;
+        }
+        
+        // Move toward target symbol at appropriate speed
+        const symbolDirection = symbolDistance > 0 ? 1 : -1;
+        const symbolsAway = Math.abs(symbolDistance);
+        
+        // Speed: faster when many symbols away, slower when close
+        let targetVelocity;
+        if (symbolsAway > 10) {
+          targetVelocity = 300 * symbolDirection; // Fast when far
+        } else if (symbolsAway > 3) {
+          targetVelocity = 150 * symbolDirection; // Medium when close
+        } else {
+          targetVelocity = 75 * symbolDirection;  // Slow when very close
+        }
+        
+        // Smoothly adjust to target velocity
+        state.velocity = state.velocity * 0.7 + targetVelocity * 0.3;
+        
+        console.log(`⚡ Reel ${this.reelStates.indexOf(state)}: symbolsAway=${symbolsAway}, velocity=${state.velocity.toFixed(0)} (target=${targetVelocity})`);
+        break;
+
+      case 'slow_spin':
+        // Maintain slow spinning until outcome is displayed
+        const maintainSlowSpeed = state.maxVelocity * 0.15;
+        state.velocity = maintainSlowSpeed * direction;
         break;
 
       case 'settling':
@@ -234,6 +311,9 @@ export class ReelPhysicsEngine {
           state.isSpinning = false;
           state.blur = 0;
           state.offset = 0;
+          const reelIndex = this.reelStates.indexOf(state);
+          console.log(`✅ Reel ${reelIndex} settled at final position: ${state.targetPosition}px`);
+          console.log(`📺 Reel ${reelIndex} viewport positions: [${state.targetPosition/100}, ${state.targetPosition/100 + 1}, ${state.targetPosition/100 + 2}]`);
         }
         break;
     }
@@ -242,15 +322,19 @@ export class ReelPhysicsEngine {
     if (state.easingPhase !== 'settling') {
       state.currentPosition += state.velocity * deltaTime;
       
-      // Wrap position for infinite scrolling with buffer consideration
-      const bufferSymbols = 5; // Match buffer size from ReelGrid.svelte
-      const wrapLowerBound = SYMBOL_HEIGHT * bufferSymbols;
-      const wrapUpperBound = SYMBOL_HEIGHT * (TOTAL_SYMBOLS - bufferSymbols);
+      // AGGRESSIVE WRAPPING: Wrap early and often to prevent any visible gaps
+      const bufferSymbols = 5; // Match ReelGrid buffer  
+      const visibleHeight = VISIBLE_SYMBOLS * SYMBOL_HEIGHT; // 300px viewport
       
-      if (state.currentPosition < wrapLowerBound) {
-        state.currentPosition += SYMBOL_HEIGHT * (TOTAL_SYMBOLS - bufferSymbols * 2);
+      // Wrap much more aggressively - start wrapping while still well within buffer zone
+      const wrapLowerBound = SYMBOL_HEIGHT * bufferSymbols; // 500px - wrap when we're still in buffer
+      const wrapUpperBound = SYMBOL_HEIGHT * (TOTAL_SYMBOLS - bufferSymbols); // 2500px - wrap before hitting end buffer
+      
+      // Immediate wrapping with smaller jump to maintain continuity
+      if (state.currentPosition <= wrapLowerBound) {
+        state.currentPosition += SYMBOL_HEIGHT * (TOTAL_SYMBOLS - bufferSymbols * 2); // +2000px jump
       } else if (state.currentPosition >= wrapUpperBound) {
-        state.currentPosition -= SYMBOL_HEIGHT * (TOTAL_SYMBOLS - bufferSymbols * 2);
+        state.currentPosition -= SYMBOL_HEIGHT * (TOTAL_SYMBOLS - bufferSymbols * 2); // -2000px jump
       }
     }
 

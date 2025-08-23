@@ -26,6 +26,13 @@ export class BlockchainService {
   private claimingBets = new Set<string>(); // Track ongoing claims by betKey
 
   /**
+   * Sleep for a specified number of milliseconds
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
    * Submit a spin to the blockchain
    */
   async submitSpin(spin: QueuedSpin): Promise<void> {
@@ -137,18 +144,38 @@ export class BlockchainService {
     }
 
     try {
-      // First check if the bet still exists
+      // First check if the bet still exists - with retry logic for "Bet not found" errors
       let betExists = true;
-      try {
-        await algorandService.getBetInfo(spin.betKey);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (errorMessage.includes('Bet not found') || 
-            errorMessage.includes('box not found') ||
-            errorMessage.includes('status 404')) {
-          betExists = false;
-        } else {
-          throw error; // Re-throw if it's a different error
+      let betInfo = null;
+      
+      const maxRetries = 3;
+      let attempt = 0;
+      
+      while (attempt < maxRetries && betInfo === null) {
+        try {
+          betInfo = await algorandService.getBetInfo(spin.betKey);
+          betExists = true;
+          break;
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          
+          if (errorMessage.includes('Bet not found') || 
+              errorMessage.includes('box not found') ||
+              errorMessage.includes('status 404')) {
+            
+            attempt++;
+            
+            if (attempt < maxRetries) {
+              console.log(`🔄 Bet not found (attempt ${attempt}/${maxRetries}), retrying in 2 seconds...`);
+              await this.sleep(2000); // Wait 2 seconds before retry
+            } else {
+              console.log(`❌ Bet not found after ${maxRetries} attempts, treating as non-existent`);
+              betExists = false;
+            }
+          } else {
+            // Re-throw if it's a different error (not "Bet not found")
+            throw error;
+          }
         }
       }
       
@@ -358,13 +385,16 @@ export class BlockchainService {
         return; // Early return to avoid the error handling below
       }
       
-      // If this was a manual retry (claimRetryCount was reset), don't revert to READY_TO_CLAIM
-      // Instead, keep as CLAIMING with error so user can retry again
-      const isManualRetry = (spin.claimRetryCount || 0) === 0;
+      // For auto-claims, don't update the spin state here - let queueProcessor handle it
+      // But still re-throw the error so queueProcessor knows it failed
+      if (isAutoClaim) {
+        throw error;
+      }
       
+      // For manual claims, update the state with error
       queueStore.updateSpin({
         id: spin.id,
-        status: isManualRetry ? SpinStatus.CLAIMING : SpinStatus.READY_TO_CLAIM,
+        status: SpinStatus.CLAIMING,
         data: {
           error: errorMessage,
           isAutoClaimInProgress: undefined

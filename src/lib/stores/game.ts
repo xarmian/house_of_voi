@@ -96,9 +96,17 @@ function createGameStore() {
           return state;
         }
 
-        const newVisibleGrid = finalSymbols.map(reel => 
-          reel.map(symbolId => getSymbol(symbolId))
+        console.log('🎯 Game Store: Setting final grid from outcome:', finalSymbols);
+        const newVisibleGrid = finalSymbols.map((reel, reelIndex) => 
+          reel.map((symbolId, symbolIndex) => {
+            const symbol = getSymbol(symbolId);
+            if (reelIndex === 0 && symbolIndex === 0) {
+              console.log(`🔄 Symbol mapping example: '${symbolId}' → '${symbol.id}' (${symbol.displayName})`);
+            }
+            return symbol;
+          })
         );
+        console.log('🎯 Game Store: Final visible grid symbols:', newVisibleGrid.map(reel => reel.map(s => s.id)));
 
         // Completing spin animation
         return {

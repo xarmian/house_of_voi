@@ -233,7 +233,10 @@ export class QueueProcessor {
           id: spin.id,
           status: SpinStatus.READY_TO_CLAIM,
           data: {
-            isAutoClaimInProgress: undefined
+            isAutoClaimInProgress: undefined,
+            // KEEP the retry tracking fields that were just set
+            claimRetryCount: claimRetryCount + 1,
+            lastClaimRetry: currentTime
           }
         });
       }
