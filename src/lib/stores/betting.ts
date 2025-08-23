@@ -282,6 +282,82 @@ function createBettingStore() {
       });
     },
 
+    // Increase bet per line
+    increaseBetPerLine() {
+      update(state => {
+        const increment = 1_000_000; // 1 VOI
+        const newAmount = Math.min(state.betPerLine + increment, BETTING_CONSTANTS.MAX_BET_PER_LINE);
+        
+        let currentBalance = 0;
+        const unsubscribe = walletBalance.subscribe(balance => {
+          currentBalance = balance;
+        });
+        unsubscribe();
+
+        const validation = validateBet(newAmount, state.selectedPaylines, currentBalance);
+        const totalBet = newAmount * state.selectedPaylines;
+        
+        return {
+          ...state,
+          betPerLine: newAmount,
+          selectedPaylines: state.selectedPaylines,
+          totalBet,
+          isValidBet: validation.isValid,
+          errors: validation.errors
+        };
+      });
+    },
+
+    // Decrease bet per line
+    decreaseBetPerLine() {
+      update(state => {
+        const decrement = 1_000_000; // 1 VOI
+        const newAmount = Math.max(state.betPerLine - decrement, BETTING_CONSTANTS.MIN_BET_PER_LINE);
+        
+        let currentBalance = 0;
+        const unsubscribe = walletBalance.subscribe(balance => {
+          currentBalance = balance;
+        });
+        unsubscribe();
+
+        const validation = validateBet(newAmount, state.selectedPaylines, currentBalance);
+        const totalBet = newAmount * state.selectedPaylines;
+        
+        return {
+          ...state,
+          betPerLine: newAmount,
+          selectedPaylines: state.selectedPaylines,
+          totalBet,
+          isValidBet: validation.isValid,
+          errors: validation.errors
+        };
+      });
+    },
+
+    // Set paylines to maximum
+    setMaxPaylines() {
+      let currentBalance = 0;
+      const unsubscribe = walletBalance.subscribe(balance => {
+        currentBalance = balance;
+      });
+      unsubscribe();
+
+      update(state => {
+        const maxCount = BETTING_CONSTANTS.MAX_PAYLINES;
+        const validation = validateBet(state.betPerLine, maxCount, currentBalance);
+        const totalBet = state.betPerLine * maxCount;
+        
+        return {
+          ...state,
+          betPerLine: state.betPerLine,
+          selectedPaylines: maxCount,
+          totalBet,
+          isValidBet: validation.isValid,
+          errors: validation.errors
+        };
+      });
+    },
+
     // Set quick bet amount
     setQuickBet(voiAmount: number) {
       const microVOI = voiAmount * 1_000_000;

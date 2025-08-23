@@ -255,9 +255,26 @@
                 <Minus class="w-4 h-4" />
               </button>
               
-              <div class="flex-1 text-center">
-                <div class="text-xl font-bold text-theme">{$bettingStore.selectedPaylines}</div>
-                <div class="text-xs text-theme-text opacity-70">Lines</div>
+              <div class="flex-1 relative">
+                <div class="absolute inset-0 flex items-center justify-center">
+                  <div class="text-center">
+                    <div class="text-xl font-bold text-theme">{$bettingStore.selectedPaylines}</div>
+                    <div class="text-xs text-theme-text opacity-70">Lines</div>
+                  </div>
+                </div>
+                <div class="flex items-center justify-center">
+                  <div class="text-center invisible">
+                    <div class="text-xl font-bold">{$bettingStore.selectedPaylines}</div>
+                    <div class="text-xs">Lines</div>
+                  </div>
+                  <button
+                    on:click={(e) => handleControlButton(() => bettingStore.setMaxPaylines(), e.currentTarget)}
+                    disabled={$bettingStore.selectedPaylines >= BETTING_CONSTANTS.MAX_PAYLINES || disabled}
+                    class="relative z-10 ml-16 px-2 py-1 bg-surface-secondary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium rounded-md transition-all duration-200 text-theme"
+                  >
+                    Max
+                  </button>
+                </div>
               </div>
               
               <button
@@ -277,20 +294,40 @@
               <span class="label-text">Bet Per Line</span>
               <span class="label-value">{$betPerLineVOI} VOI</span>
             </div>
-            <div class="relative">
-              <input
-                type="number"
-                min={formatVOI(BETTING_CONSTANTS.MIN_BET_PER_LINE)}
-                max={formatVOI(BETTING_CONSTANTS.MAX_BET_PER_LINE)}
-                bind:value={betInputValue}
-                on:input={handleBetInput}
-                disabled={disabled}
-                class="input-field pr-12 text-center font-medium text-lg"
-                placeholder="1"
-              />
-              <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-theme-text opacity-70 font-medium text-xs">
-                VOI
+            <div class="card p-3 flex items-center gap-3">
+              <button
+                on:click={(e) => handleControlButton(() => bettingStore.decreaseBetPerLine(), e.currentTarget)}
+                disabled={$bettingStore.betPerLine <= BETTING_CONSTANTS.MIN_BET_PER_LINE || disabled}
+                class="control-button text-theme"
+                aria-label="Decrease bet per line"
+              >
+                <Minus class="w-4 h-4" />
+              </button>
+              
+              <div class="flex-1 relative">
+                <input
+                  type="number"
+                  min={formatVOI(BETTING_CONSTANTS.MIN_BET_PER_LINE)}
+                  max={formatVOI(BETTING_CONSTANTS.MAX_BET_PER_LINE)}
+                  bind:value={betInputValue}
+                  on:input={handleBetInput}
+                  disabled={disabled}
+                  class="input-field pr-12 text-center font-medium text-lg w-full"
+                  placeholder="1"
+                />
+                <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-theme-text opacity-70 font-medium text-xs">
+                  VOI
+                </div>
               </div>
+              
+              <button
+                on:click={(e) => handleControlButton(() => bettingStore.increaseBetPerLine(), e.currentTarget)}
+                disabled={$bettingStore.betPerLine >= BETTING_CONSTANTS.MAX_BET_PER_LINE || disabled}
+                class="control-button text-theme"
+                aria-label="Increase bet per line"
+              >
+                <Plus class="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -373,8 +410,20 @@
             <Minus class="w-3 h-3" />
           </button>
           
-          <div class="flex-1 text-center">
-            <div class="text-sm font-medium text-theme">{$bettingStore.selectedPaylines} Lines</div>
+          <div class="flex-1 relative">
+            <div class="absolute inset-0 flex items-center justify-center">
+              <div class="text-sm font-medium text-theme">{$bettingStore.selectedPaylines} Lines</div>
+            </div>
+            <div class="flex items-center justify-center">
+              <div class="text-sm font-medium invisible">{$bettingStore.selectedPaylines} Lines</div>
+              <button
+                on:click={(e) => handleControlButton(() => bettingStore.setMaxPaylines(), e.currentTarget)}
+                disabled={$bettingStore.selectedPaylines >= BETTING_CONSTANTS.MAX_PAYLINES || disabled}
+                class="relative z-10 ml-16 px-2 py-0.5 bg-surface-secondary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium rounded transition-all duration-200 text-theme"
+              >
+                Max
+              </button>
+            </div>
           </div>
           
           <button
@@ -391,21 +440,41 @@
       <!-- Bet Per Line Control -->
       <div class="control-group">
         <div class="space-y-2">
-          <!-- Bet Input -->
-          <div class="relative">
-            <input
-              type="number"
-              min={formatVOI(BETTING_CONSTANTS.MIN_BET_PER_LINE)}
-              max={formatVOI(BETTING_CONSTANTS.MAX_BET_PER_LINE)}
-              bind:value={betInputValue}
-              on:input={handleBetInput}
-              disabled={disabled}
-              class="input-field pr-12 text-center font-medium text-sm py-2"
-              placeholder="1"
-            />
-            <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-theme-text opacity-70 font-medium text-xs">
-              VOI
+          <!-- Bet Input with Plus/Minus -->
+          <div class="card p-2 flex items-center gap-2">
+            <button
+              on:click={(e) => handleControlButton(() => bettingStore.decreaseBetPerLine(), e.currentTarget)}
+              disabled={$bettingStore.betPerLine <= BETTING_CONSTANTS.MIN_BET_PER_LINE || disabled}
+              class="control-button w-8 h-8 text-theme"
+              aria-label="Decrease bet per line"
+            >
+              <Minus class="w-3 h-3" />
+            </button>
+            
+            <div class="flex-1 relative">
+              <input
+                type="number"
+                min={formatVOI(BETTING_CONSTANTS.MIN_BET_PER_LINE)}
+                max={formatVOI(BETTING_CONSTANTS.MAX_BET_PER_LINE)}
+                bind:value={betInputValue}
+                on:input={handleBetInput}
+                disabled={disabled}
+                class="input-field pr-12 text-center font-medium text-sm py-2 w-full"
+                placeholder="1"
+              />
+              <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-theme-text opacity-70 font-medium text-xs">
+                VOI
+              </div>
             </div>
+            
+            <button
+              on:click={(e) => handleControlButton(() => bettingStore.increaseBetPerLine(), e.currentTarget)}
+              disabled={$bettingStore.betPerLine >= BETTING_CONSTANTS.MAX_BET_PER_LINE || disabled}
+              class="control-button w-8 h-8 text-theme"
+              aria-label="Increase bet per line"
+            >
+              <Plus class="w-3 h-3" />
+            </button>
           </div>
           
           <!-- Quick Bet Buttons -->
