@@ -235,9 +235,13 @@ class YBTService {
         }
       );
 
+      const bal_result = await ci.arc200_balanceOf(wallet.address);
+      if (!bal_result.success && bal_result.returnValue > BigInt(0)) {
+        return BigInt(0);
+      }
+
       // Call deposit_cost method - this should be a read-only call
       const result = await ci.deposit_cost();
-      console.log('deposit_cost result:', result);
       
       if (!result.success) {
         throw new Error(`Deposit cost call failed: ${result.error || 'Unknown error'}`);
