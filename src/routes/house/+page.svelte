@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import { Web3Wallet, selectedWallet, connectedWallets } from 'avm-wallet-svelte';
   import { ybtStore } from '$lib/stores/ybt';
-  import { walletStore } from '$lib/stores/wallet';
   import { NETWORK_CONFIG } from '$lib/constants/network';
   import YBTDashboard from '$lib/components/house/YBTDashboard.svelte';
   import OddsAnalysis from '$lib/components/analytics/OddsAnalysis.svelte';
@@ -23,9 +22,8 @@
   const availableWallets = ['Kibisis', 'LuteWallet'];
 
   onMount(async () => {
-    // Initialize both wallet systems
-    await walletStore.initialize(); // Initialize in-browser wallet for analytics
-    await ybtStore.initialize();    // Initialize YBT store - wallet connection will be handled by avm-wallet-svelte
+    // Initialize YBT store - wallet connection will be handled by avm-wallet-svelte
+    await ybtStore.initialize();
     isLoaded = true;
   });
   
