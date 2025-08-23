@@ -357,7 +357,7 @@ class YBTService {
       // Set fee to cover the app call and inner payment transaction
       // Withdrawals might need higher fee due to complex inner transactions
       // Base fee (2000) + inner payment fee (2000) + buffer (2000) = 6000 microAlgos
-      ci.setFee(6000);
+      ci.setFee(7000);
 
       // Call withdraw method using ulujs with shares parameter (this generates unsigned transactions)
       const result = await ci.withdraw(BigInt(params.shares));
