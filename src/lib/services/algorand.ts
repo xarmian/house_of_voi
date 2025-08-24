@@ -719,7 +719,7 @@ export class AlgorandService {
       );
       
       // Set fee and enable params like in documentation
-      ci.setFee(6000);
+      ci.setFee(32000);
       ci.setEnableParamsLastRoundMod(true);
       ci.setEnableRawBytes(true);
       
