@@ -463,11 +463,105 @@ export class AlgorandService {
   }
 
   /**
-   * Get bet grid using cached reel data and block seed (faster than contract call)
+   * Get bet grid from the smart contract (authoritative source)
    */
   async getBetGrid(betKey: string, address: string): Promise<string> {
     try {
-      console.log('🎲 Getting bet grid using cached reel data for key:', betKey.slice(0, 16) + '...');
+      console.log('🎲 Getting bet grid from contract for key:', betKey.slice(0, 16) + '...');
+      
+      // Validate bet key format
+      if (!betKey || betKey.length !== 112) {
+        throw new Error(`Invalid bet key format: expected 112 hex chars, got ${betKey?.length || 0}`);
+      }
+
+      // Validate bet key contains valid hex
+      if (!/^[0-9a-fA-F]+$/.test(betKey)) {
+        throw new Error('Bet key contains non-hex characters');
+      }
+
+      // Get grid directly from contract
+      return await this.getBetGridFromContract(betKey, address);
+
+    } catch (error) {
+      console.warn('⚠️ Contract grid retrieval failed, falling back to local generation:', error);
+      // Fallback to local generation if contract call fails
+      return await this.getBetGridLocally(betKey, address);
+    }
+  }
+
+  /**
+   * Get bet grid directly from the smart contract using get_bet_grid method
+   */
+  async getBetGridFromContract(betKey: string, address: string): Promise<string> {
+    const maxRetries = 3;
+    const retryDelay = 3000; // 3 seconds
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`📞 Attempt ${attempt}/${maxRetries} calling contract get_bet_grid for key:`, betKey.slice(0, 16) + '...');
+        
+        // Create ulujs CONTRACT instance for readonly call
+        const ci = new CONTRACT(
+          this.appId,
+          this.client,
+          undefined, // indexer not needed for readonly call
+          slotMachineABI,
+          {
+            addr: address, // Can use any address for readonly calls
+            sk: new Uint8Array(64) // Dummy secret key for readonly calls
+          }
+        );
+
+        ci.setFee(5000);
+        ci.setEnableParamsLastRoundMod(true);
+
+        // Convert bet key to the format expected by contract (Bytes56)
+        const betKeyBytes = this.hexStringToUint8Array(betKey);
+        
+        // Call the contract's get_bet_grid method
+        const gridResult = await ci.get_bet_grid(betKeyBytes);
+        
+        if (!gridResult.success) {
+          throw new Error(`Contract get_bet_grid failed: ${gridResult.error || 'Unknown error'}`);
+        }
+
+        // The return value should be Bytes15 which converts to a 15-character string
+        const gridString = gridResult.returnValue;
+        
+        console.log(`✅ Retrieved grid from contract on attempt ${attempt}:`, gridString);
+        
+        // Validate the grid string is 15 characters (5 reels x 3 rows)
+        if (gridString.length !== 15) {
+          throw new Error(`Invalid grid length from contract: expected 15, got ${gridString.length}`);
+        }
+
+        return gridString;
+
+      } catch (error: any) {
+        console.log(`❌ Attempt ${attempt}/${maxRetries} to get grid from contract failed:`, error.message);
+        
+        // If this was the last attempt, throw the error
+        if (attempt === maxRetries) {
+          console.error('💥 All contract grid retrieval attempts failed:', error);
+          throw this.handleError(error, 'Failed to get bet grid from contract after all retry attempts');
+        }
+        
+        // Wait before retrying
+        console.log(`⏱️ Waiting ${retryDelay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
+
+    // This should never be reached, but TypeScript needs it
+    throw new Error(`Failed to get bet grid from contract after ${maxRetries} attempts`);
+  }
+
+  /**
+   * Get bet grid using cached reel data and block seed (preserved for future refinement)
+   */
+  async getBetGridLocally(betKey: string, address: string): Promise<string> {
+    try {
+      console.log('🎲 Getting bet grid using local generation for key:', betKey.slice(0, 16) + '...');
       
       // Validate bet key format
       if (!betKey || betKey.length !== 112) {
@@ -499,11 +593,11 @@ export class AlgorandService {
       // Generate grid from seed using contract reel data (much faster than contract call)
       const grid = await this.generateGridFromSeed(seed, address);
       
-      console.log('✅ Generated grid using cached reel data:', grid);
+      console.log('✅ Generated grid using local reel data:', grid);
       return grid;
 
     } catch (error) {
-      throw this.handleError(error, 'Failed to get bet grid using reel data');
+      throw this.handleError(error, 'Failed to get bet grid using local generation');
     }
   }
 
