@@ -1,6 +1,4 @@
 import algosdk from 'algosdk';
-import * as algokit from '@algorandfoundation/algokit-utils';
-import { SlotMachineClient } from '../../clients/SlotMachineClient.js';
 import { CONTRACT } from 'ulujs';
 import { NETWORK_CONFIG, CONTRACT_CONFIG, BLOCKCHAIN_CONFIG } from '$lib/constants/network';
 import type { WalletAccount } from '$lib/types/wallet';
@@ -144,6 +142,56 @@ export class AlgorandService {
     return accountInfo.amount;
   }
 
+  async sendPayment(recipientAddress: string, amount: number): Promise<{ success: boolean; txId?: string; error?: string }> {
+    try {
+      const { walletStore } = await import('$lib/stores/wallet');
+      let currentWallet: any = null;
+      
+      // Get current wallet state
+      walletStore.subscribe(state => {
+        currentWallet = state.account;
+      })();
+      
+      if (!currentWallet) {
+        throw new Error('No wallet connected');
+      }
+
+      // Get suggested transaction parameters
+      const params = await this.getSuggestedParams();
+      
+      // Create payment transaction
+      const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
+        from: currentWallet.address,
+        to: recipientAddress,
+        amount: amount,
+        suggestedParams: params,
+        note: new TextEncoder().encode('Transfer via House of Voi')
+      });
+
+      // Sign the transaction
+      const privateKeyBytes = this.hexToUint8Array(currentWallet.privateKey);
+      const signedTxn = algosdk.signTransaction(txn, privateKeyBytes);
+
+      // Send the transaction
+      const { txId } = await this.client.sendRawTransaction(signedTxn.blob).do();
+      
+      // Wait for confirmation
+      await this.waitForConfirmation(txId);
+      
+      return {
+        success: true,
+        txId: txId
+      };
+
+    } catch (error) {
+      console.error('Payment failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Payment failed'
+      };
+    }
+  }
+
   getClient(): algosdk.Algodv2 {
     return this.client;
   }
@@ -154,17 +202,6 @@ export class AlgorandService {
 
   getAppId(): number {
     return this.appId;
-  }
-
-  private createSlotMachineClient(account: { addr: string; sk: Uint8Array }) {
-    return new SlotMachineClient(
-      {
-        resolveBy: "id",
-        id: this.appId,
-        sender: account,
-      },
-      this.client
-    );
   }
 
   /**
@@ -178,118 +215,6 @@ export class AlgorandService {
       return await this.client.getTransactionParams().do();
     } catch (error) {
       throw this.handleError(error, 'Failed to get transaction parameters');
-    }
-  }
-
-  /**
-   * Ensure the contract is bootstrapped (spin_params box initialized)
-   */
-  async ensureBootstrapped(appClient: any): Promise<void> {
-    try {
-      console.log('Checking if contract is bootstrapped...');
-      
-      // Check if the spin_params box exists by directly querying box storage
-      // This avoids the chicken-and-egg problem of calling spinCost which needs the box
-      try {
-        console.log('Checking for spin_params box...');
-        const boxResponse = await this.client.getApplicationBoxByName(this.appId, new TextEncoder().encode('spin_params')).do();
-        if (boxResponse && boxResponse.value && boxResponse.value.length > 0) {
-          console.log('✅ Contract is already bootstrapped (spin_params box exists with data)');
-          return;
-        }
-        console.log('spin_params box exists but is empty, need to bootstrap');
-      } catch (error: any) {
-        // Box doesn't exist, need to bootstrap
-        console.log('❌ spin_params box not found, contract needs bootstrap. Error:', error.message);
-      }
-      
-      console.log('🔄 Attempting to bootstrap contract...');
-      
-      // Get bootstrap cost
-      console.log('Getting bootstrap cost...');
-      const bootstrapCostResult = await appClient.bootstrapCost({});
-      const bootstrapCost = Number(bootstrapCostResult.return);
-      
-      console.log('💰 Bootstrap cost:', bootstrapCost, 'microAlgos');
-      
-      // Call bootstrap with payment
-      console.log('Executing bootstrap transaction...');
-      const bootstrapResult = await appClient.bootstrap({}, {
-        payment: algokit.microAlgos(bootstrapCost),
-        sendParams: {
-          extraProgramPages: 1,
-        }
-      });
-      
-      console.log('✅ Contract bootstrapped successfully!');
-      console.log('Bootstrap transaction ID:', bootstrapResult.transaction.txID());
-      
-      // Wait for confirmation
-      console.log('Waiting for bootstrap confirmation...');
-      await this.waitForConfirmation(bootstrapResult.transaction.txID());
-      console.log('Bootstrap confirmed!');
-      
-      // Verify bootstrap worked
-      try {
-        const verifyBoxResponse = await this.client.getApplicationBoxByName(this.appId, new TextEncoder().encode('spin_params')).do();
-        if (verifyBoxResponse && verifyBoxResponse.value && verifyBoxResponse.value.length > 0) {
-          console.log('✅ Bootstrap verification successful - spin_params box now exists');
-        } else {
-          throw new Error('Bootstrap verification failed - spin_params box still empty');
-        }
-      } catch (verifyError) {
-        console.error('❌ Bootstrap verification failed:', verifyError);
-        throw new Error('Bootstrap completed but verification failed');
-      }
-      
-    } catch (error) {
-      console.error('💥 Failed to ensure bootstrap:', error);
-      throw this.handleError(error, 'Failed to ensure contract is bootstrapped');
-    }
-  }
-
-  /**
-   * Force bootstrap the contract manually
-   */
-  async forceBootstrap(senderAccount: { address: string; privateKey: string }): Promise<void> {
-    try {
-      console.log('🔄 FORCE BOOTSTRAP: Starting manual bootstrap...');
-      
-      const account = {
-        addr: senderAccount.address,
-        sk: this.hexToUint8Array(senderAccount.privateKey)
-      };
-
-      // Create client instance
-      const appClient = this.createSlotMachineClient(account);
-      
-      // Get bootstrap cost
-      console.log('Getting bootstrap cost...');
-      const bootstrapCostResult = await appClient.bootstrapCost({});
-      const bootstrapCost = Number(bootstrapCostResult.return);
-      
-      console.log('💰 Bootstrap cost:', bootstrapCost, 'microAlgos');
-      
-      // Call bootstrap with payment
-      console.log('Executing bootstrap transaction...');
-      const bootstrapResult = await appClient.bootstrap({}, {
-        payment: algokit.microAlgos(bootstrapCost),
-        sendParams: {
-          extraProgramPages: 1,
-        }
-      });
-      
-      console.log('✅ FORCE BOOTSTRAP COMPLETED!');
-      console.log('Bootstrap transaction ID:', bootstrapResult.transaction.txID());
-      
-      // Wait for confirmation
-      console.log('Waiting for bootstrap confirmation...');
-      await this.waitForConfirmation(bootstrapResult.transaction.txID());
-      console.log('✅ Bootstrap confirmed and ready!');
-      
-    } catch (error) {
-      console.error('💥 FORCE BOOTSTRAP FAILED:', error);
-      throw this.handleError(error, 'Failed to force bootstrap contract');
     }
   }
 
@@ -359,14 +284,9 @@ export class AlgorandService {
       console.log('🎰 Starting ulujs spin...');
       
       // Calculate required payment first
-      const spinCost = 50500;
-      const spinPaylineCost = 30000;
-      const minimumExtraCosts = spinCost + spinPaylineCost * (spinTx.maxPaylineIndex + 1);
-      const totalRequired = spinTx.betAmount + minimumExtraCosts;
-      
-      // Check balances before attempting spin
-      await this.checkBalances(senderAccount.address, totalRequired);
-      console.log(slotMachineABI);
+      //const spinPaylineCost = 30000;
+      //const minimumExtraCosts = spinCost + spinPaylineCost * (spinTx.maxPaylineIndex + 1);
+      //const totalRequired = spinTx.betAmount + minimumExtraCosts;
       
       // Create ulujs CONTRACT instance (matching React component pattern exactly)
       const ci = new CONTRACT(
@@ -380,11 +300,21 @@ export class AlgorandService {
         }
       );
 
+      const spin_costR = await ci.spin_cost();
+      if (!spin_costR.success) {
+        throw new Error(`Unable to obtain spin cost: ${spin_costR.error || 'Unknown error'}`);
+      }
+
+      const spinCost = Number(spin_costR.returnValue);
+      const paymentAmount = spinTx.betAmount + spinCost; 
+
+      // Check balances before attempting spin
+      await this.checkBalances(senderAccount.address, paymentAmount);
+
       // Configure CONTRACT instance 
       ci.setEnableRawBytes(true);
-      
+
       // Set payment amount (calculated above)
-      const paymentAmount = totalRequired;
       ci.setPaymentAmount(paymentAmount);
       
       console.log('💰 TEAL-compliant Payment calculation:', {
@@ -392,8 +322,6 @@ export class AlgorandService {
         maxPaylineIndex: spinTx.maxPaylineIndex,
         index: spinTx.index,
         spinCost,
-        spinPaylineCost,
-        minimumExtraCosts,
         totalPayment: paymentAmount
       });
       
@@ -427,7 +355,7 @@ export class AlgorandService {
       console.log('📄 Got unsigned transactions to submit:', unsignedTxns);
 
       // Decode the unsigned transactions
-      const decodedTxns = unsignedTxns.map(txnBlob => {
+      const decodedTxns = unsignedTxns.map((txnBlob: string) => {
         // Decode base64 transaction blob
         const txnBytes = this.base64ToUint8Array(txnBlob);
         return algosdk.decodeUnsignedTransaction(txnBytes);
@@ -441,14 +369,14 @@ export class AlgorandService {
         sk: this.hexToUint8Array(senderAccount.privateKey)
       };
 
-      const signedTxns = decodedTxns.map(txn => {
+      const signedTxns = decodedTxns.map((txn: algosdk.Transaction) => {
         return algosdk.signTransaction(txn, account.sk);
       });
 
       console.log('📝 Transactions signed');
 
       // Submit the signed transactions as a group
-      const submittedGroup = await this.client.sendRawTransaction(signedTxns.map(stxn => stxn.blob)).do();
+      const submittedGroup = await this.client.sendRawTransaction(signedTxns.map((stxn: {txID: string, blob: string}) => stxn.blob)).do();
       const txId = submittedGroup.txId;
       
       console.log('🚀 Transaction group submitted with ID:', txId);
@@ -484,7 +412,7 @@ export class AlgorandService {
         txId: txId,
         betKey: actualBetKey,
         round: confirmedTxn['confirmed-round'] || 0,
-        transactions: signedTxns.map(stxn => stxn.blob)
+        transactions: signedTxns.map((stxn: {txID: string, blob: string}) => stxn.blob)
       };
 
     } catch (error) {
@@ -761,9 +689,6 @@ export class AlgorandService {
         sk: this.hexToUint8Array(senderAccount.privateKey)
       };
 
-      // Create client instance
-      const appClient = this.createSlotMachineClient(account);
-      
       // Verify the bet key exists first
       try {
         const betKeyBytes = this.hexStringToUint8Array(betKey);
@@ -1019,7 +944,6 @@ try {
     getIndexer: () => { throw new Error('AlgorandService not properly initialized'); },
     getAppId: () => { throw new Error('AlgorandService not properly initialized'); },
     getSuggestedParams: async () => { throw new Error('AlgorandService not properly initialized'); },
-    forceBootstrap: async () => { throw new Error('AlgorandService not properly initialized'); },
     submitSpin: async () => { throw new Error('AlgorandService not properly initialized'); },
     getBetGrid: async () => { throw new Error('AlgorandService not properly initialized'); },
     getBetInfo: async () => { throw new Error('AlgorandService not properly initialized'); },
