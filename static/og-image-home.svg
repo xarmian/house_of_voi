@@ -50,5 +50,5 @@
   </g>
   
   <!-- CTA -->
-  <text x="600" y="550" text-anchor="middle" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="24">Connect Wallet & Play Now</text>
+  <text x="600" y="550" text-anchor="middle" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="24">Connect Wallet &amp; Play Now</text>
 </svg>

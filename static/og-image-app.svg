@@ -66,5 +66,5 @@
   <text x="600" y="60" text-anchor="middle" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="48" font-weight="bold">Play House of Voi Slots</text>
   
   <!-- Win Message -->
-  <text x="600" y="570" text-anchor="middle" fill="#f59e0b" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="600">Jackpot Available • Spin to Win!</text>
+  <text x="600" y="570" text-anchor="middle" fill="#f59e0b" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="600">Jackpot Available &#8226; Spin to Win!</text>
 </svg>
