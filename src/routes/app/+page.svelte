@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { MetaTags } from 'svelte-meta-tags';
   import { walletStore } from '$lib/stores/wallet';
   import { contractDataCache } from '$lib/services/contractDataCache';
   import { balanceManager } from '$lib/services/balanceManager';
@@ -62,33 +63,39 @@
   });
 </script>
 
-<svelte:head>
-  <title>{data.meta.title}</title>
-  <meta name="description" content={data.meta.description} />
-  <meta name="keywords" content={data.meta.keywords} />
-  <meta name="author" content={data.meta.author} />
-  <meta name="robots" content="index, follow" />
-  <meta name="theme-color" content={data.meta.themeColor} />
-  
-  <!-- Open Graph -->
-  <meta property="og:title" content={data.meta.title} />
-  <meta property="og:description" content={data.meta.description} />
-  <meta property="og:image" content={data.meta.ogImage} />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
-  <meta property="og:url" content={data.meta.ogUrl} />
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content={data.meta.siteName} />
-  
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content={data.meta.title} />
-  <meta name="twitter:description" content={data.meta.description} />
-  <meta name="twitter:image" content={data.meta.twitterImage} />
-  
-  <!-- Canonical -->
-  <link rel="canonical" href={data.meta.canonical} />
-</svelte:head>
+<MetaTags
+  title={data.meta.title}
+  description={data.meta.description}
+  canonical={data.meta.canonical}
+  openGraph={{
+    type: 'website',
+    url: data.meta.ogUrl,
+    title: data.meta.title,
+    description: data.meta.description,
+    images: [
+      {
+        url: data.meta.ogImage,
+        width: 1200,
+        height: 630,
+        alt: 'House of Voi - Play Provably Fair Blockchain Slots'
+      }
+    ],
+    siteName: data.meta.siteName
+  }}
+  twitter={{
+    cardType: 'summary_large_image',
+    title: data.meta.title,
+    description: data.meta.description,
+    image: data.meta.twitterImage,
+    imageAlt: 'House of Voi - Play Provably Fair Blockchain Slots'
+  }}
+  additionalMetaTags={[
+    { name: 'keywords', content: data.meta.keywords },
+    { name: 'author', content: data.meta.author },
+    { name: 'robots', content: 'index, follow' },
+    { name: 'theme-color', content: data.meta.themeColor }
+  ]}
+/>
 
 <main class="min-h-screen transition-all duration-700 ease-in-out" style={combinedStyle}>
   <div class="max-w-7xl mx-auto px-4 py-2 lg:py-2">
