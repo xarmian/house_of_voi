@@ -3,11 +3,15 @@
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
+  import { MetaTags, deepMerge } from 'svelte-meta-tags';
   import { soundService } from '$lib/services/soundService';
   import SoundToggleButton from '$lib/components/ui/SoundToggleButton.svelte';
   import { checkForPurchaseResult, clearPurchaseParams, showPurchaseNotification } from '$lib/utils/voiPurchase';
   
+  export let data;
+  
   $: isGameRoute = $page.route.id?.startsWith('/app');
+  $: metaTags = deepMerge(data.baseMetaTags, $page.data.pageMetaTags || {});
   
   let mounted = false;
   
@@ -26,10 +30,11 @@
   });
 </script>
 
+<MetaTags {...metaTags} />
+
 <svelte:head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f172a" />
   <link rel="icon" href="/favicon.ico" />
 </svelte:head>
 

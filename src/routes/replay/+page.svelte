@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { MetaTags } from 'svelte-meta-tags';
   import SlotMachine from '$lib/components/game/SlotMachine.svelte';
   import { formatVOI } from '$lib/constants/betting';
   import { Play, Home, ExternalLink } from 'lucide-svelte';
@@ -37,39 +36,6 @@
   }
 </script>
 
-<MetaTags
-  title={data.meta.title}
-  description={data.meta.description}
-  canonical={data.meta.canonical}
-  openGraph={{
-    type: 'website',
-    url: data.meta.ogUrl,
-    title: data.meta.title,
-    description: data.meta.description,
-    images: [
-      {
-        url: data.meta.ogImage,
-        width: 1200,
-        height: 630,
-        alt: data.meta.title
-      }
-    ],
-    siteName: data.meta.siteName
-  }}
-  twitter={{
-    cardType: 'summary_large_image',
-    title: data.meta.title,
-    description: data.meta.description,
-    image: data.meta.twitterImage,
-    imageAlt: data.meta.title
-  }}
-  additionalMetaTags={[
-    { name: 'keywords', content: data.meta.keywords },
-    { name: 'author', content: data.meta.author },
-    { name: 'robots', content: 'index, follow' },
-    { name: 'theme-color', content: data.meta.themeColor }
-  ]}
-/>
 
 <main class="replay-page">
   {#if isLoading}

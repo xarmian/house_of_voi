@@ -1,16 +1,31 @@
+import type { MetaTagsProps } from 'svelte-meta-tags';
+
 export const load = () => {
-  return {
-    meta: {
+  const pageMetaTags = {
+    title: 'Play Now - House of Voi Slots',
+    description: 'Spin to win on the blockchain! Connect your wallet and play provably fair slots with instant VOI payouts, transparent outcomes, and low fees.',
+    openGraph: {
       title: 'Play Now - House of Voi Slots',
       description: 'Spin to win on the blockchain! Connect your wallet and play provably fair slots with instant VOI payouts, transparent outcomes, and low fees.',
-      keywords: 'play slots, voi network slots, crypto gambling, blockchain gaming, slot machine game, VOI tokens, web3 slots, provably fair gaming',
-      ogImage: '/og-image-app.svg',
-      ogUrl: 'https://house-of-voi.vercel.app/app',
-      twitterImage: '/og-image-app.svg',
-      author: 'House of Voi Team',
-      siteName: 'House of Voi',
-      themeColor: '#10b981',
-      canonical: 'https://house-of-voi.vercel.app/app'
-    }
-  };
+      images: [
+        {
+          url: 'https://house-of-voi.vercel.app/og-image-app.svg',
+          width: 1200,
+          height: 630,
+          alt: 'House of Voi - Play Provably Fair Blockchain Slots'
+        }
+      ]
+    },
+    twitter: {
+      title: 'Play Now - House of Voi Slots',
+      description: 'Spin to win on the blockchain! Connect your wallet and play provably fair slots with instant VOI payouts, transparent outcomes, and low fees.',
+      image: 'https://house-of-voi.vercel.app/og-image-app.svg',
+      imageAlt: 'House of Voi - Play Provably Fair Blockchain Slots'
+    },
+    additionalMetaTags: [
+      { name: 'keywords', content: 'play slots, voi network slots, crypto gambling, blockchain gaming, slot machine game, VOI tokens, web3 slots, provably fair gaming' }
+    ]
+  } satisfies MetaTagsProps;
+
+  return { pageMetaTags };
 };

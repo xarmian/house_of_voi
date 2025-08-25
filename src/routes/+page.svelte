@@ -1,7 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { MetaTags } from 'svelte-meta-tags';
   import HeroSection from '$lib/components/landing/HeroSection.svelte';
   import FeaturesSection from '$lib/components/landing/FeaturesSection.svelte';
   import HowItWorksSection from '$lib/components/landing/HowItWorksSection.svelte';
@@ -20,64 +19,6 @@
   }
 </script>
 
-<MetaTags
-  title={data.meta.title}
-  description={data.meta.description}
-  canonical={data.meta.canonical}
-  openGraph={{
-    type: 'website',
-    url: data.meta.ogUrl,
-    title: data.meta.title,
-    description: data.meta.description,
-    images: [
-      {
-        url: data.meta.ogImage,
-        width: 1200,
-        height: 630,
-        alt: 'House of Voi - Provably Fair Blockchain Slots'
-      }
-    ],
-    siteName: data.meta.siteName
-  }}
-  twitter={{
-    cardType: 'summary_large_image',
-    title: data.meta.title,
-    description: data.meta.description,
-    image: data.meta.twitterImage,
-    imageAlt: 'House of Voi - Provably Fair Blockchain Slots'
-  }}
-  additionalMetaTags={[
-    { name: 'keywords', content: data.meta.keywords },
-    { name: 'author', content: data.meta.author },
-    { name: 'robots', content: 'index, follow' },
-    { name: 'theme-color', content: data.meta.themeColor }
-  ]}
-  jsonLd={{
-    "@context": "https://schema.org",
-    "@type": "WebApplication",
-    "name": "House of Voi",
-    "description": "Provably fair blockchain slot machine on Voi Network with transparent outcomes and instant payouts",
-    "url": "https://house-of-voi.vercel.app",
-    "applicationCategory": "GameApplication",
-    "operatingSystem": "Web",
-    "browserRequirements": "Requires JavaScript. Compatible with modern browsers.",
-    "creator": {
-      "@type": "Organization",
-      "name": "House of Voi Team"
-    },
-    "featureList": [
-      "Provably Fair Gaming",
-      "Instant Payouts",
-      "Low Transaction Fees", 
-      "Transparent Outcomes",
-      "Voi Network Integration",
-      "Wallet Integration",
-      "Spin Replay Sharing"
-    ],
-    "screenshot": "https://house-of-voi.vercel.app/og-image-app.svg",
-    "image": "https://house-of-voi.vercel.app/og-image-home.svg"
-  }}
-/>
 
 <main class="min-h-screen">
   <div class="landing-gradient">
