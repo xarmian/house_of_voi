@@ -169,6 +169,16 @@
     
     // Subscribe to queue changes to manage continuous spinning
     queueUnsubscribe = queueStore.subscribe(queueState => {
+      // Initialize autoCelebratedSpinIds with existing completed wins on first load
+      if (isInitialMount && queueState.spins && queueState.spins.length > 0) {
+        const existingWinningSpins = queueState.spins.filter(spin => 
+          [SpinStatus.READY_TO_CLAIM, SpinStatus.COMPLETED].includes(spin.status) && 
+          spin.winnings > 0
+        );
+        existingWinningSpins.forEach(spin => autoCelebratedSpinIds.add(spin.id));
+        console.log(`🎉 Initialized autoCelebratedSpinIds with ${existingWinningSpins.length} existing winning spins`);
+      }
+      
       handleQueueUpdate(queueState);
     });
 
@@ -423,6 +433,7 @@
           if (!spinTooOld && 
               spin.winnings > 0 && 
               !autoCelebratedSpinIds.has(spin.id) &&
+              spin.id !== lastCelebratedSpinId &&
               spin.id !== $currentSpinId) { // Don't auto-celebrate current spin (it gets normal treatment)
             
             // Mark as auto-celebrated
