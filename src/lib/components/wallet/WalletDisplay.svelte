@@ -10,7 +10,7 @@
   import BalanceUpdateAnimation from './BalanceUpdateAnimation.svelte';
   import { playDeposit, playBalanceIncrease } from '$lib/services/soundService';
   import { formatVOI } from '$lib/constants/betting';
-  
+
   const dispatch = createEventDispatcher();
   
   export let compact = false;
@@ -42,7 +42,7 @@
   const minTransactionCost = 50500 + 30000 + 28500 + 15000 + 1000000; // spin + 1 payline + box + network + buffer
   $: grossAvailable = Math.max(0, walletBal - reserved);
   $: availableForBetting = Math.max(0, grossAvailable - minTransactionCost);
-  $: formattedAvailableCredits = formatVOI(availableForBetting);
+  $: formattedAvailableCredits = Math.floor(availableForBetting / 1e6);
   
   $: shortAddress = $isWalletConnected ? 
     ($walletAddress ? $walletAddress.slice(0, 8) + '...' + $walletAddress.slice(-8) : '') :

@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { fly, fade } from 'svelte/transition';
   import { Clock, RefreshCw, TrendingUp, TrendingDown, X, Check, Loader, Info } from 'lucide-svelte';
-  import { queueStore, queueStats, pendingSpins, recentSpins } from '$lib/stores/queue';
+  import { queueStore, queueStats, pendingSpins, recentSpins, allSpins } from '$lib/stores/queue';
   import { currentSpinId } from '$lib/stores/game';
   import { formatVOI } from '$lib/constants/betting';
   import { SpinStatus } from '$lib/types/queue';
@@ -16,6 +16,10 @@
   let selectedTab: 'recent' | 'stats' = 'recent';
   let showSpinDetailsModal = false;
   let selectedSpin: QueuedSpin | null = null;
+  
+  // Pagination state
+  let currentPage = 0;
+  const itemsPerPage = 10;
   
   // Track which spin is being replayed
   let replayingSpinId: string | null = null;
@@ -178,6 +182,24 @@
   
   function clearCompleted() {
     queueStore.clearOldSpins(0); // Clear all completed spins
+    currentPage = 0; // Reset pagination after clearing
+  }
+  
+  
+  function goToPage(page: number) {
+    currentPage = Math.max(0, Math.min(page, totalPages - 1));
+  }
+  
+  function previousPage() {
+    if (currentPage > 0) {
+      currentPage--;
+    }
+  }
+  
+  function nextPage() {
+    if (currentPage < totalPages - 1) {
+      currentPage++;
+    }
   }
 
   function openSpinDetails(spin: QueuedSpin) {
@@ -205,8 +227,8 @@
     // Add pending spins first (they take priority)
     $pendingSpins.forEach(spin => spinMap.set(spin.id, spin));
     
-    // Add recent spins, but only if not already present
-    $recentSpins.forEach(spin => {
+    // Add all non-pending spins
+    $allSpins.forEach(spin => {
       if (!spinMap.has(spin.id)) {
         spinMap.set(spin.id, spin);
       }
@@ -225,7 +247,14 @@
     
     return spins;
   })();
-  $: displaySpins = selectedTab === 'recent' ? allRecentSpins : [];
+  
+  // Calculate pagination values
+  $: totalSpins = allRecentSpins.length;
+  $: totalPages = Math.ceil(totalSpins / itemsPerPage);
+  $: startIndex = currentPage * itemsPerPage;
+  $: endIndex = Math.min(startIndex + itemsPerPage, totalSpins);
+  
+  $: displaySpins = selectedTab === 'recent' ? allRecentSpins.slice(startIndex, endIndex) : [];
   
   // Calculate additional stats for the Stats tab
   $: largestWin = Math.max(0, ...$queueStats.totalSpins > 0 ? allRecentSpins.filter(s => s.winnings).map(s => s.winnings!) : [0]);
@@ -259,8 +288,8 @@
   <!-- Quick Stats -->
   <div class="queue-stats">
     <div class="stat">
-      <div class="stat-value">{allRecentSpins.length}</div>
-      <div class="stat-label">Recent</div>
+      <div class="stat-value">{totalSpins}</div>
+      <div class="stat-label">Total</div>
     </div>
     
     <div class="stat">
@@ -290,7 +319,7 @@
       class:active={selectedTab === 'recent'}
       on:click={() => selectedTab = 'recent'}
     >
-      Recent Spins ({allRecentSpins.length})
+      All Spins ({totalSpins > 0 ? `${startIndex + 1}-${endIndex} of ${totalSpins}` : '0'})
     </button>
     <button
       class="tab"
@@ -388,6 +417,35 @@
         </div>
       {/if}
     </div>
+    
+    <!-- Pagination Controls -->
+    {#if totalPages > 1}
+      <div class="pagination-controls">
+        <button 
+          class="pagination-button" 
+          class:disabled={currentPage === 0}
+          on:click={previousPage}
+          disabled={currentPage === 0}
+        >
+          ‹ Previous
+        </button>
+        
+        <div class="pagination-info">
+          <span class="text-xs text-theme-text opacity-70">
+            Page {currentPage + 1} of {totalPages}
+          </span>
+        </div>
+        
+        <button 
+          class="pagination-button" 
+          class:disabled={currentPage === totalPages - 1}
+          on:click={nextPage}
+          disabled={currentPage === totalPages - 1}
+        >
+          Next ›
+        </button>
+      </div>
+    {/if}
   {:else if selectedTab === 'stats'}
     <!-- Stats View -->
     <div class="stats-content">
@@ -871,5 +929,23 @@
   
   .modal-body::-webkit-scrollbar-thumb:hover {
     background: rgba(16, 185, 129, 0.7);
+  }
+  
+  /* Pagination styles */
+  .pagination-controls {
+    @apply flex items-center justify-between px-4 py-3 border-t border-surface-border bg-surface-tertiary;
+  }
+  
+  .pagination-button {
+    @apply bg-surface-secondary hover:bg-surface-hover text-theme text-xs font-medium px-3 py-2 rounded transition-colors duration-200;
+  }
+  
+  .pagination-button:disabled,
+  .pagination-button.disabled {
+    @apply opacity-50 cursor-not-allowed hover:bg-surface-secondary;
+  }
+  
+  .pagination-info {
+    @apply flex items-center;
   }
 </style>

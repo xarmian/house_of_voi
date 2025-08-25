@@ -8,7 +8,7 @@ import { browser } from '$app/environment';
 import { estimateSpinTransactionCost, filterActivePendingSpins } from '$lib/utils/balanceUtils';
 
 const STORAGE_KEY = 'hov_queue';
-const MAX_QUEUE_SIZE = 50;
+const MAX_QUEUE_SIZE = 500;
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY = 5000; // 5 seconds
 
@@ -309,6 +309,14 @@ export const recentSpins = derived(
     .filter(spin => spin.status !== SpinStatus.PENDING)
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, 10)
+);
+
+// Get all non-pending spins for pagination
+export const allSpins = derived(
+  queueStore,
+  $queue => $queue.spins
+    .filter(spin => spin.status !== SpinStatus.PENDING)
+    .sort((a, b) => b.timestamp - a.timestamp)
 );
 
 export const reservedBalance = derived(
