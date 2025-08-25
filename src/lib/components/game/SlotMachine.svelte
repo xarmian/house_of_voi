@@ -59,13 +59,19 @@
   export let disabled = false;
   export let compact = false;
   
-  // Win celebration state
-  let showWinCelebration = false;
-  let winAmount = 0;
-  let winLevel: 'small' | 'medium' | 'large' | 'jackpot' = 'small';
-  let winningSymbols: SlotSymbol[] = [];
-  let celebrationGridOutcome: string[][] | null = null;
-  let celebrationSelectedPaylines: number = 1;
+  // Win celebration state - support multiple concurrent celebrations
+  type CelebrationData = {
+    id: string;
+    winAmount: number;
+    winLevel: 'small' | 'medium' | 'large' | 'jackpot';
+    winningSymbols: SlotSymbol[];
+    gridOutcome: string[][] | null;
+    selectedPaylines: number;
+    startTime: number;
+    timeout: NodeJS.Timeout;
+  };
+  
+  let activeCelebrations: Map<string, CelebrationData> = new Map();
   
   // Loss feedback state
   let showLossFeedback = false;
@@ -80,8 +86,8 @@
   let spinningInterval: NodeJS.Timeout | null = null;
   let queueUnsubscribe: (() => void) | null = null;
   let isInitialMount = true;
-  let celebrationTimeout: NodeJS.Timeout | null = null;
-  let lastCelebratedSpinId: string | null = null;
+  let lastCelebratedSpinId: string | null = null; // Keep for current spin celebrations
+  let autoCelebratedSpinIds = new Set<string>(); // Track background auto-celebrations
   let lossFeedbackTimeout: NodeJS.Timeout | null = null;
   let lastLossFeedbackSpinId: string | null = null;
   let lastProcessedOutcomeSpinId: string | null = null;
@@ -183,12 +189,17 @@
     houseBalanceActions.reset(); // Stop house balance monitoring
     if (queueUnsubscribe) queueUnsubscribe();
     if (spinningInterval) clearInterval(spinningInterval);
-    if (celebrationTimeout) clearTimeout(celebrationTimeout);
     if (lossFeedbackTimeout) clearTimeout(lossFeedbackTimeout);
     if (paylineTimeout) clearTimeout(paylineTimeout);
     // Clear all replay timeouts
     replayTimeouts.forEach(timeout => clearTimeout(timeout));
     replayTimeouts = [];
+    
+    // Clear all active celebration timeouts
+    activeCelebrations.forEach(celebration => {
+      clearTimeout(celebration.timeout);
+    });
+    activeCelebrations.clear();
     
     // Stop any spinning sounds
     soundService.stopLoopingSound('spin-loop', { fadeOut: 0.1 }).catch(() => {
@@ -354,14 +365,19 @@
         displayOutcome(mostRecentSpin);
       }
       
-      // Check for any completed winning spins that we haven't celebrated yet (background wins)
+      // Check for any completed winning spins that we haven't auto-celebrated yet (background wins)
       if (userSessionStarted && !isInitialMount) {
         for (const spin of readySpins) {
           const spinTooOld = spin.timestamp < fiveMinutesAgo;
           if (!spinTooOld && 
               spin.winnings > 0 && 
-              spin.id !== lastCelebratedSpinId) {
-            // This is a winning spin we haven't celebrated yet
+              !autoCelebratedSpinIds.has(spin.id) &&
+              spin.id !== $currentSpinId) { // Don't auto-celebrate current spin (it gets normal treatment)
+            
+            // Mark as auto-celebrated
+            autoCelebratedSpinIds.add(spin.id);
+            
+            // This is a background winning spin we haven't celebrated yet
             const winLevel = spin.winnings >= 100000000 ? 'jackpot' : 
                            spin.winnings >= 50000000 ? 'large' : 
                            spin.winnings >= 20000000 ? 'medium' : 'small';
@@ -376,6 +392,12 @@
             
             break; // Only celebrate one spin per update to avoid overwhelming
           }
+        }
+        
+        // Clean up old auto-celebrated IDs to prevent memory bloat
+        if (autoCelebratedSpinIds.size > 20) {
+          const idsArray = Array.from(autoCelebratedSpinIds);
+          autoCelebratedSpinIds = new Set(idsArray.slice(-20));
         }
       }
     }
@@ -680,33 +702,15 @@
     gridOutcome?: string[][];
     selectedPaylines?: number;
   }, spinId?: string) {
-    // Clear any existing celebration timeout to prevent conflicts
-    if (celebrationTimeout) {
-      clearTimeout(celebrationTimeout);
-      celebrationTimeout = null;
-    }
-    
-    // Don't trigger if already showing the same celebration
-    if (showWinCelebration && winAmount === win.amount && winLevel === win.level) {
-      return;
-    }
+    // Create unique celebration ID
+    const celebrationId = spinId || `celebration_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Record that we've celebrated this spin
     if (spinId) {
       lastCelebratedSpinId = spinId;
     }
     
-    winAmount = win.amount;
-    winLevel = win.level;
-    winningSymbols = generateWinningSymbols(win.level);
-    celebrationGridOutcome = win.gridOutcome || null;
-    
-    // Store the selectedPaylines from win data (for both real spins and tests)
-    celebrationSelectedPaylines = win.selectedPaylines || $bettingStore.selectedPaylines;
-    
-    showWinCelebration = true;
-    
-    // Auto-hide celebration after duration
+    // Auto-hide duration
     const duration = {
       small: 3000,
       medium: 4000,
@@ -714,10 +718,27 @@
       jackpot: 6000
     }[win.level];
     
-    celebrationTimeout = setTimeout(() => {
-      showWinCelebration = false;
-      celebrationTimeout = null;
+    // Create celebration timeout
+    const timeout = setTimeout(() => {
+      activeCelebrations.delete(celebrationId);
+      activeCelebrations = activeCelebrations; // Trigger reactivity
     }, duration);
+    
+    // Create new celebration data
+    const celebration: CelebrationData = {
+      id: celebrationId,
+      winAmount: win.amount,
+      winLevel: win.level,
+      winningSymbols: generateWinningSymbols(win.level),
+      gridOutcome: win.gridOutcome || null,
+      selectedPaylines: win.selectedPaylines || $bettingStore.selectedPaylines,
+      startTime: Date.now(),
+      timeout
+    };
+    
+    // Add to active celebrations
+    activeCelebrations.set(celebrationId, celebration);
+    activeCelebrations = activeCelebrations; // Trigger reactivity
   }
 
   function triggerLossFeedback(spin: any) {
@@ -727,8 +748,8 @@
       lossFeedbackTimeout = null;
     }
     
-    // Don't show loss feedback if we're already showing win celebration
-    if (showWinCelebration) {
+    // Don't show loss feedback if we have active win celebrations
+    if (activeCelebrations.size > 0) {
       return;
     }
     
@@ -752,8 +773,8 @@
       failureFeedbackTimeout = null;
     }
     
-    // Don't show failure feedback if we're showing win celebration
-    if (showWinCelebration) {
+    // Don't show failure feedback if we have active win celebrations
+    if (activeCelebrations.size > 0) {
       return;
     }
     
@@ -1138,16 +1159,18 @@
     {/if}
   </div>
   
-  <!-- Win Celebration Overlay -->
-  <WinCelebration 
-    bind:isVisible={showWinCelebration}
-    {winAmount}
-    betAmount={$bettingStore.betPerLine * $bettingStore.selectedPaylines}
-    {winLevel}
-    {winningSymbols}
-    gridOutcome={celebrationGridOutcome}
-    selectedPaylines={celebrationSelectedPaylines}
-  />
+  <!-- Win Celebration Overlays - Multiple concurrent celebrations -->
+  {#each [...activeCelebrations.values()] as celebration (celebration.id)}
+    <WinCelebration 
+      isVisible={true}
+      winAmount={celebration.winAmount}
+      betAmount={$bettingStore.betPerLine * $bettingStore.selectedPaylines}
+      winLevel={celebration.winLevel}
+      winningSymbols={celebration.winningSymbols}
+      gridOutcome={celebration.gridOutcome}
+      selectedPaylines={celebration.selectedPaylines}
+    />
+  {/each}
 
   <!-- Development Test Controls -->
   {#if PUBLIC_DEBUG_MODE === 'true'}

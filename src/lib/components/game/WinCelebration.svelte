@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { scale, fly, fade } from 'svelte/transition';
   import { elasticOut, bounceOut, cubicOut } from 'svelte/easing';
   import type { CelebrationEffect, WinAnimation } from '$lib/types/animations';
@@ -208,7 +208,11 @@
 
   // Handle visibility changes
   $: if (isVisible) {
-    startCelebration();
+    // Use async IIFE to wait for DOM to be ready
+    (async () => {
+      await tick(); // Wait for DOM to update
+      startCelebration();
+    })();
   } else {
     cleanup();
   }
@@ -596,10 +600,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-
-  .win-celebration-container.visible {
-    pointer-events: auto;
   }
 
   .celebration-background {
