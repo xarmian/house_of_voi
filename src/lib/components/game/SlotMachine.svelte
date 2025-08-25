@@ -58,6 +58,8 @@
   
   export let disabled = false;
   export let compact = false;
+  export let initialReplayData: any = null;
+  export let hideBettingControls = false;
   
   // Win celebration state - support multiple concurrent celebrations
   type CelebrationData = {
@@ -177,6 +179,55 @@
 
     // @ts-ignore
     document.addEventListener('replay-spin', handleReplayEvent);
+    
+    // Auto-start replay if initialReplayData is provided
+    if (initialReplayData) {
+      console.log('🎬 Initializing replay with data:', initialReplayData);
+      
+      const waitForReels = async () => {
+        console.log('⏳ Waiting for reels to be ready...');
+        let attempts = 0;
+        const maxAttempts = 50; // 5 seconds max wait
+        
+        while (attempts < maxAttempts) {
+          // Check if any reel grid is ready
+          const reelGrids = [desktopReelGrid, mobileReelGrid1, mobileReelGrid2].filter(Boolean);
+          const hasReadyGrid = reelGrids.some(grid => grid?.isReady?.());
+          
+          if (hasReadyGrid) {
+            console.log('✅ Reels are ready, starting replay');
+            handleReplaySpin({
+              spin: {
+                id: 'initial-replay',
+                ...initialReplayData
+              },
+              outcome: initialReplayData.outcome,
+              winnings: initialReplayData.winnings,
+              betAmount: initialReplayData.betAmount
+            });
+            break;
+          }
+          
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+        }
+        
+        if (attempts >= maxAttempts) {
+          console.warn('⚠️ Timeout waiting for reels to be ready, starting replay anyway');
+          handleReplaySpin({
+            spin: {
+              id: 'initial-replay-fallback',
+              ...initialReplayData
+            },
+            outcome: initialReplayData.outcome,
+            winnings: initialReplayData.winnings,
+            betAmount: initialReplayData.betAmount
+          });
+        }
+      };
+      
+      waitForReels();
+    }
     
     return () => {
       // @ts-ignore
@@ -933,9 +984,9 @@
           replayTimeouts = replayTimeouts.filter(t => t !== startTimeout && t !== outcomeTimeout && t !== celebrationTimeout && t !== cleanupTimeout);
           
           console.log(`=== REPLAY: Cleanup completed for ${replayId} ===`);
-        }, 3000); // Clear the replay after 3 seconds
+        }, 6000); // Clear the replay after 6 seconds
         replayTimeouts.push(cleanupTimeout);
-      }, 2500); // Show spinning for 2.5 seconds
+      }, 5000); // Show spinning for 5 seconds
       replayTimeouts.push(outcomeTimeout);
     }, 0);
     replayTimeouts.push(startTimeout);
@@ -964,6 +1015,13 @@
       
       <!-- Machine body with metallic finish -->
       <div class="machine-body">
+        <!-- Replay Mode Indicator -->
+        {#if initialReplayData}
+          <div class="replay-indicator">
+            <span class="replay-badge">REPLAY MODE</span>
+          </div>
+        {/if}
+        
         <!-- Chrome accent frame -->
         <div class="chrome-frame">
           <!-- Inner shadow frame -->
@@ -1009,7 +1067,9 @@
     </div>
     
     <!-- Betting Controls - Below slot machine -->
-    <BettingControls on:spin={handleSpin} {compact} />
+    {#if !hideBettingControls && !initialReplayData}
+      <BettingControls on:spin={handleSpin} {compact} disabled={disabled} />
+    {/if}
   </div>
   
   <!-- Mobile: Full height layout -->
@@ -1078,9 +1138,11 @@
       <!-- Mobile Controls - Vertical stacked layout -->
       <div class="flex-1 flex flex-col space-y-3">
         <!-- Betting Controls - Fixed height, takes priority -->
-        <div class="flex-shrink-0">
-          <BettingControls on:spin={handleSpin} {compact} />
-        </div>
+        {#if !hideBettingControls && !initialReplayData}
+          <div class="flex-shrink-0">
+            <BettingControls on:spin={handleSpin} {compact} disabled={disabled} />
+          </div>
+        {/if}
         
         <!-- Game Queue - Can scroll below the fold -->
         <div class="flex-shrink-0">
@@ -1152,7 +1214,9 @@
         
         <!-- Mobile Controls and Queue -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <BettingControls on:spin={handleSpin} {compact} />
+          {#if !hideBettingControls && !initialReplayData}
+            <BettingControls on:spin={handleSpin} {compact} disabled={disabled} />
+          {/if}
           <GameQueue maxHeight="400px" />
         </div>
       </div>
@@ -1383,6 +1447,15 @@
       inset 0 2px 4px rgba(255, 255, 255, 0.1),
       inset 0 -2px 4px rgba(0, 0, 0, 0.3),
       0 0 20px var(--theme-lights);
+  }
+
+  .replay-indicator {
+    @apply absolute top-2 left-1/2 transform -translate-x-1/2 z-20;
+  }
+
+  .replay-badge {
+    @apply bg-amber-600 text-theme text-xs font-bold px-3 py-1 rounded-full shadow-lg animate-pulse;
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
   }
 
   .chrome-frame {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { fly } from 'svelte/transition';
+  import { fly, fade } from 'svelte/transition';
   import type { SlotSymbol, SpinSequence } from '$lib/types/symbols';
   import type { ReelAnimationState } from '$lib/types/animations';
   import { 
@@ -37,6 +37,10 @@
   const VISIBLE_SYMBOLS = 3;
   const EXTENDED_SYMBOLS = 100; // Use ALL contract symbols - this was the issue!
   
+  // Loading state for reel data
+  let isLoadingReelData = true;
+  let reelDataError: string | null = null;
+  
   // Contract reel data - the TRUE layout from blockchain
   let contractReelData: string = '';
   let contractReels: string[][] = []; // 5 reels, each with 100 symbols
@@ -46,9 +50,27 @@
   $: reduceMotion = $shouldReduceAnimations;
   $: theme = $currentTheme;
   
-  // Initialize extended reels using ALL contract symbols (1:1 mapping)
-  // Only rebuild when we don't have extended reels yet, not on every spin end
-  $: if (!currentlySpinning && contractReels.length > 0 && extendedReels.length === 0) {
+  // Initialize extended reels immediately with deterministic data as fallback
+  // This ensures the grid has content and proper height from the start
+  $: if (extendedReels.length === 0) {
+    console.log('🎰 ReelGrid: Initializing with deterministic fallback data');
+    extendedReels = Array(5).fill(null).map((_, reelIndex) => {
+      const extended: SlotSymbol[] = [];
+      
+      // Use deterministic symbols to ensure immediate display
+      for (let i = 0; i < 100; i++) {
+        const symbolChar = getDeterministicReelSymbol(reelIndex, i);
+        const symbol = getSymbol(symbolChar);
+        extended.push(symbol);
+      }
+      
+      return extended;
+    });
+  }
+  
+  // Update with contract data when available (but keep existing data if contract fails)
+  $: if (!currentlySpinning && contractReels.length > 0) {
+    console.log('🔗 ReelGrid: Updating with contract reel data');
     extendedReels = contractReels.map((contractReel, reelIndex) => {
       const extended: SlotSymbol[] = [];
       
@@ -69,7 +91,11 @@
   
   // Function to fetch and parse real reel data from contract
   async function fetchContractReelData() {
+    isLoadingReelData = true;
+    reelDataError = null;
+    
     try {
+      console.log('🔄 Fetching contract reel data...');
       // For contractDataCache, we need a placeholder address
       const placeholderAddress = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
       const reelData = await contractDataCache.getReelData(placeholderAddress);
@@ -85,10 +111,14 @@
         contractReels.push(reelSymbols);
       }
       
-      
+      console.log('✅ Contract reel data loaded successfully');
+      isLoadingReelData = false;
       return true;
     } catch (error) {
       console.error('❌ Failed to fetch contract reel data:', error);
+      reelDataError = 'Using deterministic reel configuration';
+      isLoadingReelData = false;
+      // Continue with deterministic data - don't fail completely
       return false;
     }
   }
@@ -97,6 +127,14 @@
   let lastProcessedSpinId: string | null = null;
   let lastProcessedOutcomeSpinId: string | null = null;
   
+  // Export readiness check function for external components
+  export function isReady(): boolean {
+    return isMounted && 
+           extendedReels.length > 0 && 
+           physicsEngine !== null && 
+           reelElements.length > 0;
+  }
+
   // Direct function that gets called from parent component
   export function startSpin(spinId: string) {
     if (!isMounted || !physicsEngine || !reelElements.length || 
@@ -385,6 +423,22 @@
 </script>
 
 <div class="reel-grid" bind:this={gridElement} role="application" aria-label="Slot machine reels">
+  <!-- Loading indicator overlay -->
+  {#if isLoadingReelData}
+    <div class="loading-overlay" transition:fade={{ duration: 200 }}>
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Loading reels...</div>
+    </div>
+  {/if}
+  
+  <!-- Error indicator -->
+  {#if reelDataError}
+    <div class="error-indicator" transition:fade={{ duration: 200 }}>
+      <span class="error-icon">⚠️</span>
+      <span class="error-text">{reelDataError}</span>
+    </div>
+  {/if}
+  
   {#each extendedReels as extendedReel, reelIndex}
     <div 
       class="reel-container"
@@ -457,6 +511,76 @@
     margin: 0 auto;
     position: relative;
     overflow: hidden;
+    /* Ensure minimum height even when empty to prevent collapse */
+    min-height: 336px; /* 320px container + 8px padding top/bottom */
+  }
+  
+  /* Fallback height when grid is empty */
+  .reel-grid:not(:has(.reel-container)) {
+    height: 336px;
+  }
+  
+  /* Loading overlay */
+  .loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    border-radius: 8px;
+    backdrop-filter: blur(4px);
+  }
+  
+  .loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(16, 185, 129, 0.3);
+    border-top: 3px solid #10b981;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 12px;
+  }
+  
+  .loading-text {
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  
+  /* Error indicator */
+  .error-indicator {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    backdrop-filter: blur(4px);
+  }
+  
+  .error-icon {
+    font-size: 14px;
+  }
+  
+  .error-text {
+    font-weight: 500;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
   
   .reel-container {

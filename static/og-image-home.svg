@@ -1,0 +1,54 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#1e293b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f172a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  
+  <!-- Accent bar -->
+  <rect width="1200" height="8" fill="url(#accent)"/>
+  <rect width="1200" height="8" y="622" fill="url(#accent)"/>
+  
+  <!-- Title -->
+  <text x="600" y="200" text-anchor="middle" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="72" font-weight="bold">House of Voi</text>
+  
+  <!-- Subtitle -->
+  <text x="600" y="260" text-anchor="middle" fill="#10b981" font-family="system-ui, -apple-system, sans-serif" font-size="32" font-weight="600">Blockchain Slot Machine</text>
+  
+  <!-- Features -->
+  <text x="600" y="340" text-anchor="middle" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="28">Provably Fair • Instant Payouts • Voi Network</text>
+  
+  <!-- Slot symbols -->
+  <g transform="translate(300, 400)">
+    <rect width="80" height="80" rx="12" fill="#374151" stroke="#10b981" stroke-width="2"/>
+    <text x="40" y="55" text-anchor="middle" fill="#10b981" font-size="40">💎</text>
+  </g>
+  <g transform="translate(410, 400)">
+    <rect width="80" height="80" rx="12" fill="#374151" stroke="#f59e0b" stroke-width="2"/>
+    <text x="40" y="55" text-anchor="middle" fill="#f59e0b" font-size="40">🥇</text>
+  </g>
+  <g transform="translate(520, 400)">
+    <rect width="80" height="80" rx="12" fill="#374151" stroke="#6b7280" stroke-width="2"/>
+    <text x="40" y="55" text-anchor="middle" fill="#6b7280" font-size="40">🥈</text>
+  </g>
+  <g transform="translate(630, 400)">
+    <rect width="80" height="80" rx="12" fill="#374151" stroke="#92400e" stroke-width="2"/>
+    <text x="40" y="55" text-anchor="middle" fill="#92400e" font-size="40">🥉</text>
+  </g>
+  <g transform="translate(740, 400)">
+    <rect width="80" height="80" rx="12" fill="#374151" stroke="#10b981" stroke-width="2"/>
+    <text x="40" y="55" text-anchor="middle" fill="#10b981" font-size="40">💎</text>
+  </g>
+  
+  <!-- CTA -->
+  <text x="600" y="550" text-anchor="middle" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="24">Connect Wallet & Play Now</text>
+</svg>

@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { fly, fade } from 'svelte/transition';
-  import { Clock, RefreshCw, TrendingUp, TrendingDown, X, Check, Loader, Info } from 'lucide-svelte';
+  import { Clock, RefreshCw, TrendingUp, TrendingDown, X, Check, Loader, Info, Share2 } from 'lucide-svelte';
   import { queueStore, queueStats, pendingSpins, recentSpins, allSpins } from '$lib/stores/queue';
   import { currentSpinId } from '$lib/stores/game';
   import { formatVOI } from '$lib/constants/betting';
   import { SpinStatus } from '$lib/types/queue';
   import type { QueuedSpin } from '$lib/types/queue';
   import { playButtonClick } from '$lib/services/soundService';
+  import { encodeReplayData } from '$lib/utils/replayEncoder';
   
   export let maxHeight = '400px';
   
@@ -27,6 +28,10 @@
   
   // Track spins that have been shown as "Completed" to prevent reverting to "Submitting"
   let completedSpins = new Set<string>();
+  
+  // Track share button states
+  let sharingSpinId: string | null = null;
+  let shareSuccess = false;
   
   onMount(() => {
     // Auto-refresh disabled - the queue processor handles all updates
@@ -220,6 +225,43 @@
     return txId.length > 16 ? `${txId.slice(0, 8)}...${txId.slice(-8)}` : txId;
   }
   
+  async function handleShareSpin(spin: QueuedSpin) {
+    if (!spin.outcome || typeof spin.winnings !== 'number') {
+      console.warn('Cannot share spin without outcome data');
+      return;
+    }
+    
+    try {
+      sharingSpinId = spin.id;
+      
+      const encoded = encodeReplayData({
+        outcome: spin.outcome,
+        winnings: spin.winnings,
+        totalBet: spin.totalBet,
+        selectedPaylines: spin.selectedPaylines,
+        timestamp: spin.timestamp,
+        txId: spin.txId
+      });
+      
+      const url = `${window.location.origin}/replay?d=${encoded}`;
+      await navigator.clipboard.writeText(url);
+      
+      shareSuccess = true;
+      setTimeout(() => {
+        shareSuccess = false;
+        sharingSpinId = null;
+      }, 2000);
+      
+      // Play button click sound
+      playButtonClick().catch(() => {
+        // Ignore sound errors
+      });
+    } catch (error) {
+      console.error('Failed to share spin:', error);
+      sharingSpinId = null;
+    }
+  }
+  
   $: allRecentSpins = (() => {
     // Create a Map to deduplicate by ID, ensuring each spin appears only once
     const spinMap = new Map();
@@ -358,7 +400,7 @@
             {/if}
           </div>
 
-          <!-- Info Button -->
+          <!-- Info Button (kept near status icon) -->
           {#if spin.txId || spin.claimTxId || spin.commitmentRound || spin.outcomeRound || spin.status === SpinStatus.FAILED}
             <button 
               class="info-button"
@@ -404,6 +446,24 @@
               </div>
             {/if}
           </div>
+          
+          <!-- Share Button (far right) -->
+          {#if [SpinStatus.READY_TO_CLAIM, SpinStatus.CLAIMING, SpinStatus.COMPLETED].includes(spin.status) && spin.outcome && typeof spin.winnings === 'number'}
+            <button 
+              class="share-button"
+              class:sharing={sharingSpinId === spin.id}
+              class:success={shareSuccess && sharingSpinId === spin.id}
+              on:click|stopPropagation={() => handleShareSpin(spin)}
+              title={shareSuccess && sharingSpinId === spin.id ? 'Link copied!' : 'Share this spin'}
+              disabled={sharingSpinId === spin.id}
+            >
+              {#if shareSuccess && sharingSpinId === spin.id}
+                <Check class="w-3 h-3" />
+              {:else}
+                <Share2 class="w-3 h-3" />
+              {/if}
+            </button>
+          {/if}
         </div>
       {/each}
       
@@ -839,9 +899,20 @@
     }
   }
 
-  /* Info Button */
+  .share-button {
+    @apply flex-shrink-0 p-1 rounded-full bg-surface-secondary hover:bg-surface-hover text-theme-text opacity-60 hover:opacity-100 transition-all duration-200 disabled:cursor-not-allowed;
+  }
+  
+  .share-button.sharing {
+    @apply opacity-50;
+  }
+  
+  .share-button.success {
+    @apply bg-green-600 text-theme opacity-100;
+  }
+  
   .info-button {
-    @apply flex-shrink-0 p-1 rounded-full bg-surface-secondary hover:bg-surface-hover text-theme-text opacity-60 hover:opacity-100 transition-all duration-200;
+    @apply p-1 rounded-full bg-surface-secondary hover:bg-surface-hover text-theme-text opacity-60 hover:opacity-100 transition-all duration-200;
   }
 
   /* Modal Styles */

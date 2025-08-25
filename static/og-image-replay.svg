@@ -1,0 +1,67 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#1e293b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f172a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="amber" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  
+  <!-- Accent bars -->
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <rect width="1200" height="6" y="624" fill="url(#accent)"/>
+  
+  <!-- Replay Badge -->
+  <g transform="translate(50, 50)">
+    <rect width="180" height="50" rx="25" fill="url(#amber)" opacity="0.9"/>
+    <text x="90" y="35" text-anchor="middle" fill="#ffffff" font-family="system-ui" font-size="20" font-weight="bold">REPLAY</text>
+  </g>
+  
+  <!-- Title -->
+  <text x="600" y="150" text-anchor="middle" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="56" font-weight="bold">Spin Replay</text>
+  <text x="600" y="200" text-anchor="middle" fill="#10b981" font-family="system-ui, -apple-system, sans-serif" font-size="32">House of Voi Slots</text>
+  
+  <!-- Mini Slot Machine -->
+  <g transform="translate(350, 250)">
+    <!-- Frame -->
+    <rect width="500" height="200" rx="16" fill="#374151" stroke="url(#accent)" stroke-width="3"/>
+    <rect width="480" height="180" rx="12" x="10" y="10" fill="#1f2937"/>
+    
+    <!-- Reels -->
+    <g transform="translate(40, 30)">
+      <!-- Reel backgrounds -->
+      <rect width="70" height="120" rx="6" fill="#0f172a" stroke="#4b5563" stroke-width="1"/>
+      <rect width="70" height="120" rx="6" x="90" fill="#0f172a" stroke="#4b5563" stroke-width="1"/>
+      <rect width="70" height="120" rx="6" x="180" fill="#0f172a" stroke="#4b5563" stroke-width="1"/>
+      <rect width="70" height="120" rx="6" x="270" fill="#0f172a" stroke="#4b5563" stroke-width="1"/>
+      <rect width="70" height="120" rx="6" x="360" fill="#0f172a" stroke="#4b5563" stroke-width="1"/>
+      
+      <!-- Symbols -->
+      <text x="35" y="75" text-anchor="middle" fill="#6b7280" font-size="40">🥈</text>
+      <text x="125" y="75" text-anchor="middle" fill="#10b981" font-size="40">💎</text>
+      <text x="215" y="75" text-anchor="middle" fill="#f59e0b" font-size="40">🥇</text>
+      <text x="305" y="75" text-anchor="middle" fill="#6b7280" font-size="40">🥈</text>
+      <text x="395" y="75" text-anchor="middle" fill="#92400e" font-size="40">🥉</text>
+    </g>
+  </g>
+  
+  <!-- Play Button -->
+  <g transform="translate(520, 480)">
+    <circle cx="80" cy="40" r="35" fill="url(#accent)" stroke="#ffffff" stroke-width="2"/>
+    <polygon points="70,25 95,40 70,55" fill="#ffffff"/>
+  </g>
+  
+  <!-- Description -->
+  <text x="600" y="570" text-anchor="middle" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="24">Watch this House of Voi spin replay</text>
+</svg>
