@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, createEventDispatcher } from 'svelte';
   import { ybtStore, userShares, sharePercentage, totalSupply, isYBTLoading } from '$lib/stores/ybt';
   import { walletStore } from '$lib/stores/walletAdapter';
   import { selectedWallet } from 'avm-wallet-svelte';
@@ -8,19 +8,35 @@
   import YBTDepositModal from './YBTDepositModal.svelte';
   import YBTWithdrawModal from './YBTWithdrawModal.svelte';
   import type { YBTGlobalState } from '$lib/types/ybt';
+  import type { HouseBalanceData } from '$lib/services/houseBalance';
+
+  export let houseBalance: HouseBalanceData | null = null;
+  export let balanceLoading = false;
+  export let onRefreshBalance: (() => Promise<void>) | null = null;
+
+  const dispatch = createEventDispatcher();
 
   let showDepositModal = false;
   let showWithdrawModal = false;
   let isRefreshing = false;
   let globalState: YBTGlobalState | null = null;
-  let contractValue = BigInt(0);
-  let isLoadingContractValue = false;
 
   async function handleRefresh() {
     isRefreshing = true;
     await ybtStore.refresh();
-    await loadContractValue();
+    if (onRefreshBalance) {
+      await onRefreshBalance();
+    }
     isRefreshing = false;
+  }
+
+  async function handleYBTSuccess() {
+    await ybtStore.refresh();
+    if (onRefreshBalance) {
+      await onRefreshBalance();
+    }
+    // Notify parent component that balances have changed due to YBT operation
+    dispatch('balanceChanged');
   }
 
   function formatShares(shares: bigint): string {
@@ -35,28 +51,17 @@
     }
   }
   
-  async function loadContractValue() {
-    isLoadingContractValue = true;
-    try {
-      contractValue = await ybtService.getContractTotalValue();
-    } catch (error) {
-      console.error('Error loading contract value:', error);
-      contractValue = BigInt(0);
-    } finally {
-      isLoadingContractValue = false;
-    }
-  }
   
   function calculateUserPortfolioValue(): bigint {
-    if (!globalState || $userShares === BigInt(0) || $totalSupply === BigInt(0) || contractValue === BigInt(0)) {
+    if (!globalState || $userShares === BigInt(0) || $totalSupply === BigInt(0) || !houseBalance) {
       return BigInt(0);
     }
+    const contractValue = BigInt(houseBalance.total);
     return ybtService.calculateUserPortfolioValue($userShares, $totalSupply, contractValue);
   }
   
   onMount(() => {
     loadGlobalState();
-    loadContractValue();
   });
 
   $: hasShares = $userShares > BigInt(0);
@@ -64,7 +69,11 @@
 
 <div class="space-y-6">
   <!-- Stats Overview -->
-  <YBTStats />
+  <YBTStats 
+    {houseBalance} 
+    {balanceLoading} 
+    {onRefreshBalance} 
+  />
 
   <!-- User Shares Card -->
   <div class="card p-6">
@@ -72,10 +81,10 @@
       <h2 class="text-2xl font-bold text-theme">Your YBT Holdings</h2>
       <button
         on:click={handleRefresh}
-        disabled={isRefreshing || $isYBTLoading}
+        disabled={isRefreshing || $isYBTLoading || balanceLoading}
         class="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {#if isRefreshing}
+        {#if isRefreshing || balanceLoading}
           <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-theme" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -116,7 +125,7 @@
         <div class="bg-slate-700 rounded-lg p-4">
           <div class="text-slate-400 text-sm font-medium mb-1">Portfolio Value</div>
           <div class="text-2xl font-bold text-yellow-400">
-            {#if isLoadingContractValue}
+            {#if balanceLoading || !houseBalance}
               <div class="flex items-center">
                 <svg class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -200,7 +209,7 @@
 {#if showDepositModal}
   <YBTDepositModal 
     bind:open={showDepositModal}
-    on:success={() => ybtStore.refresh()}
+    on:success={handleYBTSuccess}
   />
 {/if}
 
@@ -208,7 +217,7 @@
   <YBTWithdrawModal 
     bind:open={showWithdrawModal}
     userShares={$userShares}
-    on:success={() => ybtStore.refresh()}
+    on:success={handleYBTSuccess}
   />
 {/if}
 

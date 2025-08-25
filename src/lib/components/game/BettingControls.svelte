@@ -493,19 +493,35 @@
         </div>
       </div>
 
-      <!-- Total Bet Display -->
+      <!-- Total Bet Display with Add Credits -->
       <div class="control-group">
         <div class="bg-gradient-to-r from-voi-900/20 to-blue-900/20 border border-voi-700/30 rounded-lg p-2">
-          <div class="flex items-center justify-between">
-            <span class="text-theme-text text-sm font-medium">Total</span>
-            <div class="flex items-center gap-1">
-              <span class="text-lg font-bold text-theme">{$totalBetVOI}</span>
-              <span class="text-xs text-theme-text opacity-70">VOI</span>
+          <div class="flex items-center gap-4">
+            <!-- Total display (left) -->
+            <div class="flex-1">
+              <div class="flex items-center justify-between">
+                <span class="text-theme-text text-sm font-medium">Total</span>
+                <div class="flex items-center gap-1">
+                  <span class="text-lg font-bold text-theme">{$totalBetVOI}</span>
+                  <span class="text-xs text-theme-text opacity-70">VOI</span>
+                </div>
+              </div>
+              
+              <div class="text-xs text-theme-text opacity-70 mt-1">
+                {$bettingStore.selectedPaylines}L × {$betPerLineVOI}
+              </div>
             </div>
-          </div>
-          
-          <div class="text-xs text-theme-text opacity-70 mt-1">
-            {$bettingStore.selectedPaylines}L × {$betPerLineVOI}
+            
+            <!-- Add Credits button (right) -->
+            <button
+              on:click={() => showAddFundsModal = true}
+              disabled={!$isWalletConnected}
+              class="btn-primary text-xs py-1.5 px-2 flex items-center gap-1 shrink-0"
+              title="Add credits to your wallet"
+            >
+              <Plus class="w-3 h-3" />
+              <span class="text-xs max-w-12 text-center">Add Credits</span>
+            </button>
           </div>
         </div>
       </div>
@@ -767,6 +783,19 @@
     transform: scale(0.95);
   }
   
+  .btn-primary {
+    @apply bg-voi-600 hover:bg-voi-700 disabled:bg-voi-600/50 disabled:opacity-50 disabled:cursor-not-allowed text-theme font-medium rounded-lg transition-all duration-200;
+    position: relative;
+    overflow: hidden;
+    transform-origin: center;
+    backface-visibility: hidden;
+    touch-action: manipulation;
+  }
+  
+  .btn-primary:active:not(:disabled) {
+    transform: scale(0.95);
+  }
+  
   .spin-button {
     @apply w-full py-4 px-6 bg-gradient-to-r from-voi-600 to-voi-700 hover:from-voi-700 hover:to-voi-800 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-100 font-bold text-lg rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl disabled:shadow-none;
     position: relative;
@@ -838,6 +867,7 @@
     .control-button,
     .quick-bet-button,
     .btn-secondary,
+    .btn-primary,
     .spin-button,
     .input-field {
       transition: opacity 0.2s ease !important;
@@ -848,6 +878,7 @@
     .control-button:active:not(:disabled),
     .quick-bet-button:active:not(:disabled),
     .btn-secondary:active:not(:disabled),
+    .btn-primary:active:not(:disabled),
     .spin-button:active:not(:disabled) {
       opacity: 0.8;
       transform: none;
@@ -863,7 +894,8 @@
   @media (prefers-contrast: high) {
     .control-button,
     .quick-bet-button,
-    .btn-secondary {
+    .btn-secondary,
+    .btn-primary {
       border: 2px solid currentColor;
     }
     
@@ -900,7 +932,8 @@
       min-height: 40px; /* Better touch target */
     }
     
-    .btn-secondary {
+    .btn-secondary,
+    .btn-primary {
       min-height: 44px; /* Better touch target */
     }
     
@@ -913,6 +946,7 @@
     .control-button,
     .quick-bet-button,
     .btn-secondary,
+    .btn-primary,
     .spin-button {
       -webkit-tap-highlight-color: transparent; /* Remove iOS tap highlight */
     }
@@ -938,7 +972,8 @@
       padding: 6px 8px;
     }
     
-    .btn-secondary {
+    .btn-secondary,
+    .btn-primary {
       font-size: 0.875rem;
       min-height: 40px;
     }
@@ -949,6 +984,7 @@
     .control-button:hover,
     .quick-bet-button:hover,
     .btn-secondary:hover,
+    .btn-primary:hover,
     .spin-button:hover {
       transform: none; /* Disable hover transforms on touch devices */
     }

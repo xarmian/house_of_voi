@@ -3,6 +3,11 @@
   import { totalSupply, isYBTLoading } from '$lib/stores/ybt';
   import { ybtService } from '$lib/services/ybt';
   import type { YBTGlobalState } from '$lib/types/ybt';
+  import type { HouseBalanceData } from '$lib/services/houseBalance';
+
+  export let houseBalance: HouseBalanceData | null = null;
+  export let balanceLoading = false;
+  export let onRefreshBalance: (() => Promise<void>) | null = null;
 
   let globalState: YBTGlobalState | null = null;
   let isLoadingGlobal = false;
@@ -33,13 +38,18 @@
 
 <div class="card p-6">
   <div class="flex items-center justify-between mb-4">
-    <h2 class="text-2xl font-bold text-theme">YBT Contract Overview</h2>
+    <h2 class="text-2xl font-bold text-theme">House Contract Overview</h2>
     <button
-      on:click={loadGlobalState}
-      disabled={isLoadingGlobal}
+      on:click={async () => {
+        await loadGlobalState();
+        if (onRefreshBalance) {
+          await onRefreshBalance();
+        }
+      }}
+      disabled={isLoadingGlobal || balanceLoading}
       class="btn-secondary text-sm"
     >
-      {#if isLoadingGlobal}
+      {#if isLoadingGlobal || balanceLoading}
         <svg class="animate-spin -ml-1 mr-1 h-3 w-3 text-theme" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -105,6 +115,78 @@
         </div>
         <div class="text-xs text-slate-500 mt-1">App ID</div>
       </div>
+    </div>
+
+    <!-- Contract Balances -->
+    <div class="mt-6">
+      <h3 class="text-lg font-semibold text-theme mb-4">Contract Balances</h3>
+      {#if balanceLoading}
+        <div class="flex items-center justify-center py-8">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-voi-400"></div>
+        </div>
+      {:else if houseBalance}
+        <div class="grid md:grid-cols-3 gap-4">
+          <div class="bg-slate-700 rounded-lg p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs text-gray-400 uppercase tracking-wide">Available</span>
+              <span class="text-xs text-green-400">●</span>
+            </div>
+            <div class="text-xl font-bold text-theme">
+              {(houseBalance.available / 1e6).toLocaleString(undefined, { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 6 
+              })}
+            </div>
+            <div class="text-xs text-gray-400">VOI</div>
+          </div>
+          
+          <div class="bg-slate-700 rounded-lg p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs text-gray-400 uppercase tracking-wide">Locked</span>
+              <span class="text-xs text-yellow-400">●</span>
+            </div>
+            <div class="text-xl font-bold text-theme">
+              {(houseBalance.locked / 1e6).toLocaleString(undefined, { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 6 
+              })}
+            </div>
+            <div class="text-xs text-gray-400">VOI</div>
+          </div>
+          
+          <div class="bg-slate-700 rounded-lg p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs text-gray-400 uppercase tracking-wide">Total</span>
+              <span class="text-xs {houseBalance.isOperational ? 'text-green-400' : 'text-red-400'}">●</span>
+            </div>
+            <div class="text-xl font-bold text-theme">
+              {(houseBalance.total / 1e6).toLocaleString(undefined, { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 6 
+              })}
+            </div>
+            <div class="text-xs text-gray-400">VOI</div>
+          </div>
+        </div>
+        
+        <div class="mt-4 p-3 bg-slate-800/50 rounded-lg">
+          <div class="flex items-center gap-2 text-sm">
+            <span class="text-gray-400">Status:</span>
+            {#if houseBalance.isOperational}
+              <span class="text-green-400 font-medium">● Operational</span>
+            {:else}
+              <span class="text-red-400 font-medium">● Below Minimum</span>
+            {/if}
+          </div>
+          <div class="text-xs text-gray-500 mt-1">
+            Available: Funds ready for payouts • Locked: Funds reserved for pending bets • Total: All contract funds
+          </div>
+        </div>
+      {:else}
+        <div class="text-center py-8 text-gray-400">
+          <p>Unable to load contract balance information</p>
+        </div>
+      {/if}
     </div>
 
     <!-- Additional Info -->

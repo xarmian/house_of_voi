@@ -16,6 +16,8 @@ import { contractDataCache } from './contractDataCache';
 
 // Import the actual ABI from SlotMachineClient like React component does
 import { APP_SPEC as SlotMachineAppSpec } from '../../clients/SlotMachineClient.js';
+// Import BankManager ABI for balance queries
+import { APP_SPEC as BankManagerAppSpec } from '../../clients/BankManagerClient.js';
 
 // Slot Machine ABI for ulujs - use the real ABI like React component
 const slotMachineABI = {
@@ -45,6 +47,13 @@ const slotMachineABI = {
       ]
     }
   ]
+};
+
+const BankManagerABI = {
+  name: "BankManager",
+  desc: "A simple bank manager contract",
+  methods: BankManagerAppSpec.contract.methods,
+  events: []
 };
 
 // Helper function to sign, send and confirm transactions
@@ -121,7 +130,11 @@ export class AlgorandService {
 
   private base64ToUint8Array(base64: string): Uint8Array {
     const binaryString = atob(base64);
-    return new Uint8Array(binaryString.length).map((_, i) => binaryString.charCodeAt(i));
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
   }
 
   async generateWallet(): Promise<WalletAccount> {
@@ -140,6 +153,50 @@ export class AlgorandService {
   async getBalance(address: string): Promise<number> {
     const accountInfo = await this.client.accountInformation(address).do();
     return accountInfo.amount;
+  }
+
+  async getBalances(options?: { appId?: number; addr?: string; sk?: Uint8Array; debug?: boolean }): Promise<{ balanceAvailable: number; balanceTotal: number; balanceLocked: number }> {
+    try {
+      const appId = options?.appId || this.appId;
+      const addr = options?.addr || algosdk.getApplicationAddress(appId);
+      const sk = options?.sk || new Uint8Array(64); // Dummy SK for readonly calls
+
+      const acc = { addr, sk };
+      const ci = new CONTRACT(appId, this.client, undefined, BankManagerABI, acc);
+
+      if (options?.debug) {
+        console.log('🔍 Calling get_balances on contract:', appId);
+      }
+
+      const getBalancesR = await ci.get_balances();
+      
+      if (!getBalancesR.success) {
+        throw new Error(`Contract get_balances failed: ${getBalancesR.error || 'Unknown error'}`);
+      }
+
+      if (options?.debug) {
+        console.log('Raw balance result:', getBalancesR);
+      }
+
+      return this.decodeBalances(getBalancesR.returnValue);
+
+    } catch (error) {
+      console.error('💥 getBalances failed:', error);
+      throw this.handleError(error, 'Failed to get contract balances');
+    }
+  }
+
+  private decodeBalances(balances: any): { balanceAvailable: number; balanceTotal: number; balanceLocked: number } {
+
+    const balanceAvailable = balances[0];
+    const balanceTotal = balances[1];
+    const balanceLocked = balances[2];
+
+    return {
+      balanceAvailable: Number(BigInt(balanceAvailable) / BigInt(1e6)),
+      balanceTotal: Number(BigInt(balanceTotal) / BigInt(1e6)),
+      balanceLocked: Number(BigInt(balanceLocked) / BigInt(1e6)),
+    };
   }
 
   async sendPayment(recipientAddress: string, amount: number): Promise<{ success: boolean; txId?: string; error?: string }> {
@@ -344,7 +401,7 @@ export class AlgorandService {
       // Extract bet key from the simulated response
       const betKey = spinR.returnValue;
       const betKeyHex = Array.from(new Uint8Array(betKey)).map(b => b.toString(16).padStart(2, '0')).join('');
-      console.log('🔑 Simulated bet key:', betKeyHex);
+      console.log('🔑 Simulation txn bet key:', betKeyHex);
 
       // Get the unsigned transactions from the simulation
       const unsignedTxns = spinR.txns;
@@ -352,7 +409,7 @@ export class AlgorandService {
         throw new Error('No transactions returned from ulujs simulation');
       }
 
-      console.log('📄 Got unsigned transactions to submit:', unsignedTxns);
+      // console.log('📄 Got unsigned transactions to submit:', unsignedTxns);
 
       // Decode the unsigned transactions
       const decodedTxns = unsignedTxns.map((txnBlob: string) => {
@@ -361,7 +418,7 @@ export class AlgorandService {
         return algosdk.decodeUnsignedTransaction(txnBytes);
       });
 
-      console.log('🔍 Decoded transactions:', decodedTxns);
+      // console.log('🔍 Decoded transactions:', decodedTxns);
 
       // Sign the transactions
       const account = {
@@ -373,7 +430,10 @@ export class AlgorandService {
         return algosdk.signTransaction(txn, account.sk);
       });
 
-      console.log('📝 Transactions signed');
+      console.log(`📝 ${signedTxns.length} transactions signed`);
+
+      // txid of the second transaction
+      const appCallTxId = signedTxns[1].txID;
 
       // Submit the signed transactions as a group
       const submittedGroup = await this.client.sendRawTransaction(signedTxns.map((stxn: {txID: string, blob: string}) => stxn.blob)).do();
@@ -383,31 +443,23 @@ export class AlgorandService {
 
       // Wait for confirmation
       console.log('⏳ Waiting for transaction confirmation...');
-      const confirmedTxn = await this.waitForConfirmation(txId);
+      const confirmedTxn = await this.waitForConfirmation(appCallTxId, 4);
       console.log('✅ Transaction confirmed:', confirmedTxn);
       
       // Extract the actual bet key from the confirmed transaction logs
       let actualBetKey = betKeyHex; // fallback to simulated key
-      
-      if (confirmedTxn && confirmedTxn.logs && confirmedTxn.logs.length > 0) {
-        try {
-          // The bet key should be in the first log entry
-          const logData = this.base64ToUint8Array(confirmedTxn.logs[0]);
-          console.log('📜 Transaction log data:', logData);
-          
-          // Extract bet key from log (it should be the first part of the log after the event signature)
-          // Based on TEAL contract, the log format includes the bet key
-          if (logData.length >= 56) {
-            // Skip the first 4 bytes (event signature) and extract the bet key (56 bytes)
-            const betKeyBytes = logData.slice(4, 60);
-            actualBetKey = Array.from(betKeyBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-            console.log('🔑 Actual bet key from logs:', actualBetKey);
-          }
-        } catch (error) {
-          console.warn('⚠️ Could not extract bet key from logs, using simulated key:', error);
+
+      // get the bet key from the confirmed transaction logs
+      for (const log of confirmedTxn.logs) {
+        // log is already uint8array
+        const betKey = Array.from(log as Uint8Array).map(b => b.toString(16).padStart(2, '0')).join('');
+        if (betKey.length === 112) {
+          // actualBetKey = betKey;
+          console.log('🔑 Actual bet key from logs:', betKey);
+          break;
         }
       }
-      
+
       return {
         txId: txId,
         betKey: actualBetKey,
@@ -428,38 +480,53 @@ export class AlgorandService {
   private async generateGridFromSeed(seed: Uint8Array, address: string): Promise<string> {
     const { reelData, reelLength, reelCount, windowLength } = await contractDataCache.getReelData(address);
     
-    let grid = '';
+    // Port of _get_reel_tops() - calculate position for each reel
+    const maxReelStop = reelLength - (windowLength + 1);
+    const reelTops: number[] = [];
     
-    console.log('🎲 Generating grid from seed using cached contract reel data');
-    
-    // Generate 5 reels using the same algorithm as the contract
-    for (let reel = 0; reel < reelCount; reel++) {
-      // Use the same hash-based approach as the contract for each reel
-      const reelSeed = seed.slice(); // Copy seed
-      const reelIdBytes = new TextEncoder().encode((reel + 1).toString());
-      const combined = new Uint8Array(seed.length + reelIdBytes.length);
+    for (let reelIndex = 1; reelIndex <= 5; reelIndex++) {
+      // Exact port: op.sha256(seed + Bytes(b"1")), etc.
+      const reelIdByte = new Uint8Array([0x30 + reelIndex]); // "1" = 0x31, "2" = 0x32, etc.
+      const combined = new Uint8Array(seed.length + 1);
       combined.set(seed);
-      combined.set(reelIdBytes, seed.length);
+      combined.set(reelIdByte, seed.length);
       
       // Hash to get reel-specific seed
       const hashedSeed = await crypto.subtle.digest('SHA-256', combined);
       const reelSeedBytes = new Uint8Array(hashedSeed);
       
-      // Get last 8 bytes and convert to number (matching contract logic)
+      // Get last 8 bytes and convert to BigUint64 (big endian, as per contract)
       const seedValue = new DataView(reelSeedBytes.buffer, reelSeedBytes.length - 8).getBigUint64(0, false);
-      const maxReelStop = BigInt(reelLength - windowLength);
-      const position = Number(seedValue % maxReelStop);
-      
-      // Extract window from reel data
-      const startPos = reel * reelLength + position;
-      const reelWindow = reelData.slice(startPos, startPos + windowLength);
-      grid += reelWindow;
-      
-      console.log(`  Reel ${reel}: position=${position}, window="${reelWindow}"`);
+      const position = Number(seedValue % BigInt(maxReelStop));
+      reelTops.push(position);
     }
     
-    console.log('🎰 Final grid:', grid);
+    // Port of _get_grid() - combine all reel windows
+    let grid = '';
+    for (let reelIndex = 0; reelIndex < 5; reelIndex++) {
+      const reelWindow = this.getReelWindow(reelData, reelIndex, reelTops[reelIndex], reelLength, windowLength);
+      grid += reelWindow;
+    }
+    
     return grid;
+  }
+
+  /**
+   * Port of _get_reel_window() - get 3-character window from specific reel at given position
+   */
+  private getReelWindow(reelData: string, reelIndex: number, position: number, reelLength: number, windowLength: number): string {
+    // Get the reel data for this specific reel
+    const reelStartInFullData = reelIndex * reelLength;
+    const reelDataForThisReel = reelData.slice(reelStartInFullData, reelStartInFullData + reelLength);
+    
+    // Port of contract logic with wrap-around
+    let window = '';
+    for (let i = 0; i < windowLength; i++) {
+      const pos = (position + i) % reelLength;
+      window += reelDataForThisReel[pos];
+    }
+    
+    return window;
   }
 
   /**
@@ -467,7 +534,7 @@ export class AlgorandService {
    */
   async getBetGrid(betKey: string, address: string): Promise<string> {
     try {
-      console.log('🎲 Getting bet grid from contract for key:', betKey.slice(0, 16) + '...');
+      console.log('🎲 Getting bet grid for key:', betKey.slice(0, 16) + '...');
       
       // Validate bet key format
       if (!betKey || betKey.length !== 112) {
@@ -498,7 +565,7 @@ export class AlgorandService {
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`📞 Attempt ${attempt}/${maxRetries} calling contract get_bet_grid for key:`, betKey.slice(0, 16) + '...');
+        console.log(`📞 Getting grid from contract (attempt ${attempt}/${maxRetries}) for key:`, betKey.slice(0, 16) + '...');
         
         // Create ulujs CONTRACT instance for readonly call
         const ci = new CONTRACT(
@@ -528,7 +595,7 @@ export class AlgorandService {
         // The return value should be Bytes15 which converts to a 15-character string
         const gridString = gridResult.returnValue;
         
-        console.log(`✅ Retrieved grid from contract on attempt ${attempt}:`, gridString);
+        console.log(`✅ Got grid from contract:`, gridString);
         
         // Validate the grid string is 15 characters (5 reels x 3 rows)
         if (gridString.length !== 15) {
@@ -538,16 +605,14 @@ export class AlgorandService {
         return gridString;
 
       } catch (error: any) {
-        console.log(`❌ Attempt ${attempt}/${maxRetries} to get grid from contract failed:`, error.message);
+        console.log(`❌ Contract attempt ${attempt}/${maxRetries} failed:`, error.message);
         
         // If this was the last attempt, throw the error
         if (attempt === maxRetries) {
-          console.error('💥 All contract grid retrieval attempts failed:', error);
           throw this.handleError(error, 'Failed to get bet grid from contract after all retry attempts');
         }
         
         // Wait before retrying
-        console.log(`⏱️ Waiting ${retryDelay}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, retryDelay));
       }
     }
@@ -561,7 +626,7 @@ export class AlgorandService {
    */
   async getBetGridLocally(betKey: string, address: string): Promise<string> {
     try {
-      console.log('🎲 Getting bet grid using local generation for key:', betKey.slice(0, 16) + '...');
+      console.log('🎲 Getting bet grid locally for key:', betKey.slice(0, 16) + '...');
       
       // Validate bet key format
       if (!betKey || betKey.length !== 112) {
@@ -580,8 +645,8 @@ export class AlgorandService {
       const blockSeed = await this.getBlockSeedWithRetry(betInfo.claimRound);
       
       // Generate grid using cached reel data and the same algorithm as the contract
-      // combined = block_seed + bet_key, then sha256, then generate grid
       const betKeyBytes = this.hexStringToUint8Array(betKey);
+      
       const combined = new Uint8Array(blockSeed.length + betKeyBytes.length);
       combined.set(blockSeed);
       combined.set(betKeyBytes, blockSeed.length);
@@ -590,10 +655,10 @@ export class AlgorandService {
       const hashedBytes = await crypto.subtle.digest('SHA-256', combined);
       const seed = new Uint8Array(hashedBytes);
       
-      // Generate grid from seed using contract reel data (much faster than contract call)
+      // Generate grid from seed
       const grid = await this.generateGridFromSeed(seed, address);
       
-      console.log('✅ Generated grid using local reel data:', grid);
+      console.log('✅ Generated grid locally:', grid);
       return grid;
 
     } catch (error) {
@@ -610,28 +675,33 @@ export class AlgorandService {
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`🔄 Attempt ${attempt}/${maxRetries} to get block seed for round ${round}...`);
+        console.log(`🔄 Getting block seed for round ${round} (attempt ${attempt}/${maxRetries})`);
         
         const block = await this.client.block(round).do();
         const blockSeed = block.block.seed;
         
-        console.log(`✅ Got block seed on attempt ${attempt}:`, blockSeed);
-        
         // Handle block seed correctly - it might be Uint8Array or string
+        // Contract uses only the last 32 bytes: op.Block.blk_seed(round)[-32:]
+        let seedBytes: Uint8Array;
         if (blockSeed instanceof Uint8Array) {
-          return blockSeed;
+          seedBytes = blockSeed;
         } else if (typeof blockSeed === 'string') {
-          // If it's a hex string, convert it
-          return this.hexStringToUint8Array(blockSeed);
+          // Block seed is base64-encoded, not hex
+          seedBytes = this.base64ToUint8Array(blockSeed);
         } else if (Array.isArray(blockSeed)) {
           // If it's an array of numbers, convert to Uint8Array
-          return new Uint8Array(blockSeed);
+          seedBytes = new Uint8Array(blockSeed);
         } else {
           throw new Error(`Unexpected block seed type: ${typeof blockSeed}`);
         }
+        
+        // Return only the last 32 bytes to match contract behavior
+        const last32Bytes = seedBytes.slice(-32);
+        const cleanSeed = new Uint8Array(last32Bytes);
+        return cleanSeed;
 
       } catch (error: any) {
-        console.log(`❌ Attempt ${attempt}/${maxRetries} to get block seed failed:`, error.message);
+        console.log(`❌ Block seed fetch failed (attempt ${attempt}/${maxRetries}):`, error.message);
         
         // If this was the last attempt, throw the error
         if (attempt === maxRetries) {
@@ -639,7 +709,6 @@ export class AlgorandService {
         }
         
         // Wait before retrying
-        console.log(`⏱️ Waiting ${retryDelay}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, retryDelay));
       }
     }
@@ -784,7 +853,7 @@ export class AlgorandService {
       };
 
       // Verify the bet key exists first
-      try {
+      /*try {
         const betKeyBytes = this.hexStringToUint8Array(betKey);
         const boxResponse = await this.client.getApplicationBoxByName(this.appId, betKeyBytes).do();
         console.log('📦 Box exists, length:', boxResponse.value?.length || 0);
@@ -798,7 +867,7 @@ export class AlgorandService {
           throw new Error(`Bet not found in contract. The bet may have already been claimed or never existed. Key: ${betKey.slice(0, 16)}...`);
         }
         throw boxError;
-      }
+      }*/
       
       // Call the claim method using CONTRACT class like in documentation
       console.log('📝 Calling claim method...');
@@ -905,15 +974,24 @@ export class AlgorandService {
       const blockSeed = block.block.seed;
       
       // Handle different seed formats and return as hex string
+      // Contract uses only the last 32 bytes: op.Block.blk_seed(round)[-32:]
+      let bytes: Uint8Array;
       if (typeof blockSeed === 'string') {
-        return blockSeed;
-      } else if (blockSeed instanceof Uint8Array || Array.isArray(blockSeed)) {
-        // Convert to hex string
-        const bytes = blockSeed instanceof Uint8Array ? blockSeed : new Uint8Array(blockSeed);
-        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        // Block seed is base64-encoded, not hex
+        bytes = this.base64ToUint8Array(blockSeed);
+      } else if (blockSeed instanceof Uint8Array) {
+        bytes = blockSeed;
+      } else if (Array.isArray(blockSeed)) {
+        bytes = new Uint8Array(blockSeed);
       } else {
         throw new Error(`Unexpected block seed type: ${typeof blockSeed}`);
       }
+      
+      // Return only the last 32 bytes as hex string to match contract behavior
+      // Create a new Uint8Array to avoid buffer view issues
+      const last32Bytes = bytes.slice(-32);
+      const cleanLast32Bytes = new Uint8Array(last32Bytes);
+      return Array.from(cleanLast32Bytes).map(b => b.toString(16).padStart(2, '0')).join('');
     } catch (error) {
       throw this.handleError(error, `Failed to get block seed for round ${round}`);
     }

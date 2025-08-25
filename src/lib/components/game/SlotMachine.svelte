@@ -104,7 +104,7 @@
   const GLOBAL_PROCESSED_REPLAYS = globalThis.GLOBAL_PROCESSED_REPLAYS || (globalThis.GLOBAL_PROCESSED_REPLAYS = new Set<string>());
 
   // Maintenance overlay state - don't show until after initial balance check
-  let showMaintenanceOverlay = true;
+  let showMaintenanceOverlay = false;
   let hasInitialBalanceCheckCompleted = false;
   
   // Loading state
@@ -149,6 +149,10 @@
     // Initialize house balance monitoring
     houseBalanceActions.initialize().finally(() => {
       hasInitialBalanceCheckCompleted = true;
+      // Show maintenance popup if slot machine is not operational after initial check
+      if (!$isSlotMachineOperational) {
+        showMaintenanceOverlay = true;
+      }
     });
     
     // DO NOT auto-clear queue - keep for testing
@@ -330,7 +334,7 @@
       return;
     }
     
-    // Find the most recent spin that has an outcome ready
+    // Find spins that have outcomes ready
     const readySpins = queueState.spins.filter((spin: any) => 
       [SpinStatus.READY_TO_CLAIM, SpinStatus.COMPLETED].includes(spin.status) && 
       spin.outcome
@@ -345,11 +349,34 @@
       const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
       const isTooOld = isInitialMount && mostRecentSpin.timestamp < fiveMinutesAgo;
       
-      // CRITICAL FIX: Only display outcome if this spin is currently being displayed
-      // This prevents PROCESSING spins from triggering animations for unrelated spins
-      // ALSO: Only display outcomes if user has started a session (prevents auto-animation)
+      // Display outcome if this is the current spin (for visual animation)
       if (!isTooOld && $currentSpinId === mostRecentSpin.id && userSessionStarted) {
         displayOutcome(mostRecentSpin);
+      }
+      
+      // Check for any completed winning spins that we haven't celebrated yet (background wins)
+      if (userSessionStarted && !isInitialMount) {
+        for (const spin of readySpins) {
+          const spinTooOld = spin.timestamp < fiveMinutesAgo;
+          if (!spinTooOld && 
+              spin.winnings > 0 && 
+              spin.id !== lastCelebratedSpinId) {
+            // This is a winning spin we haven't celebrated yet
+            const winLevel = spin.winnings >= 100000000 ? 'jackpot' : 
+                           spin.winnings >= 50000000 ? 'large' : 
+                           spin.winnings >= 20000000 ? 'medium' : 'small';
+            
+            // Trigger win celebration for background spin
+            triggerWinCelebration({
+              amount: spin.winnings,
+              level: winLevel,
+              gridOutcome: spin.outcome,
+              selectedPaylines: spin.selectedPaylines || $bettingStore.selectedPaylines
+            }, spin.id);
+            
+            break; // Only celebrate one spin per update to avoid overwhelming
+          }
+        }
       }
     }
     

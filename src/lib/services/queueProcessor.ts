@@ -9,6 +9,7 @@ import type { QueuedSpin } from '$lib/types/queue';
 export class QueueProcessor {
   private processingInterval: NodeJS.Timeout | null = null;
   private isRunning = false;
+  private processingSpins = new Set<string>(); // Track spins currently being processed
 
   start() {
     if (this.isRunning) return;
@@ -92,6 +93,14 @@ export class QueueProcessor {
   private async checkCommitment(spin: QueuedSpin) {
     if (!spin.commitmentRound) return;
 
+    // Check if this spin is already being processed
+    if (this.processingSpins.has(spin.id)) {
+      return; // Skip if already processing
+    }
+
+    // Add to processing set
+    this.processingSpins.add(spin.id);
+
     try {
       const currentRound = await blockchainService.getCurrentRound();
       
@@ -106,10 +115,21 @@ export class QueueProcessor {
       }
     } catch (error) {
       console.error(`Error checking commitment for spin ${spin.id}:`, error);
+    } finally {
+      // Always remove from processing set when done
+      this.processingSpins.delete(spin.id);
     }
   }
 
   private async checkOutcome(spin: QueuedSpin) {
+    // Check if this spin is already being processed
+    if (this.processingSpins.has(spin.id)) {
+      return; // Skip if already processing
+    }
+
+    // Add to processing set
+    this.processingSpins.add(spin.id);
+
     try {
       // TIMEOUT MECHANISM: Check if spin has been PROCESSING too long (5 minutes)
       const PROCESSING_TIMEOUT = 5 * 60 * 1000; // 5 minutes
@@ -131,6 +151,9 @@ export class QueueProcessor {
     } catch (error) {
       console.error(`Error checking outcome for spin ${spin.id}:`, error);
       this.handleSpinError(spin, error);
+    } finally {
+      // Always remove from processing set when done
+      this.processingSpins.delete(spin.id);
     }
   }
 
@@ -173,31 +196,41 @@ export class QueueProcessor {
   }
 
   private async attemptAutoClaim(spin: QueuedSpin) {
-    const currentTime = Date.now();
+    // Check if this spin is already being processed
+    if (this.processingSpins.has(spin.id)) {
+      return; // Skip if already processing
+    }
+
+    // Add to processing set
+    this.processingSpins.add(spin.id);
+
     const claimRetryCount = spin.claimRetryCount || 0;
     const lastClaimRetry = spin.lastClaimRetry || 0;
-    
-    // Don't auto-claim if we've already tried 3 times - just give up silently
-    if (claimRetryCount >= 3) {
-      console.log(`Auto-claim completed for spin ${spin.id} after ${claimRetryCount} attempts. Likely claimed by bot (good!).`);
-      // Mark as completed since claim failures usually mean someone else claimed it
-      queueStore.updateSpin({
-        id: spin.id,
-        status: SpinStatus.COMPLETED
-      });
-      return;
-    }
-    
-    // Wait 10-20 seconds between claim attempts (random to avoid collision with bots)
-    const minWait = 10000; // 10 seconds
-    const maxWait = 20000; // 20 seconds
-    const randomWait = minWait + Math.random() * (maxWait - minWait);
-    
-    if (lastClaimRetry && (currentTime - lastClaimRetry) < randomWait) {
-      return;
-    }
-    
+
     try {
+      const currentTime = Date.now();
+      
+      // Don't auto-claim if we've already tried 3 times - just give up silently
+      if (claimRetryCount >= 3) {
+        console.log(`Auto-claim completed for spin ${spin.id} after ${claimRetryCount} attempts. Likely claimed by bot (good!).`);
+
+        // Mark as completed since claim failures usually mean someone else claimed it
+        queueStore.updateSpin({
+          id: spin.id,
+          status: SpinStatus.COMPLETED
+        });
+        return;
+      }
+      
+      // Wait 10-20 seconds between claim attempts (random to avoid collision with bots)
+      const minWait = 10000; // 10 seconds
+      const maxWait = 20000; // 20 seconds
+      const randomWait = minWait + Math.random() * (maxWait - minWait);
+      
+      if (lastClaimRetry && (currentTime - lastClaimRetry) < randomWait) {
+        return;
+      }
+      
       console.log(`Attempting auto-claim for spin ${spin.id} (attempt ${claimRetryCount + 1}/3)`);
       
       // Update retry tracking and mark as auto-claiming before attempting
@@ -236,10 +269,13 @@ export class QueueProcessor {
             isAutoClaimInProgress: undefined,
             // KEEP the retry tracking fields that were just set
             claimRetryCount: claimRetryCount + 1,
-            lastClaimRetry: currentTime
+            lastClaimRetry: Date.now()
           }
         });
       }
+    } finally {
+      // Always remove from processing set when done
+      this.processingSpins.delete(spin.id);
     }
   }
 

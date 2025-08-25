@@ -31,8 +31,8 @@ function createWalletAdapter() {
     
     currentMonitoredAddress = address;
     
-    // Start monitoring with the balance manager
-    balanceManager.startMonitoring(address);
+    // Start monitoring with the balance manager (house context for slower refresh)
+    balanceManager.startMonitoring(address, { context: 'house' });
     
     // Subscribe to balance change events
     balanceChangeUnsubscribe = balanceManager.onBalanceChange((event) => {
@@ -48,7 +48,7 @@ function createWalletAdapter() {
   const stopBalanceMonitoring = () => {
     // Stop balance monitoring in the manager
     if (currentMonitoredAddress) {
-      balanceManager.stopMonitoring(currentMonitoredAddress);
+      balanceManager.stopMonitoring(currentMonitoredAddress, 'house');
       currentMonitoredAddress = null;
     }
     

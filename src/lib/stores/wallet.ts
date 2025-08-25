@@ -30,8 +30,8 @@ function createWalletStore() {
     
     currentMonitoredAddress = address;
     
-    // Start monitoring with the balance manager
-    balanceManager.startMonitoring(address);
+    // Start monitoring with the balance manager (gaming context for fast refresh)
+    balanceManager.startMonitoring(address, { context: 'gaming' });
     
     // Subscribe to balance change events
     balanceChangeUnsubscribe = balanceManager.onBalanceChange((event) => {
@@ -47,7 +47,7 @@ function createWalletStore() {
   const stopBalanceMonitoring = () => {
     // Stop balance monitoring in the manager
     if (currentMonitoredAddress) {
-      balanceManager.stopMonitoring(currentMonitoredAddress);
+      balanceManager.stopMonitoring(currentMonitoredAddress, 'gaming');
       currentMonitoredAddress = null;
     }
     

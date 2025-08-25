@@ -19,7 +19,7 @@ export const CONTRACT_CONFIG = {
   slotMachineAppId: parseInt(env.PUBLIC_SLOT_MACHINE_APP_ID || '0'),
   ybtAppId: parseInt(env.PUBLIC_YBT_APP_ID || '0'),
   version: env.PUBLIC_CONTRACT_VERSION || '1.0.0',
-  cacheDuration: parseInt(env.PUBLIC_CONTRACT_CACHE_DURATION || '3600000'), // Default 1 hour
+  cacheDuration: parseInt(env.PUBLIC_CONTRACT_CACHE_DURATION || '86400000'), // Default 24 hours
 } as const;
 
 // Phase 7: Enable contract validation for blockchain integration  

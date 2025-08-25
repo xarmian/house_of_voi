@@ -505,10 +505,28 @@ class YBTService {
         return BigInt(0);
       }
 
-      return await this.getEscrowVoiBalance(globalState.yieldBearingSource);
+      // Use the contract's authoritative balance tracking instead of account balance
+      const { algorandService } = await import('./algorand');
+      const balances = await algorandService.getBalances({
+        appId: globalState.yieldBearingSource,
+        debug: false
+      });
+
+      // Convert from VOI to microVOI and return as BigInt
+      return BigInt(Math.round(balances.balanceTotal * 1e6));
     } catch (error) {
       console.error('Error getting contract total value:', error);
-      return BigInt(0);
+      // Fallback to old method if contract balance fails
+      try {
+        const globalState = await this.getGlobalState();
+        if (!globalState.yieldBearingSource || globalState.yieldBearingSource === 0) {
+          return BigInt(0);
+        }
+        return await this.getEscrowVoiBalance(globalState.yieldBearingSource);
+      } catch (fallbackError) {
+        console.error('Error with fallback method:', fallbackError);
+        return BigInt(0);
+      }
     }
   }
 

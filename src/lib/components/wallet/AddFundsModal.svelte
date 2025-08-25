@@ -2,6 +2,10 @@
   import { createEventDispatcher, onMount } from 'svelte';
   import { Copy, QrCode, CreditCard, X } from 'lucide-svelte';
   import QRCode from 'qrcode';
+  import IBuyVoiWidget from '../widget/IBuyVoiWidget.svelte';
+  import { deviceCapabilities } from '$lib/utils/device';
+
+  console.log(deviceCapabilities.isMobile);
   
   export let address: string;
   
@@ -9,7 +13,9 @@
   
   let qrCodeUrl = '';
   let copySuccess = false;
-  let activeTab = 'transfer'; // 'transfer' | 'buy'
+  let activeTab = 'buy'; // 'transfer' | 'buy'
+  let purchaseSuccess = false;
+  let purchaseError: string | null = null;
   
   onMount(async () => {
     if (address) {
@@ -47,6 +53,31 @@
       closeModal();
     }
   }
+
+  function handlePurchaseComplete(event: CustomEvent) {
+    const { voiTxId, amount } = event.detail;
+    purchaseSuccess = true;
+    purchaseError = null;
+    console.log('Purchase completed:', { voiTxId, amount });
+    
+    // Optionally close modal after success
+    setTimeout(() => {
+      closeModal();
+    }, 3000);
+  }
+
+  function handlePurchaseError(event: CustomEvent) {
+    const { message } = event.detail;
+    purchaseError = message;
+    purchaseSuccess = false;
+    console.error('Purchase error:', message);
+  }
+
+  function handleWidgetClose() {
+    // Reset state when widget is closed
+    purchaseSuccess = false;
+    purchaseError = null;
+  }
 </script>
 
 <!-- Modal Overlay -->
@@ -73,21 +104,21 @@
     <div class="flex border-b border-slate-700">
       <button
         class="flex-1 py-3 px-6 text-center transition-colors"
-        class:bg-slate-700={activeTab === 'transfer'}
-        class:text-theme={activeTab === 'transfer'}
-        class:text-gray-400={activeTab !== 'transfer'}
-        on:click={() => activeTab = 'transfer'}
-      >
-        Transfer VOI
-      </button>
-      <button
-        class="flex-1 py-3 px-6 text-center transition-colors"
         class:bg-slate-700={activeTab === 'buy'}
         class:text-theme={activeTab === 'buy'}
         class:text-gray-400={activeTab !== 'buy'}
         on:click={() => activeTab = 'buy'}
       >
         Buy VOI
+      </button>
+      <button
+        class="flex-1 py-3 px-6 text-center transition-colors"
+        class:bg-slate-700={activeTab === 'transfer'}
+        class:text-theme={activeTab === 'transfer'}
+        class:text-gray-400={activeTab !== 'transfer'}
+        on:click={() => activeTab = 'transfer'}
+      >
+        Transfer VOI
       </button>
     </div>
     
@@ -153,35 +184,49 @@
       {:else}
         <!-- Buy Tab -->
         <div class="space-y-6">
-          <div class="text-center">
-            <CreditCard class="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 class="text-lg font-semibold text-theme mb-2">Buy VOI with Card</h3>
-            <p class="text-gray-400">Purchase VOI directly with your debit card or Apple Pay</p>
-          </div>
-          
-          <!-- Coming Soon Notice -->
-          <div class="p-6 bg-gradient-to-r from-voi-900/20 to-blue-900/20 border border-voi-700/30 rounded-lg text-center">
-            <h4 class="text-lg font-semibold text-theme mb-2">Coming Soon</h4>
-            <p class="text-gray-400 mb-4">
-              Direct VOI purchases with debit card and Apple Pay will be available in the next update.
-            </p>
-            <button 
-              disabled
-              class="btn-primary opacity-50 cursor-not-allowed"
-            >
-              Buy VOI (Coming Soon)
-            </button>
-          </div>
-          
-          <!-- Alternative Options -->
-          <div>
-            <h4 class="font-medium text-theme mb-3">In the meantime:</h4>
-            <ul class="space-y-2 text-sm text-gray-400">
-              <li>• Purchase VOI on supported exchanges</li>
-              <li>• Transfer from your main VOI wallet</li>
-              <li>• Ask friends to send you VOI for testing</li>
-            </ul>
-          </div>
+          {#if purchaseSuccess}
+            <!-- Success State -->
+            <div class="text-center p-6 bg-green-50 border border-green-200 rounded-lg">
+              <div class="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 class="text-lg font-semibold text-green-800 mb-2">Purchase Successful!</h3>
+              <p class="text-green-600 text-sm mb-4">
+                Your VOI tokens will appear in your wallet shortly.
+              </p>
+              <p class="text-xs text-green-500">This modal will close automatically...</p>
+            </div>
+          {:else if purchaseError}
+            <!-- Error State -->
+            <div class="text-center p-6 bg-red-50 border border-red-200 rounded-lg">
+              <div class="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </div>
+              <h3 class="text-lg font-semibold text-red-800 mb-2">Purchase Failed</h3>
+              <p class="text-red-600 text-sm mb-4">{purchaseError}</p>
+              <button 
+                on:click={() => { purchaseError = null; }}
+                class="btn-secondary text-sm"
+              >
+                Try Again
+              </button>
+            </div>
+          {:else}
+            <!-- Widget State -->
+            <IBuyVoiWidget 
+              destination={address}
+              theme="dark"
+              width={deviceCapabilities.isMobile ? 320 : 440}
+              height={500}
+              on:purchaseComplete={handlePurchaseComplete}
+              on:purchaseError={handlePurchaseError}
+              on:close={handleWidgetClose}
+            />
+          {/if}
         </div>
       {/if}
     </div>

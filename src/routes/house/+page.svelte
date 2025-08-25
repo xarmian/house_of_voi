@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { Web3Wallet, selectedWallet, connectedWallets } from 'avm-wallet-svelte';
   import { ybtStore } from '$lib/stores/ybt';
   import { NETWORK_CONFIG } from '$lib/constants/network';
+  import { houseBalanceService } from '$lib/services/houseBalance';
+  import { houseBalanceManager } from '$lib/stores/houseBalance';
   import YBTDashboard from '$lib/components/house/YBTDashboard.svelte';
   import OddsAnalysis from '$lib/components/analytics/OddsAnalysis.svelte';
   import LoadingOverlay from '$lib/components/ui/LoadingOverlay.svelte';
@@ -10,6 +12,8 @@
 
   let isLoaded = false;
   let algodClient: algosdk.Algodv2;
+  let houseBalance: any = null;
+  let balanceLoading = true;
   
   // Initialize Algorand client for avm-wallet-svelte
   algodClient = new algosdk.Algodv2(
@@ -24,8 +28,46 @@
   onMount(async () => {
     // Initialize YBT store - wallet connection will be handled by avm-wallet-svelte
     await ybtStore.initialize();
+    
+    // Load house balance information
+    loadHouseBalance();
+    
     isLoaded = true;
   });
+
+  onDestroy(() => {
+    // Clear YBT store intervals and reset state
+    ybtStore.reset();
+    
+    // Clear house balance intervals
+    houseBalanceManager.stopPeriodicRefresh();
+  });
+
+  async function loadHouseBalance() {
+    try {
+      balanceLoading = true;
+      houseBalance = await houseBalanceService.getHouseBalance();
+    } catch (error) {
+      console.error('Failed to load house balance:', error);
+      houseBalance = null;
+    } finally {
+      balanceLoading = false;
+    }
+  }
+
+  async function refreshHouseBalance() {
+    try {
+      balanceLoading = true;
+      houseBalance = await houseBalanceService.refreshHouseBalance();
+      
+      // Also refresh YBT data since portfolio value depends on contract balances
+      await ybtStore.refresh();
+    } catch (error) {
+      console.error('Failed to refresh house balance:', error);
+    } finally {
+      balanceLoading = false;
+    }
+  }
   
   // Reactive statements to track wallet connection
   $: isWalletConnected = $selectedWallet !== null;
@@ -89,10 +131,16 @@
         {/if}
       </div>
 
+
       <!-- YBT Dashboard -->
       {#if isWalletConnected}
         <div class="space-y-8">
-          <YBTDashboard />
+          <YBTDashboard 
+            {houseBalance} 
+            {balanceLoading} 
+            onRefreshBalance={refreshHouseBalance}
+            on:balanceChanged={loadHouseBalance} 
+          />
           
           <!-- Game Analytics Section -->
           <div class="card p-6 hidden">

@@ -1,5 +1,6 @@
 import { CONTRACT_CONFIG, NETWORK_CONFIG } from '$lib/constants/network';
 import { CONTRACT_CONSTANTS } from '$lib/types/blockchain';
+import { algorandService } from './algorand';
 import algosdk from 'algosdk';
 
 export interface HouseBalanceData {
@@ -78,19 +79,26 @@ class HouseBalanceService {
 
   private async fetchHouseBalanceFromContract(): Promise<HouseBalanceData> {
     try {
-      // Convert YBT app ID to account address
-      const houseAccountAddress = algosdk.getApplicationAddress(CONTRACT_CONFIG.slotMachineAppId);
-      
-      // Get account information including VOI balance
-      const accountInfo = await this.client.accountInformation(houseAccountAddress).do();
-      
-      // The account balance is in microVOI
-      const available = accountInfo.amount || 0;
-      const total = available; // For slot machine account, available balance represents the total house balance
-      const locked = 0; // No locked balance for simple account lookup
+      // Get actual contract balances using the contract's get_balances method
+      const balances = await algorandService.getBalances({
+        appId: CONTRACT_CONFIG.slotMachineAppId,
+        debug: false
+      });
+
+      // Convert from VOI to microVOI for consistency with existing interface
+      const available = balances.balanceAvailable * 1e6;
+      const total = balances.balanceTotal * 1e6;
+      const locked = balances.balanceLocked * 1e6;
 
       // Check if operational based on minimum balance requirement
       const isOperational = available >= CONTRACT_CONSTANTS.MIN_BANK_AMOUNT;
+
+      console.log('📊 Contract balances:', {
+        available: `${balances.balanceAvailable.toFixed(6)} VOI`,
+        total: `${balances.balanceTotal.toFixed(6)} VOI`, 
+        locked: `${balances.balanceLocked.toFixed(6)} VOI`,
+        isOperational
+      });
 
       return {
         available,
@@ -99,8 +107,9 @@ class HouseBalanceService {
         isOperational,
         lastUpdated: Date.now()
       };
+
     } catch (error) {
-      console.error('Error fetching house balance from slot machine account:', error);
+      console.error('Error fetching house balance from contract:', error);
       throw error;
     }
   }

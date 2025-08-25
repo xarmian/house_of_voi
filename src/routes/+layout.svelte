@@ -5,6 +5,7 @@
   import { fade } from 'svelte/transition';
   import { soundService } from '$lib/services/soundService';
   import SoundToggleButton from '$lib/components/ui/SoundToggleButton.svelte';
+  import { checkForPurchaseResult, clearPurchaseParams, showPurchaseNotification } from '$lib/utils/voiPurchase';
   
   $: isGameRoute = $page.route.id?.startsWith('/app');
   
@@ -12,6 +13,16 @@
   
   onMount(async () => {
     mounted = true;
+    
+    // Check for VOI purchase result from mobile redirect
+    const purchaseResult = checkForPurchaseResult();
+    if (purchaseResult) {
+      // Show notification for purchase result
+      showPurchaseNotification(purchaseResult);
+      
+      // Clean up URL parameters
+      clearPurchaseParams();
+    }
   });
 </script>
 

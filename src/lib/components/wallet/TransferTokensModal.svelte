@@ -24,7 +24,7 @@
   }
   
   async function transferTokens() {
-    if (!recipientAddress.trim() || !amount.trim()) {
+    if (!recipientAddress?.trim() || !String(amount || '').trim()) {
       transferError = 'Please enter both recipient address and amount';
       return;
     }
@@ -49,7 +49,7 @@
     
     try {
       const result = await algorandService.sendPayment(
-        recipientAddress.trim(),
+        String(recipientAddress || '').trim(),
         amountMicroVOI
       );
       
@@ -125,7 +125,7 @@
             <p class="text-gray-300 mb-4">Your tokens have been sent successfully.</p>
             <div class="p-3 bg-slate-700/50 rounded-lg">
               <p class="text-sm text-gray-400 mb-1">Transaction ID:</p>
-              <p class="font-mono text-xs text-theme break-all">{txId}</p>
+              <a class="font-mono text-xs text-voi-400 break-all hover:underline" href={`https://block.voi.network/explorer/transaction/${txId}`} target="_blank">{txId}</a>
             </div>
           </div>
           <button
@@ -212,7 +212,7 @@
               <ul class="text-yellow-300 text-sm space-y-1">
                 <li>• Double-check the recipient address</li>
                 <li>• Transactions cannot be reversed</li>
-                <li>• A small fee will be deducted</li>
+                <li>• A 0.001 network fee will be deducted</li>
               </ul>
             </div>
           </div>

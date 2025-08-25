@@ -158,6 +158,14 @@ export const APP_SPEC = {
                 "desc": "Get the total balance"
             },
             {
+                "name": "get_balances",
+                "args": [],
+                "readonly": true,
+                "returns": {
+                    "type": "(uint64,uint64,uint64,bool)"
+                }
+            },
+            {
                 "name": "bootstrap",
                 "args": [],
                 "readonly": false,
