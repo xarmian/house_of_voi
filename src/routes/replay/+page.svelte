@@ -6,18 +6,43 @@
   import { formatVOI } from '$lib/constants/betting';
   import { bettingStore } from '$lib/stores/betting';
   import { Play, Home, ExternalLink, RotateCcw } from 'lucide-svelte';
+  import WarningModal from '$lib/components/ui/WarningModal.svelte';
 
   export let data;
 
   $: replayData = data.replayData;
   $: error = data.error;
   $: isLoading = false; // Server-side loading is already complete
+  
+  // Warning modal state
+  let showWarningModal = false;
+  const warningMessage = "This is an experimental prototype deployed on Voi Mainnet. It is provided as-is, with no guarantees of reliability, availability, or accuracy. Outcomes are random and for entertainment purposes only. Do not expect consistent performance, returns, or support. Play at your own risk.";
 
   function goHome() {
     goto('/');
   }
 
   function playGame() {
+    // Check if user has already dismissed the warning
+    const warningDismissed = localStorage.getItem('hov-warning-dismissed');
+    if (!warningDismissed || warningDismissed !== 'true') {
+      // Show warning modal before navigating
+      showWarningModal = true;
+    } else {
+      // Direct navigation if warning already dismissed
+      goto('/app');
+    }
+  }
+  
+  function handleWarningDismiss(event: CustomEvent<{ dontShowAgain: boolean }>) {
+    const { dontShowAgain } = event.detail;
+    showWarningModal = false;
+    
+    if (dontShowAgain) {
+      localStorage.setItem('hov-warning-dismissed', 'true');
+    }
+    
+    // Navigate to game after dismissing warning
     goto('/app');
   }
 
@@ -132,6 +157,14 @@
     </div>
   {/if}
 </main>
+
+<!-- Warning Modal for "Play This Game" action -->
+<WarningModal 
+  isVisible={showWarningModal}
+  message={warningMessage}
+  showDontAskAgain={true}
+  on:dismiss={handleWarningDismiss}
+/>
 
 <style>
   .replay-page {

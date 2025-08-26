@@ -7,7 +7,7 @@
   
   const warningMessage = "This is an experimental prototype deployed on Voi Mainnet. It is provided as-is, with no guarantees of reliability, availability, or accuracy. Outcomes are random and for entertainment purposes only. Do not expect consistent performance, returns, or support. Play at your own risk.";
   
-  // Define which pages should show modal
+  // Define which pages should show modal (exclude /replay)
   const modalPages = ['/app', '/house'];
   
   // Reactive state based on current route
