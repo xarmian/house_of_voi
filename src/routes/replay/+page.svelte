@@ -4,7 +4,8 @@
   import { goto } from '$app/navigation';
   import SlotMachine from '$lib/components/game/SlotMachine.svelte';
   import { formatVOI } from '$lib/constants/betting';
-  import { Play, Home, ExternalLink } from 'lucide-svelte';
+  import { bettingStore } from '$lib/stores/betting';
+  import { Play, Home, ExternalLink, RotateCcw } from 'lucide-svelte';
 
   export let data;
 
@@ -18,6 +19,25 @@
 
   function playGame() {
     goto('/app');
+  }
+
+  function replayAgain() {
+    // Trigger the replay again by dispatching a custom event to the SlotMachine
+    const slotMachineContainer = document.querySelector('.slot-machine-container');
+    if (slotMachineContainer && replayData) {
+      const replayEvent = new CustomEvent('replay-spin', {
+        detail: {
+          spin: {
+            id: `manual-replay-${Date.now()}`,
+            ...replayData
+          },
+          outcome: replayData.outcome,
+          winnings: replayData.winnings,
+          betAmount: replayData.betAmount
+        }
+      });
+      document.dispatchEvent(replayEvent);
+    }
   }
 
   function shareReplay() {
@@ -92,6 +112,10 @@
 
       <!-- Actions -->
       <div class="replay-actions">
+        <button on:click={replayAgain} class="play-button">
+          <RotateCcw class="w-4 h-4" />
+          Replay
+        </button>
         <button on:click={playGame} class="play-button">
           <Play class="w-4 h-4" />
           Play This Game

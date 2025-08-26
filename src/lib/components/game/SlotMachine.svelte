@@ -65,10 +65,12 @@
   type CelebrationData = {
     id: string;
     winAmount: number;
+    betAmount: number;
     winLevel: 'small' | 'medium' | 'large' | 'jackpot';
     winningSymbols: SlotSymbol[];
     gridOutcome: string[][] | null;
     selectedPaylines: number;
+    isReplay: boolean;
     startTime: number;
     timeout: NodeJS.Timeout;
   };
@@ -200,9 +202,9 @@
         const maxAttempts = 50; // 5 seconds max wait
         
         while (attempts < maxAttempts) {
-          // Check if any reel grid is ready
+          // Check if all mounted reel grids are ready
           const reelGrids = [desktopReelGrid, mobileReelGrid1, mobileReelGrid2].filter(Boolean);
-          const hasReadyGrid = reelGrids.some(grid => grid?.isReady?.());
+          const hasReadyGrid = reelGrids.length > 0 && reelGrids.every(grid => grid?.isReady?.());
           
           if (hasReadyGrid) {
             console.log('✅ Reels are ready, starting replay');
@@ -447,6 +449,7 @@
             // Trigger win celebration for background spin
             triggerWinCelebration({
               amount: spin.winnings,
+              betAmount: spin.betPerLine * spin.selectedPaylines,
               level: winLevel,
               gridOutcome: spin.outcome,
               selectedPaylines: spin.selectedPaylines || $bettingStore.selectedPaylines
@@ -581,6 +584,7 @@
           // Use actual winnings from blockchain
           triggerWinCelebration({
             amount: spin.winnings,
+            betAmount: spin.betPerLine * spin.selectedPaylines,
             level: winLevel,
             gridOutcome: spin.outcome,
             selectedPaylines: spin.selectedPaylines || $bettingStore.selectedPaylines
@@ -759,10 +763,12 @@
   }
 
   function triggerWinCelebration(win: { 
-    amount: number; 
+    amount: number;
+    betAmount: number;
     level: 'small' | 'medium' | 'large' | 'jackpot'; 
     gridOutcome?: string[][];
     selectedPaylines?: number;
+    isReplay?: boolean;
   }, spinId?: string) {
     // Create unique celebration ID
     const celebrationId = spinId || `celebration_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -790,10 +796,12 @@
     const celebration: CelebrationData = {
       id: celebrationId,
       winAmount: win.amount,
+      betAmount: win.betAmount,
       winLevel: win.level,
       winningSymbols: generateWinningSymbols(win.level),
       gridOutcome: win.gridOutcome || null,
       selectedPaylines: win.selectedPaylines || $bettingStore.selectedPaylines,
+      isReplay: win.isReplay || false,
       startTime: Date.now(),
       timeout
     };
@@ -966,9 +974,11 @@
             
             triggerWinCelebration({
               amount: replayData.winnings,
+              betAmount: replayData.betAmount,
               level: winLevel,
               gridOutcome: replayData.outcome,
-              selectedPaylines: replayData.spin.selectedPaylines || $bettingStore.selectedPaylines
+              selectedPaylines: replayData.spin.paylines || $bettingStore.selectedPaylines,
+              isReplay: true
             }, replayAnimationId);
           } else {
             triggerLossFeedback({
@@ -1156,9 +1166,11 @@
         {/if}
         
         <!-- Game Queue - Can scroll below the fold -->
-        <div class="flex-shrink-0">
-          <GameQueue maxHeight="300px" />
-        </div>
+        {#if !initialReplayData}
+          <div class="flex-shrink-0">
+            <GameQueue maxHeight="300px" />
+          </div>
+        {/if}
       </div>
     {:else}
       <!-- Original mobile layout for non-compact -->
@@ -1228,7 +1240,9 @@
           {#if !hideBettingControls && !initialReplayData}
             <BettingControls on:spin={handleSpin} {compact} disabled={disabled} />
           {/if}
-          <GameQueue maxHeight="400px" />
+          {#if !initialReplayData}
+            <GameQueue maxHeight="400px" />
+          {/if}
         </div>
       </div>
     {/if}
@@ -1239,11 +1253,12 @@
     <WinCelebration 
       isVisible={true}
       winAmount={celebration.winAmount}
-      betAmount={$bettingStore.betPerLine * $bettingStore.selectedPaylines}
+      betAmount={celebration.betAmount}
       winLevel={celebration.winLevel}
       winningSymbols={celebration.winningSymbols}
       gridOutcome={celebration.gridOutcome}
       selectedPaylines={celebration.selectedPaylines}
+      isReplay={celebration.isReplay}
     />
   {/each}
 
@@ -1259,7 +1274,10 @@
             // Update game grid to show the test outcome
             gameStore.completeSpin('test-small', testData.gridOutcome);
             // Show celebration with test data
-            triggerWinCelebration(testData, 'test-small');
+            triggerWinCelebration({
+              ...testData,
+              betAmount: $bettingStore.betPerLine * $bettingStore.selectedPaylines
+            }, 'test-small');
           }}
         >
           Small Win
@@ -1271,7 +1289,10 @@
             // Update game grid to show the test outcome
             gameStore.completeSpin('test-medium', testData.gridOutcome);
             // Show celebration with test data
-            triggerWinCelebration(testData, 'test-medium');
+            triggerWinCelebration({
+              ...testData,
+              betAmount: $bettingStore.betPerLine * $bettingStore.selectedPaylines
+            }, 'test-medium');
           }}
         >
           Medium Win
@@ -1283,7 +1304,10 @@
             // Update game grid to show the test outcome
             gameStore.completeSpin('test-large', testData.gridOutcome);
             // Show celebration with test data
-            triggerWinCelebration(testData, 'test-large');
+            triggerWinCelebration({
+              ...testData,
+              betAmount: $bettingStore.betPerLine * $bettingStore.selectedPaylines
+            }, 'test-large');
           }}
         >
           Large Win
@@ -1295,7 +1319,10 @@
             // Update game grid to show the test outcome
             gameStore.completeSpin('test-jackpot', testData.gridOutcome);
             // Show celebration with test data
-            triggerWinCelebration(testData, 'test-jackpot');
+            triggerWinCelebration({
+              ...testData,
+              betAmount: $bettingStore.betPerLine * $bettingStore.selectedPaylines
+            }, 'test-jackpot');
           }}
         >
           Jackpot

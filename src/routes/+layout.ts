@@ -14,7 +14,7 @@ export const load = ({ url }) => {
       siteName: 'House of Voi',
       images: [
         {
-          url: 'https://house-of-voi.vercel.app/og-image-home.svg',
+          url: 'https://house-of-voi.vercel.app/og-image-home.png',
           width: 1200,
           height: 630,
           alt: 'House of Voi - Provably Fair Blockchain Slots'
@@ -25,7 +25,7 @@ export const load = ({ url }) => {
       cardType: 'summary_large_image',
       title: 'House of Voi - Provably Fair Blockchain Slot Machine',
       description: 'Experience transparent, provably fair slot gaming on Voi Network. Connect your wallet for instant payouts, low fees, and verifiable on-chain outcomes.',
-      image: 'https://house-of-voi.vercel.app/og-image-home.svg',
+      image: 'https://house-of-voi.vercel.app/og-image-home.png',
       imageAlt: 'House of Voi - Provably Fair Blockchain Slots'
     },
     additionalMetaTags: [

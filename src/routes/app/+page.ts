@@ -9,7 +9,7 @@ export const load = () => {
       description: 'Spin to win on the blockchain! Connect your wallet and play provably fair slots with instant VOI payouts, transparent outcomes, and low fees.',
       images: [
         {
-          url: 'https://house-of-voi.vercel.app/og-image-app.svg',
+          url: 'https://house-of-voi.vercel.app/og-image-app.png',
           width: 1200,
           height: 630,
           alt: 'House of Voi - Play Provably Fair Blockchain Slots'
@@ -19,7 +19,7 @@ export const load = () => {
     twitter: {
       title: 'Play Now - House of Voi Slots',
       description: 'Spin to win on the blockchain! Connect your wallet and play provably fair slots with instant VOI payouts, transparent outcomes, and low fees.',
-      image: 'https://house-of-voi.vercel.app/og-image-app.svg',
+      image: 'https://house-of-voi.vercel.app/og-image-app.png',
       imageAlt: 'House of Voi - Play Provably Fair Blockchain Slots'
     },
     additionalMetaTags: [

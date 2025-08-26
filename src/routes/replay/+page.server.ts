@@ -14,7 +14,7 @@ export const load = async ({ url }) => {
         description: 'This replay link is invalid or expired. Create your own spins at House of Voi!',
         images: [
           {
-            url: 'https://house-of-voi.vercel.app/og-image-replay.svg',
+            url: 'https://house-of-voi.vercel.app/og-image-replay.png',
             width: 1200,
             height: 630,
             alt: 'House of Voi - Invalid Replay'
@@ -24,7 +24,7 @@ export const load = async ({ url }) => {
       twitter: {
         title: 'Invalid Replay - House of Voi',
         description: 'This replay link is invalid or expired. Create your own spins at House of Voi!',
-        image: 'https://house-of-voi.vercel.app/og-image-replay.svg',
+        image: 'https://house-of-voi.vercel.app/og-image-replay.png',
         imageAlt: 'House of Voi - Invalid Replay'
       }
     } satisfies MetaTagsProps;
@@ -48,7 +48,7 @@ export const load = async ({ url }) => {
           description: 'This replay link is invalid, corrupted, or expired. Try creating a fresh spin at House of Voi!',
           images: [
             {
-              url: 'https://house-of-voi.vercel.app/og-image-replay.svg',
+              url: 'https://house-of-voi.vercel.app/og-image-replay.png',
               width: 1200,
               height: 630,
               alt: 'House of Voi - Invalid Replay'
@@ -58,7 +58,7 @@ export const load = async ({ url }) => {
         twitter: {
           title: 'Invalid Replay - House of Voi',
           description: 'This replay link is invalid, corrupted, or expired. Try creating a fresh spin at House of Voi!',
-          image: 'https://house-of-voi.vercel.app/og-image-replay.svg',
+          image: 'https://house-of-voi.vercel.app/og-image-replay.png',
           imageAlt: 'House of Voi - Invalid Replay'
         }
       } satisfies MetaTagsProps;
@@ -99,7 +99,7 @@ export const load = async ({ url }) => {
         url: url.toString(),
         images: [
           {
-            url: 'https://house-of-voi.vercel.app/og-image-replay.svg',
+            url: 'https://house-of-voi.vercel.app/og-image-replay.png',
             width: 1200,
             height: 630,
             alt: title
@@ -109,7 +109,7 @@ export const load = async ({ url }) => {
       twitter: {
         title,
         description,
-        image: 'https://house-of-voi.vercel.app/og-image-replay.svg',
+        image: 'https://house-of-voi.vercel.app/og-image-replay.png',
         imageAlt: title
       },
       additionalMetaTags: [
@@ -134,7 +134,7 @@ export const load = async ({ url }) => {
         description: 'Unable to load this replay. The link may be corrupted or expired. Try the game yourself!',
         images: [
           {
-            url: 'https://house-of-voi.vercel.app/og-image-replay.svg',
+            url: 'https://house-of-voi.vercel.app/og-image-replay.png',
             width: 1200,
             height: 630,
             alt: 'House of Voi - Replay Error'
@@ -144,7 +144,7 @@ export const load = async ({ url }) => {
       twitter: {
         title: 'Replay Error - House of Voi',
         description: 'Unable to load this replay. The link may be corrupted or expired. Try the game yourself!',
-        image: 'https://house-of-voi.vercel.app/og-image-replay.svg',
+        image: 'https://house-of-voi.vercel.app/og-image-replay.png',
         imageAlt: 'House of Voi - Replay Error'
       }
     } satisfies MetaTagsProps;
