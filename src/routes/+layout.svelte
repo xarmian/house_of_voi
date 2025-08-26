@@ -6,6 +6,7 @@
   import { MetaTags, deepMerge } from 'svelte-meta-tags';
   import { soundService } from '$lib/services/soundService';
   import SoundToggleButton from '$lib/components/ui/SoundToggleButton.svelte';
+  import WarningProvider from '$lib/components/ui/WarningProvider.svelte';
   import { checkForPurchaseResult, clearPurchaseParams, showPurchaseNotification } from '$lib/utils/voiPurchase';
   
   export let data;
@@ -49,6 +50,9 @@
     </div>
     
     <slot />
+    
+    <!-- Global warning provider -->
+    <WarningProvider />
   </div>
 {:else}
   <!-- Loading screen -->

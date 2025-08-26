@@ -76,7 +76,7 @@
         </button>
         
         <p class="text-sm text-gray-400 mt-4">
-          No account required • Instant wallet generation • Start with 0 VOI
+          No account required • Instant wallet generation
         </p>
       </div>
       

@@ -5,6 +5,7 @@
   import FeaturesSection from '$lib/components/landing/FeaturesSection.svelte';
   import HowItWorksSection from '$lib/components/landing/HowItWorksSection.svelte';
   import Footer from '$lib/components/common/Footer.svelte';
+  import WarningBanner from '$lib/components/ui/WarningBanner.svelte';
   
   export let data;
   
@@ -17,13 +18,17 @@
   function playGame() {
     goto('/app');
   }
+
+  const warningMessage = "This is an experimental prototype deployed on Voi Mainnet. It is provided as-is, with no guarantees of reliability, availability, or accuracy. Outcomes are random and for entertainment purposes only. Do not expect consistent performance, returns, or support. Play at your own risk.";
 </script>
 
 
 <main class="min-h-screen">
   <div class="landing-gradient">
+    <WarningBanner message={warningMessage} />
     <HeroSection {playGame} {isLoaded} />
   </div>
+  
   
   <FeaturesSection />
   <HowItWorksSection />

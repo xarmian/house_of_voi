@@ -41,8 +41,8 @@
         <ul class="space-y-2">
           <li><a href="https://voi.network" class="text-gray-400 hover:text-theme transition-colors" target="_blank" rel="noopener noreferrer">Voi Network</a></li>
           <li><a href="javascript:void(0)" class="text-gray-400 hover:text-theme transition-colors">VOI Token</a></li>
-          <li><a href="javascript:void(0)" class="text-gray-400 hover:text-theme transition-colors">Explorer</a></li>
-          <li><a href="javascript:void(0)" class="text-gray-400 hover:text-theme transition-colors">Documentation</a></li>
+          <li><a href="https://block.voi.network" class="text-gray-400 hover:text-theme transition-colors">Explorer</a></li>
+          <li><a href="https://docs.houseofvoi.com" class="text-gray-400 hover:text-theme transition-colors">Documentation</a></li>
         </ul>
       </div>
     </div>
@@ -52,7 +52,7 @@
         © {new Date().getFullYear()} House of Voi. Built on Voi Network. Play responsibly.
       </p>
       <p class="text-gray-500 text-xs mt-2">
-        This is a gaming wallet for entertainment purposes only. Not for long-term storage.
+        HoV generates a gaming wallet for entertainment purposes only. Not intended for long-term storage.
       </p>
     </div>
   </div>
