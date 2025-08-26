@@ -18,14 +18,12 @@
   function playGame() {
     goto('/app');
   }
-
-  const warningMessage = "This is an experimental prototype deployed on Voi Mainnet. It is provided as-is, with no guarantees of reliability, availability, or accuracy. Outcomes are random and for entertainment purposes only. Do not expect consistent performance, returns, or support. Play at your own risk.";
 </script>
 
 
 <main class="min-h-screen">
   <div class="landing-gradient">
-    <WarningBanner message={warningMessage} />
+    <WarningBanner />
     <HeroSection {playGame} {isLoaded} />
   </div>
   

@@ -7,6 +7,7 @@
   import { bettingStore } from '$lib/stores/betting';
   import { Play, Home, ExternalLink, RotateCcw } from 'lucide-svelte';
   import WarningModal from '$lib/components/ui/WarningModal.svelte';
+  import WarningBanner from '$lib/components/ui/WarningBanner.svelte';
 
   export let data;
 
@@ -102,6 +103,7 @@
     </div>
   {:else if replayData}
     <div class="replay-container">
+      <WarningBanner />
       <!-- Header -->
       <div class="replay-header">
         <div class="replay-title">

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { AlertTriangle } from 'lucide-svelte';
 
-  export let message = '';
+  export let message = "This is an experimental prototype deployed on Voi Mainnet. It is provided as-is, with no guarantees of reliability, availability, or accuracy. Outcomes are random and for entertainment purposes only. Do not expect consistent performance, returns, or support. Play at your own risk.";
 </script>
 
 <div class="warning-banner">
@@ -17,7 +17,7 @@
   </div>
 </div>
 
-<style>
+<style lang="postcss">
   .warning-banner {
     @apply w-full py-4 px-4 mb-6;
     background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.15) 100%);
