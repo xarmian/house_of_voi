@@ -13,8 +13,9 @@
   import algosdk from 'algosdk';
   import { hovStatsStore, platformStats, connectionStatus, timeStats } from '$lib/stores/hovStats';
   import { formatVOI } from '$lib/constants/betting';
-  import { BarChart3, TrendingUp, Users, Coins, Target, Zap, Clock, Crown, Wallet, Trophy, PieChart } from 'lucide-svelte';
+  import { BarChart3, TrendingUp, Users, Coins, Target, Zap, Clock, Crown, Wallet, Trophy, PieChart, AlertTriangle } from 'lucide-svelte';
   import { PUBLIC_WALLETCONNECT_PROJECT_ID } from '$env/static/public';
+  import { isMaintenanceMode, maintenanceModeMessage } from '$lib/stores/maintenanceMode';
 
   let isLoaded = false;
   let algodClient: algosdk.Algodv2;
@@ -105,6 +106,19 @@
           Deposit funds into our yield-bearing token (YBT) and earn your share of the house profits.
         </p>
       </div>
+
+      <!-- Maintenance Mode Banner -->
+      {#if $isMaintenanceMode && $maintenanceModeMessage}
+        <div class="bg-gradient-to-r from-amber-900/90 to-orange-900/90 border border-amber-600/50 rounded-lg p-4 mb-4 sm:mb-6">
+          <div class="flex items-start gap-3">
+            <AlertTriangle class="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+            <div class="flex-1">
+              <h3 class="text-amber-300 font-semibold text-sm sm:text-base mb-1">Platform Under Maintenance</h3>
+              <p class="text-amber-200 text-xs sm:text-sm leading-relaxed">{$maintenanceModeMessage}</p>
+            </div>
+          </div>
+        </div>
+      {/if}
 
       <!-- Compact Wallet Header Bar -->
       <div class="wallet-header-bar">

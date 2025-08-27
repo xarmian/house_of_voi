@@ -1,6 +1,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { houseBalanceService, type HouseBalanceData } from '$lib/services/houseBalance';
 import { formatVOI } from '$lib/constants/betting';
+import { isMaintenanceMode, maintenanceModeMessage } from './maintenanceMode';
 
 // Default house balance state
 const defaultHouseBalance: HouseBalanceData = {
@@ -20,10 +21,10 @@ export const isLoadingHouseBalance = writable<boolean>(false);
 // Error state for balance operations
 export const houseBalanceError = writable<string | null>(null);
 
-// Derived store for operational status
+// Derived store for operational status - includes maintenance mode check
 export const isSlotMachineOperational = derived(
-  houseBalanceStore,
-  ($houseBalance) => $houseBalance.isOperational
+  [houseBalanceStore, isMaintenanceMode],
+  ([$houseBalance, $isMaintenanceMode]) => !$isMaintenanceMode && $houseBalance.isOperational
 );
 
 // Derived store for formatted balance display
@@ -38,10 +39,15 @@ export const formattedHouseBalance = derived(
 
 // Derived store for operational status message
 export const operationalStatusMessage = derived(
-  [houseBalanceStore, isLoadingHouseBalance],
-  ([$houseBalance, $isLoading]) => {
+  [houseBalanceStore, isLoadingHouseBalance, isMaintenanceMode, maintenanceModeMessage],
+  ([$houseBalance, $isLoading, $isMaintenanceMode, $maintenanceModeMessage]) => {
     if ($isLoading) {
       return 'Checking operational status...';
+    }
+    
+    // Check maintenance mode first
+    if ($isMaintenanceMode && $maintenanceModeMessage) {
+      return $maintenanceModeMessage;
     }
     
     if (!$houseBalance.isOperational) {

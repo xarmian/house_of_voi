@@ -183,7 +183,13 @@ export class AlgorandService {
       const contractBalance = contractInfo.amount / 1e6;
 
       const balances = this.decodeBalances(getBalancesR.returnValue);
+
+      console.log('🔄 get_balances Result:', balances);
+
       balances.balanceTotal = contractBalance;
+
+      console.log('🔄 Actual contractBalance:', contractBalance);
+
       balances.balanceAvailable = (contractBalance - balances.balanceLocked);
 
       return balances;

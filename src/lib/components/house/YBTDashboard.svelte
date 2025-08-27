@@ -9,6 +9,7 @@
   import YBTWithdrawModal from './YBTWithdrawModal.svelte';
   import type { YBTGlobalState } from '$lib/types/ybt';
   import type { HouseBalanceData } from '$lib/services/houseBalance';
+  import { isMaintenanceMode } from '$lib/stores/maintenanceMode';
 
   export let houseBalance: HouseBalanceData | null = null;
   export let balanceLoading = false;
@@ -187,25 +188,39 @@
         <button
           on:click={() => showDepositModal = true}
           class="btn-primary-large w-full"
-          disabled={!$selectedWallet}
+          disabled={!$selectedWallet || $isMaintenanceMode}
         >
           <svg class="w-4 h-4 sm:w-5 sm:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
           </svg>
-          <span class="text-sm sm:text-base">Deposit VOI</span>
-          <span class="text-xs opacity-75 ml-1 sm:ml-2 hidden sm:inline">→ Earn yield</span>
+          <span class="text-sm sm:text-base">
+            {#if $isMaintenanceMode}
+              Deposit Disabled (Maintenance)
+            {:else}
+              Deposit VOI
+            {/if}
+          </span>
+          {#if !$isMaintenanceMode}
+            <span class="text-xs opacity-75 ml-1 sm:ml-2 hidden sm:inline">→ Earn yield</span>
+          {/if}
         </button>
 
         <button
           on:click={() => showWithdrawModal = true}
           class="btn-secondary-large w-full"
-          disabled={!hasShares || !$selectedWallet}
+          disabled={!hasShares || !$selectedWallet || $isMaintenanceMode}
         >
           <svg class="w-4 h-4 sm:w-5 sm:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 12H6"></path>
           </svg>
-          <span class="text-sm sm:text-base">Withdraw VOI</span>
-          {#if hasShares}
+          <span class="text-sm sm:text-base">
+            {#if $isMaintenanceMode}
+              Withdraw Disabled (Maintenance)
+            {:else}
+              Withdraw VOI
+            {/if}
+          </span>
+          {#if hasShares && !$isMaintenanceMode}
             <span class="text-xs opacity-75 ml-1 sm:ml-2 hidden sm:inline">Available</span>
           {/if}
         </button>
