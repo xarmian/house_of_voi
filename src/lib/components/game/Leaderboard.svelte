@@ -281,18 +281,35 @@
 
     <!-- Metric selection -->
     <div class="metric-filters">
-      <div class="grid grid-cols-2 lg:grid-cols-3 xl:flex xl:flex-wrap gap-2 mb-4">
-        {#each Object.entries(metrics) as [key, config]}
-          <button
-            on:click={() => changeMetric(key as typeof selectedMetric)}
-            class="metric-button {selectedMetric === key ? 'active' : ''}"
+      {#if compact}
+        <!-- Dropdown for compact mode -->
+        <div class="mb-4">
+          <select
+            bind:value={selectedMetric}
+            on:change={(e) => changeMetric(e.target.value as typeof selectedMetric)}
+            class="metric-select w-full"
             disabled={$leaderboard.loading}
           >
-            <svelte:component this={config.icon} class="w-3 h-3 sm:w-4 sm:h-4" />
-            <span class="text-xs sm:text-sm">{config.label}</span>
-          </button>
-        {/each}
-      </div>
+            {#each Object.entries(metrics) as [key, config]}
+              <option value={key}>{config.label}</option>
+            {/each}
+          </select>
+        </div>
+      {:else}
+        <!-- Buttons for regular mode -->
+        <div class="grid grid-cols-2 lg:grid-cols-3 xl:flex xl:flex-wrap gap-2 mb-4">
+          {#each Object.entries(metrics) as [key, config]}
+            <button
+              on:click={() => changeMetric(key as typeof selectedMetric)}
+              class="metric-button {selectedMetric === key ? 'active' : ''}"
+              disabled={$leaderboard.loading}
+            >
+              <svelte:component this={config.icon} class="w-3 h-3 sm:w-4 sm:h-4" />
+              <span class="text-xs sm:text-sm">{config.label}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
     </div>
 
     <!-- Player rank highlight -->
@@ -546,6 +563,19 @@
 
   .metric-button.active {
     @apply bg-voi-600 border-voi-500 text-white;
+  }
+
+  .metric-select {
+    @apply px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm focus:border-voi-400 focus:outline-none transition-all duration-200;
+    min-height: 44px;
+  }
+
+  .metric-select:hover {
+    @apply bg-slate-600 border-slate-500;
+  }
+
+  .metric-select:disabled {
+    @apply opacity-50 cursor-not-allowed;
   }
 
   .player-rank-card {
