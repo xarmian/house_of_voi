@@ -304,26 +304,28 @@
   $: winRate = $queueStats.totalSpins > 0 ? (totalWins / $queueStats.totalSpins) * 100 : 0;
 </script>
 
-<div class="game-queue card">
+<div class="game-queue-container">
   <!-- Header -->
   <div class="queue-header">
-    <div class="flex items-center gap-2">
-      <Clock class="w-5 h-5 text-theme-text opacity-70" />
-      <h3 class="text-lg font-semibold text-theme">Game Queue</h3>
-      {#if $queueStats.pendingSpins > 0}
-        <span class="pending-badge">{$queueStats.pendingSpins}</span>
-      {/if}
-    </div>
-    
-    <div class="flex items-center gap-2">
-      {#if $queueStats.totalSpins > 0}
-        <button
-          on:click={clearCompleted}
-          class="text-xs text-theme-text opacity-70 hover:opacity-100 transition-colors"
-        >
-          Clear
-        </button>
-      {/if}
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2">
+        <Clock class="w-5 h-5 text-theme-text opacity-70" />
+        <h3 class="text-lg font-semibold text-theme">Game Queue</h3>
+        {#if $queueStats.pendingSpins > 0}
+          <span class="pending-badge">{$queueStats.pendingSpins}</span>
+        {/if}
+      </div>
+      
+      <div class="flex items-center gap-2">
+        {#if $queueStats.totalSpins > 0}
+          <button
+            on:click={clearCompleted}
+            class="text-xs text-theme-text opacity-70 hover:opacity-100 transition-colors"
+          >
+            Clear
+          </button>
+        {/if}
+      </div>
     </div>
   </div>
   
@@ -376,7 +378,7 @@
   <!-- Content -->
   {#if selectedTab === 'recent'}
     <!-- Spin List -->
-    <div class="spin-list" style="max-height: {maxHeight}">
+    <div class="spin-list">
       {#each displaySpins as spin (spin.id)}
         <div 
           class="spin-item"
@@ -693,12 +695,12 @@
 {/if}
 
 <style>
-  .game-queue {
-    @apply bg-surface-tertiary rounded-lg shadow-lg border border-surface-border backdrop-blur-sm overflow-hidden;
+  .game-queue-container {
+    @apply w-full;
   }
   
   .queue-header {
-    @apply flex items-center justify-between p-4 border-b border-surface-border;
+    @apply p-3 sm:p-4;
   }
   
   .pending-badge {
@@ -706,7 +708,7 @@
   }
   
   .queue-stats {
-    @apply grid grid-cols-4 gap-3 p-3 bg-surface-tertiary;
+    @apply grid grid-cols-4 gap-3 p-3 bg-slate-700/30 border-t border-slate-700;
   }
   
   .stat {
@@ -723,24 +725,26 @@
   }
   
   .queue-tabs {
-    @apply flex border-b border-surface-border;
+    @apply flex border-b border-slate-700 bg-slate-800/30;
   }
   
   .tab {
-    @apply flex-1 py-3 px-4 text-sm font-medium text-theme-text opacity-70 hover:opacity-100 transition-colors;
+    @apply flex-1 py-3 px-4 text-sm font-medium text-theme-text opacity-70 hover:opacity-100 hover:bg-slate-700/50 transition-all duration-200;
   }
   
   .tab.active {
-    @apply text-theme bg-surface-hover border-b-2 border-theme-primary;
+    @apply text-voi-400 bg-slate-700/30 border-b-2 border-voi-400;
   }
   
   
   .spin-list {
     @apply overflow-y-auto;
+    min-height: calc(100vh - 22rem);
+    max-height: calc(100vh - 22rem);
   }
   
   .spin-item {
-    @apply flex items-center gap-3 p-3 border-b border-surface-border hover:bg-surface-hover transition-colors;
+    @apply flex items-center gap-3 p-3 border-b border-slate-700 hover:bg-slate-700/50 transition-colors;
   }
   
   .spin-item:last-child {
@@ -865,7 +869,7 @@
   }
   
   .stat-card {
-    @apply bg-surface-tertiary rounded-lg shadow-lg border border-surface-border backdrop-blur-sm p-3 flex items-center gap-3;
+    @apply bg-slate-700/50 rounded-lg p-3 border border-slate-600/50 flex items-center gap-3;
   }
   
   .stat-card.wide {
@@ -900,7 +904,7 @@
   }
 
   .share-button {
-    @apply flex-shrink-0 p-1 rounded-full bg-surface-secondary hover:bg-surface-hover text-theme-text opacity-60 hover:opacity-100 transition-all duration-200 disabled:cursor-not-allowed;
+    @apply flex-shrink-0 p-1 rounded-full bg-slate-700 hover:bg-slate-600 text-theme-text opacity-60 hover:opacity-100 transition-all duration-200 disabled:cursor-not-allowed;
   }
   
   .share-button.sharing {
@@ -912,7 +916,7 @@
   }
   
   .info-button {
-    @apply p-1 rounded-full bg-surface-secondary hover:bg-surface-hover text-theme-text opacity-60 hover:opacity-100 transition-all duration-200;
+    @apply p-1 rounded-full bg-slate-700 hover:bg-slate-600 text-theme-text opacity-60 hover:opacity-100 transition-all duration-200;
   }
 
   /* Modal Styles */
@@ -921,11 +925,11 @@
   }
 
   .modal-content {
-    @apply bg-surface-primary border border-surface-border rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden;
+    @apply bg-slate-800 border border-slate-700 rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden;
   }
 
   .modal-header {
-    @apply flex items-center justify-between p-4 border-b border-surface-border;
+    @apply flex items-center justify-between p-4 border-b border-slate-700;
   }
 
   .modal-title {
@@ -933,7 +937,7 @@
   }
 
   .modal-close {
-    @apply p-1 rounded-lg hover:bg-surface-hover text-theme-text opacity-70 hover:opacity-100 transition-colors;
+    @apply p-1 rounded-lg hover:bg-slate-700 text-theme-text opacity-70 hover:opacity-100 transition-colors;
   }
 
   .modal-body {
@@ -969,7 +973,7 @@
   }
 
   .tx-link-container {
-    @apply flex items-center justify-between gap-3 bg-surface-tertiary rounded-lg shadow-lg border border-surface-border backdrop-blur-sm p-2;
+    @apply flex items-center justify-between gap-3 bg-slate-700/50 rounded-lg border border-slate-600/50 p-2;
   }
 
   .tx-id {
@@ -1004,11 +1008,11 @@
   
   /* Pagination styles */
   .pagination-controls {
-    @apply flex items-center justify-between px-4 py-3 border-t border-surface-border bg-surface-tertiary;
+    @apply flex items-center justify-between px-4 py-3 border-t border-slate-700 bg-slate-800/30;
   }
   
   .pagination-button {
-    @apply bg-surface-secondary hover:bg-surface-hover text-theme text-xs font-medium px-3 py-2 rounded transition-colors duration-200;
+    @apply bg-slate-700 hover:bg-slate-600 text-theme text-xs font-medium px-3 py-2 rounded transition-colors duration-200;
   }
   
   .pagination-button:disabled,

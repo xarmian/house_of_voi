@@ -52,10 +52,10 @@ export interface LeaderboardEntry {
   rank_position: bigint;
   who: string; // Algorand address
   total_spins: bigint;
-  total_amount_bet: bigint;
-  total_amount_won: bigint;
-  net_result: bigint;
-  largest_single_win: bigint;
+  total_amount_bet: bigint; // Keep as bigint in TS for consistency, we'll handle conversion
+  total_amount_won: bigint; // Keep as bigint in TS for consistency, we'll handle conversion
+  net_result: bigint; // Keep as bigint in TS for consistency, we'll handle conversion
+  largest_single_win: bigint; // Keep as bigint in TS for consistency, we'll handle conversion
   win_rate: number;
   longest_streak: number;
   avg_bet_size: number;
@@ -169,7 +169,7 @@ export interface GetPlatformStatsParams {
 
 export interface GetLeaderboardParams {
   p_app_id: bigint;
-  p_metric?: 'net_result' | 'total_won' | 'largest_win' | 'total_spins' | 'win_rate' | 'total_bet';
+  p_metric?: 'net_result' | 'rtp' | 'total_won' | 'largest_win' | 'total_spins' | 'win_rate' | 'total_bet';
   p_limit?: number;
   p_offset?: number;
 }
@@ -189,7 +189,7 @@ export interface GetPlayerSpinsParams {
 export interface GetPlayerRankParams {
   p_app_id: bigint;
   p_player_address: string;
-  p_metric?: 'net_result' | 'total_won' | 'largest_win' | 'total_spins' | 'total_bet';
+  p_metric?: 'net_result' | 'rtp' | 'total_won' | 'largest_win' | 'total_spins' | 'total_bet';
 }
 
 export interface GetTimeStatsParams {

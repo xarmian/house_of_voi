@@ -16,7 +16,8 @@
     RefreshCw,
     ChevronLeft,
     ChevronRight,
-    Eye
+    Eye,
+    Percent
   } from 'lucide-svelte';
   import { hovStatsStore, connectionStatus } from '$lib/stores/hovStats';
   import type { LeaderboardEntry } from '$lib/types/hovStats';
@@ -67,6 +68,12 @@
       icon: TrendingUp,
       color: 'text-green-400',
       property: 'net_result'
+    },
+    rtp: {
+      label: 'RTP',
+      icon: Percent,
+      color: 'text-green-400',
+      property: 'rtp'
     },
     total_spins: {
       label: 'Total Spins',
@@ -144,8 +151,20 @@
     return `${address.slice(0, 8)}...${address.slice(-6)}`;
   }
 
+  // Helper function to calculate RTP from entry data
+  function calculateRTP(entry: LeaderboardEntry): number {
+    if (!entry.total_amount_bet || entry.total_amount_bet === 0n) {
+      return 0;
+    }
+    return (Number(entry.total_amount_won) / Number(entry.total_amount_bet)) * 100;
+  }
+
   // Format metric value
   function formatMetricValue(entry: LeaderboardEntry, metric: string): string {
+    if (metric === 'rtp') {
+      return `${calculateRTP(entry).toFixed(1)}%`;
+    }
+    
     const config = metrics[metric as keyof typeof metrics];
     const value = entry[config.property as keyof LeaderboardEntry];
     
@@ -379,9 +398,16 @@
                         <span class="font-mono text-sm text-theme">{formatAddress(entry.who)}</span>
                       </td>
                       <td class="py-3 px-4 text-right">
-                        <span class="font-semibold {metricConfig.color}">
-                          {formatMetricValue(entry, selectedMetric)}
-                        </span>
+                        <div class="space-y-1">
+                          <div class="font-semibold {metricConfig.color}">
+                            {formatMetricValue(entry, selectedMetric)}
+                          </div>
+                          {#if selectedMetric === 'rtp'}
+                            <div class="text-xs text-gray-400">
+                              Net: {formatVOI(Number(entry.net_result))} VOI
+                            </div>
+                          {/if}
+                        </div>
                       </td>
                       <td class="py-3 px-4 text-right text-gray-300">
                         {entry.total_spins.toString()}

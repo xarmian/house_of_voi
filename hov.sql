@@ -653,6 +653,8 @@ CREATE INDEX IF NOT EXISTS idx_mv_hov_leaderboard_total_won ON mv_hov_leaderboar
 CREATE INDEX IF NOT EXISTS idx_mv_hov_leaderboard_largest_win ON mv_hov_leaderboard(app_id, largest_single_win DESC);
 CREATE INDEX IF NOT EXISTS idx_mv_hov_leaderboard_total_spins ON mv_hov_leaderboard(app_id, total_spins DESC);
 CREATE INDEX IF NOT EXISTS idx_mv_hov_leaderboard_win_rate ON mv_hov_leaderboard(app_id, win_rate DESC);
+CREATE INDEX IF NOT EXISTS idx_mv_hov_leaderboard_total_bet ON mv_hov_leaderboard(app_id, total_amount_bet DESC);
+CREATE INDEX IF NOT EXISTS idx_mv_hov_leaderboard_rtp ON mv_hov_leaderboard(app_id, ((total_amount_won::NUMERIC / NULLIF(total_amount_bet, 0)::NUMERIC) * 100) DESC);
 
 -- Function to refresh leaderboard data
 CREATE OR REPLACE FUNCTION refresh_hov_leaderboard()
@@ -665,7 +667,7 @@ $$ LANGUAGE plpgsql;
 -- Leaderboard query function
 CREATE OR REPLACE FUNCTION get_hov_leaderboard(
     p_app_id BIGINT,
-    p_metric TEXT DEFAULT 'net_result', -- 'net_result', 'total_won', 'largest_win', 'total_spins', 'win_rate', 'total_bet'
+    p_metric TEXT DEFAULT 'net_result', -- 'net_result', 'rtp', 'total_won', 'largest_win', 'total_spins', 'win_rate', 'total_bet'
     p_limit INTEGER DEFAULT 100,
     p_offset INTEGER DEFAULT 0
 )
@@ -673,9 +675,9 @@ RETURNS TABLE(
     rank_position BIGINT,
     who TEXT,
     total_spins BIGINT,
-    total_amount_bet BIGINT,
-    total_amount_won BIGINT,
-    net_result BIGINT,
+    total_amount_bet NUMERIC,
+    total_amount_won NUMERIC,
+    net_result NUMERIC,
     largest_single_win BIGINT,
     win_rate NUMERIC(5,2),
     longest_streak INTEGER,
@@ -683,31 +685,53 @@ RETURNS TABLE(
 ) AS $$
 BEGIN
     RETURN QUERY
+    WITH ranked_players AS (
+        SELECT 
+            l.who,
+            l.total_spins,
+            l.total_amount_bet,
+            l.total_amount_won,
+            l.net_result,
+            l.largest_single_win,
+            l.win_rate,
+            l.longest_streak,
+            l.avg_bet_size,
+            -- Calculate RTP once for reuse
+            CASE WHEN l.total_amount_bet > 0 THEN 
+                (l.total_amount_won / l.total_amount_bet) * 100 
+            ELSE 0 END as rtp_value,
+            -- Assign rank based on metric
+            ROW_NUMBER() OVER (
+                ORDER BY 
+                    CASE p_metric
+                        WHEN 'net_result' THEN l.net_result
+                        WHEN 'total_won' THEN l.total_amount_won
+                        WHEN 'largest_win' THEN l.largest_single_win::NUMERIC
+                        WHEN 'total_bet' THEN l.total_amount_bet
+                        WHEN 'total_spins' THEN l.total_spins::NUMERIC
+                        WHEN 'win_rate' THEN l.win_rate
+                        WHEN 'rtp' THEN CASE WHEN l.total_amount_bet > 0 THEN 
+                            (l.total_amount_won / l.total_amount_bet) * 100 
+                        ELSE 0 END
+                        ELSE l.net_result -- default
+                    END DESC
+            ) as rank
+        FROM mv_hov_leaderboard l
+        WHERE l.app_id = p_app_id
+    )
     SELECT 
-        ROW_NUMBER() OVER (
-            ORDER BY 
-                CASE 
-                    WHEN p_metric = 'net_result' THEN l.net_result
-                    WHEN p_metric = 'total_won' THEN l.total_amount_won
-                    WHEN p_metric = 'largest_win' THEN l.largest_single_win
-                    WHEN p_metric = 'total_spins' THEN l.total_spins
-                    WHEN p_metric = 'total_bet' THEN l.total_amount_bet
-                    ELSE l.net_result
-                END DESC,
-                CASE WHEN p_metric = 'win_rate' THEN l.win_rate ELSE 0 END DESC
-        ) as rank_position,
-        l.who,
-        l.total_spins,
-        l.total_amount_bet,
-        l.total_amount_won,
-        l.net_result,
-        l.largest_single_win,
-        l.win_rate,
-        l.longest_streak::INTEGER,
-        l.avg_bet_size
-    FROM mv_hov_leaderboard l
-    WHERE l.app_id = p_app_id
-    ORDER BY rank_position
+        rp.rank,
+        rp.who,
+        rp.total_spins,
+        rp.total_amount_bet,
+        rp.total_amount_won,
+        rp.net_result,
+        rp.largest_single_win,
+        rp.win_rate,
+        rp.longest_streak::INTEGER,
+        rp.avg_bet_size
+    FROM ranked_players rp
+    ORDER BY rp.rank
     LIMIT p_limit
     OFFSET p_offset;
 END;
@@ -874,8 +898,15 @@ BEGIN
                         WHEN p_metric = 'total_won' THEN total_amount_won
                         WHEN p_metric = 'largest_win' THEN largest_single_win
                         WHEN p_metric = 'total_spins' THEN total_spins
+                        WHEN p_metric = 'total_bet' THEN total_amount_bet
                         ELSE net_result
-                    END DESC
+                    END DESC,
+                    CASE WHEN p_metric = 'win_rate' THEN win_rate ELSE 0 END DESC,
+                    CASE WHEN p_metric = 'rtp' THEN 
+                        CASE WHEN total_amount_bet > 0 THEN 
+                            (total_amount_won::NUMERIC / total_amount_bet::NUMERIC) * 100 
+                        ELSE 0 END
+                    ELSE 0 END DESC
             ) as rank,
             COUNT(*) OVER () as total_count
         FROM mv_hov_leaderboard

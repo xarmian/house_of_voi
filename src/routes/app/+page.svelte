@@ -118,7 +118,7 @@
               {:else if showPlayerStats}
                 <PlayerStats compact={true} />
               {:else}
-                <GameQueue maxHeight="calc(100vh - 22rem)" />
+                <GameQueue />
               {/if}
             </div>
           </div>

@@ -460,7 +460,7 @@
 
 <style>
   .player-stats-container {
-    @apply bg-slate-800 rounded-xl border border-slate-700 overflow-hidden;
+    @apply bg-slate-800 rounded-b-xl border border-slate-700 overflow-hidden;
   }
 
   .compact {

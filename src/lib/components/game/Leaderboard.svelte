@@ -15,7 +15,8 @@
     RefreshCw,
     Search,
     BarChart3,
-    Maximize2
+    Maximize2,
+    Percent
   } from 'lucide-svelte';
   import LeaderboardModal from './LeaderboardModal.svelte';
   import PlayerStatsModal from './PlayerStatsModal.svelte';
@@ -27,17 +28,15 @@
   // Props
   export let compact = false;
   export let showPlayerHighlight = true;
-  export let autoRefresh = true;
 
   const dispatch = createEventDispatcher();
 
   // State
-  let selectedMetric: 'total_won' | 'total_bet' | 'largest_win' | 'net_result' | 'total_spins' = 'total_won';
+  let selectedMetric: 'total_won' | 'total_bet' | 'largest_win' | 'net_result' | 'rtp' | 'total_spins' = 'total_won';
   let currentPage = 0;
   let itemsPerPage = compact ? 10 : 20;
   let searchTerm = '';
   let refreshing = false;
-  let autoRefreshInterval: NodeJS.Timeout | null = null;
   let highlightedPlayer: string | null = null;
   
   // Modal state
@@ -98,6 +97,14 @@
       unit: 'VOI',
       property: 'net_result'
     },
+    rtp: {
+      label: 'RTP',
+      icon: Percent,
+      color: 'text-green-400',
+      format: (value: number) => `${value.toFixed(1)}%`,
+      unit: '%',
+      property: 'rtp'
+    },
     total_spins: {
       label: 'Total Spins',
       icon: Target,
@@ -109,10 +116,7 @@
   };
 
   onMount(async () => {
-    if (autoRefresh) {
-      startAutoRefresh();
-    }
-    // Always refresh data on mount to ensure we have correct metric data
+    // Load data on mount to ensure we have correct metric data
     if ($connectionStatus.initialized) {
       refresh();
     }
@@ -131,24 +135,9 @@
   }
 
   onDestroy(() => {
-    stopAutoRefresh();
+    // Cleanup if needed
   });
 
-  function startAutoRefresh() {
-    stopAutoRefresh();
-    autoRefreshInterval = setInterval(() => {
-      if (!$leaderboard.loading && $connectionStatus.isConnected) {
-        hovStatsStore.refreshLeaderboard(selectedMetric, Math.max(100, filteredData.length));
-      }
-    }, 60000); // Refresh every minute
-  }
-
-  function stopAutoRefresh() {
-    if (autoRefreshInterval) {
-      clearInterval(autoRefreshInterval);
-      autoRefreshInterval = null;
-    }
-  }
 
   async function refresh() {
     // Don't refresh if not initialized or already refreshing
@@ -210,6 +199,25 @@
 
   function highlightPlayer(address: string) {
     highlightedPlayer = highlightedPlayer === address ? null : address;
+  }
+
+  // Helper function to calculate RTP from entry data
+  function calculateRTP(entry: LeaderboardEntry): number {
+    if (!entry.total_amount_bet || entry.total_amount_bet === 0n) {
+      return 0;
+    }
+    return (Number(entry.total_amount_won) / Number(entry.total_amount_bet)) * 100;
+  }
+
+  // Helper function to format metric value
+  function formatMetricValue(entry: LeaderboardEntry): string {
+    if (selectedMetric === 'rtp') {
+      return metricConfig.format(calculateRTP(entry));
+    } else if (selectedMetric === 'win_rate') {
+      return metricConfig.format(entry[metricConfig.property]);
+    } else {
+      return metricConfig.format(entry[metricConfig.property] as bigint);
+    }
   }
 
   $: metricConfig = metrics[selectedMetric];
@@ -303,10 +311,7 @@
           <div class="text-left sm:text-right">
             <div class="text-xs sm:text-sm text-gray-400">{metricConfig.label}</div>
             <div class="text-sm sm:text-base font-semibold text-theme">
-              {playerEntry ? (selectedMetric === 'win_rate' 
-                ? metricConfig.format(playerEntry[metricConfig.property])
-                : metricConfig.format(playerEntry[metricConfig.property] as bigint)
-              ) : '--'}
+              {playerEntry ? formatMetricValue(playerEntry) : '--'}
             </div>
           </div>
         </div>
@@ -389,10 +394,7 @@
               <!-- Metric value -->
               <div class="text-right">
                 <div class="text-sm font-bold {metricConfig.color}">
-                  {selectedMetric === 'win_rate' 
-                    ? metricConfig.format(entry[metricConfig.property])
-                    : metricConfig.format(entry[metricConfig.property] as bigint)
-                  }
+                  {formatMetricValue(entry)}
                 </div>
                 <div class="text-xs text-gray-400">{metricConfig.unit}</div>
               </div>
@@ -434,10 +436,7 @@
             <!-- Metric value -->
             <div class="flex-shrink-0 text-right w-32">
               <div class="value {metricConfig.color}">
-                {selectedMetric === 'win_rate' 
-                  ? metricConfig.format(entry[metricConfig.property])
-                  : metricConfig.format(entry[metricConfig.property] as bigint)
-                }
+                {formatMetricValue(entry)}
               </div>
               <div class="unit">{metricConfig.unit}</div>
             </div>

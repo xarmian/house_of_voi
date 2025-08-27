@@ -449,9 +449,15 @@ export class AlgorandService {
       
       console.log('🚀 Transaction group submitted with ID:', txId);
 
-      // Wait for confirmation
+      // Wait for confirmation with progress feedback
       console.log('⏳ Waiting for transaction confirmation...');
-      const confirmedTxn = await this.waitForConfirmation(appCallTxId, 4);
+      const confirmedTxn = await this.waitForConfirmation(
+        appCallTxId, 
+        4,
+        (currentRound, maxRounds) => {
+          console.log(`⏳ Confirmation progress: ${currentRound}/${maxRounds} rounds`);
+        }
+      );
       console.log('✅ Transaction confirmed:', confirmedTxn);
       
       // Extract the actual bet key from the confirmed transaction logs
@@ -929,28 +935,64 @@ export class AlgorandService {
   }
 
   /**
-   * Wait for transaction confirmation
+   * Wait for transaction confirmation with optimized polling
    */
-  async waitForConfirmation(txId: string, maxRounds = BLOCKCHAIN_CONFIG.transactionTimeout): Promise<any> {
+  async waitForConfirmation(
+    txId: string, 
+    maxRounds = BLOCKCHAIN_CONFIG.transactionTimeout,
+    onProgress?: (currentRound: number, maxRounds: number) => void
+  ): Promise<any> {
+    try {
+      // Use algosdk's built-in waitForConfirmation which is optimized
+      const confirmedTxn = await algosdk.waitForConfirmation(this.client, txId, maxRounds);
+      return confirmedTxn;
+    } catch (error: any) {
+      // If algosdk method fails, fall back to custom implementation with faster polling
+      console.warn('algosdk.waitForConfirmation failed, using custom implementation:', error.message);
+      return await this.waitForConfirmationCustom(txId, maxRounds, onProgress);
+    }
+  }
+
+  /**
+   * Custom confirmation waiting with faster polling as fallback
+   */
+  private async waitForConfirmationCustom(
+    txId: string, 
+    maxRounds: number,
+    onProgress?: (currentRound: number, maxRounds: number) => void
+  ): Promise<any> {
+    const startTime = Date.now();
     const startRound = (await this.getSuggestedParams()).firstRound;
     let round = startRound;
+    const fastPollInterval = 100; // Poll every 100ms for faster response
     
     while (round < startRound + maxRounds) {
       try {
         const txInfo = await this.client.pendingTransactionInformation(txId).do();
         if (txInfo['confirmed-round']) {
+          console.log(`✅ Transaction confirmed in ${Date.now() - startTime}ms`);
           return txInfo;
         }
       } catch (error) {
         // Transaction not found yet, continue waiting
       }
       
-      // Wait for next round
-      await this.waitForRound(round + 1);
-      round++;
+      // Update progress if callback provided
+      if (onProgress) {
+        onProgress(round - startRound, maxRounds);
+      }
+      
+      // Fast polling instead of waiting for full round
+      await new Promise(resolve => setTimeout(resolve, fastPollInterval));
+      
+      // Check if we should move to next round
+      const currentRound = await this.getCurrentRound();
+      if (currentRound > round) {
+        round = currentRound;
+      }
     }
     
-    throw new Error(`Transaction ${txId} not confirmed after ${maxRounds} rounds`);
+    throw new Error(`Transaction ${txId} not confirmed after ${maxRounds} rounds (${Date.now() - startTime}ms)`);
   }
 
   /**

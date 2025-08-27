@@ -326,7 +326,7 @@
                     <Crown class="w-5 h-5 text-yellow-400" />
                     <h2 class="text-lg font-bold text-theme">Top Players</h2>
                   </div>
-                  <Leaderboard maxHeight="700px" showPlayerHighlight={isWalletConnected} autoRefresh={true} />
+                  <Leaderboard maxHeight="700px" showPlayerHighlight={isWalletConnected} />
                 </div>
               </div>
               
