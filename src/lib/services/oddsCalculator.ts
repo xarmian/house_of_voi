@@ -57,8 +57,6 @@ export class OddsCalculator {
     multipliers: { [key: string]: CachedMultiplier },
     paylines: number[][]
   ): OddsCalculationResult {
-    console.log('🎲 Starting odds calculation...');
-    
     // Step 1: Analyze symbol distribution across reels
     const symbolAnalysis = this.analyzeReelSymbols(reelData);
     
@@ -79,13 +77,6 @@ export class OddsCalculator {
       calculatedAt: Date.now()
     };
     
-    console.log('✅ Odds calculation completed:', {
-      rtp: `${(overallRTP * 100).toFixed(2)}%`,
-      hitFrequency: `1 in ${totalHitFrequency.toFixed(1)}`,
-      expectedValue: expectedValuePerSpin.toFixed(4),
-      paylineCount: paylines.length,
-      reelCount: symbolAnalysis.length
-    });
     
     return result;
   }
@@ -97,26 +88,40 @@ export class OddsCalculator {
     const { reelData: symbols, reelLength, reelCount } = reelData;
     const analysis: ReelAnalysis[] = [];
     
-    console.log('📊 Raw reel data:', {
-      symbols: symbols.slice(0, 20) + '...', // Show first 20 chars
-      reelLength,
-      reelCount,
-      totalSymbols: symbols.length
-    });
-    
     for (let reelIndex = 0; reelIndex < reelCount; reelIndex++) {
       const reelStart = reelIndex * reelLength;
       const reelEnd = reelStart + reelLength;
       const reelSymbols = symbols.slice(reelStart, reelEnd);
       
-      // Count each symbol in this reel (including empty spaces)
-      const symbolCounts: { [symbol: string]: number } = {};
+      // Calculate symbol probabilities for each row (0=top, 1=middle, 2=bottom)
+      const rowSymbolCounts: { [row: number]: { [symbol: string]: number } } = {
+        0: {}, // top row
+        1: {}, // middle row  
+        2: {}  // bottom row
+      };
       
-      for (const symbol of reelSymbols) {
-        symbolCounts[symbol] = (symbolCounts[symbol] || 0) + 1;
+      // For each possible stopping position (0 to reelLength-1)
+      for (let stopPosition = 0; stopPosition < reelLength; stopPosition++) {
+        // In a 3-row display:
+        // top row: stopPosition
+        // middle row: (stopPosition + 1) % reelLength  
+        // bottom row: (stopPosition + 2) % reelLength
+        
+        for (let row = 0; row < 3; row++) {
+          const rowPosition = (stopPosition + row) % reelLength;
+          const rowSymbol = reelSymbols[rowPosition];
+          
+          if (!rowSymbolCounts[row][rowSymbol]) {
+            rowSymbolCounts[row][rowSymbol] = 0;
+          }
+          rowSymbolCounts[row][rowSymbol]++;
+        }
       }
       
-      console.log(`Reel ${reelIndex} full breakdown:`, symbolCounts);
+      // For now, use middle row (row 1) as the default probability
+      // TODO: We should ideally use payline-specific row probabilities
+      const symbolCounts = rowSymbolCounts[1]; // middle row
+      
       
       // Convert counts to probabilities (exclude empty spaces from win calculations)
       const symbolProbabilities: SymbolProbability[] = Object.entries(symbolCounts)
@@ -124,7 +129,7 @@ export class OddsCalculator {
         .map(([symbol, count]) => ({
           symbol,
           count,
-          probability: count / reelLength
+          probability: count / reelLength // Now this represents actual stopping probability for middle row
         }));
       
       // Sort by probability (highest first)
@@ -210,36 +215,10 @@ export class OddsCalculator {
   ): number {
     let totalProbabilityAcrossPaylines = 0;
     
-    // Calculate probability for each payline separately
+    // Calculate probability for each payline separately using "any N symbols" logic
     for (const payline of paylines) {
-      // Calculate probability for exactly 'count' consecutive symbols on this specific payline
-      let paylineProbability = 1;
-      
-      // For each position in the consecutive sequence
-      for (let pos = 0; pos < count; pos++) {
-        const reelIndex = pos;
-        const rowIndex = payline[pos]; // This payline's row at this reel
-        
-        // Get probability of this symbol at this specific reel position
-        const reelData = symbolAnalysis[reelIndex];
-        const symbolData = reelData.symbols.find(s => s.symbol === symbol);
-        const symbolProb = symbolData ? symbolData.probability : 0;
-        
-        paylineProbability *= symbolProb;
-      }
-      
-      // If we want exactly 'count' (not more), multiply by probability of next symbol being different
-      if (count < 5) {
-        const nextReelIndex = count;
-        const nextRowIndex = payline[count];
-        const nextReelData = symbolAnalysis[nextReelIndex];
-        const nextSymbolData = nextReelData.symbols.find(s => s.symbol === symbol);
-        const nextSymbolProb = nextSymbolData ? nextSymbolData.probability : 0;
-        
-        paylineProbability *= (1 - nextSymbolProb);
-      }
-      
-      // This payline contributes this probability to the total
+      // Use the exact win probability calculation (any N symbols, not consecutive)
+      const paylineProbability = this.calculateExactWinProbability(symbol, count, payline, symbolAnalysis);
       totalProbabilityAcrossPaylines += paylineProbability;
     }
     
@@ -251,8 +230,9 @@ export class OddsCalculator {
   /**
    * Calculate overall Return to Player percentage
    * 
-   * COMPLETELY REWRITTEN: Calculates true expected value per spin by simulating
-   * the contract's exact win detection logic across all paylines.
+   * FIXED: Calculate expected payout per spin correctly.
+   * Since we can't distinguish row-specific probabilities, we calculate the base probability
+   * for one payline and then account for all active paylines.
    */
   private calculateRTP(
     winAnalysis: WinAnalysis[], 
@@ -260,76 +240,54 @@ export class OddsCalculator {
     multipliers: { [key: string]: CachedMultiplier },
     paylines: number[][]
   ): number {
-    console.log('🔍 Starting RTP calculation...');
-    console.log('Symbol probabilities per reel:');
-    symbolAnalysis.forEach((reel, i) => {
-      console.log(`Reel ${i}:`, reel.symbols.map(s => `${s.symbol}=${s.probability.toFixed(3)}`));
-    });
     
-    // Calculate expected payout per spin across all paylines
-    let totalExpectedPayout = 0;
-    let debugPaylines = [];
+    // Since all paylines have the same probability (we can't distinguish rows),
+    // calculate expected payout for ONE payline, then multiply by payline count
+    let expectedPayoutPerPayline = 0;
     
-    // For each payline, calculate expected payout
-    for (let paylineIndex = 0; paylineIndex < paylines.length; paylineIndex++) {
-      const payline = paylines[paylineIndex];
-      let paylineExpectedPayout = 0;
-      let paylineDebug = { index: paylineIndex, payline, wins: [] };
+    // For each possible symbol that could start a winning sequence
+    for (const symbol of this.WINNING_SYMBOLS) {
+      // Calculate probabilities for exactly 3, 4, and 5 of this symbol
+      const probExactly3 = this.calculateExactWinProbability(symbol, 3, paylines[0], symbolAnalysis);
+      const probExactly4 = this.calculateExactWinProbability(symbol, 4, paylines[0], symbolAnalysis);
+      const probExactly5 = this.calculateExactWinProbability(symbol, 5, paylines[0], symbolAnalysis);
       
-      // For each possible symbol that could start a winning sequence
-      for (const symbol of this.WINNING_SYMBOLS) {
-        // For each possible win length (3, 4, 5)
-        for (let winLength = this.MIN_WIN_COUNT; winLength <= this.MAX_WIN_COUNT; winLength++) {
-          // Calculate probability of exactly this win on this payline
-          const probability = this.calculateExactWinProbability(
-            symbol, 
-            winLength, 
-            payline, 
-            symbolAnalysis
-          );
-          
-          // Get multiplier for this combination
-          const multiplierKey = `${symbol}_${winLength}`;
-          const multiplier = multipliers[multiplierKey]?.data || 0;
-          
-          // Calculate contribution
-          const contribution = probability * multiplier;
-          
-          if (contribution > 0) {
-            paylineDebug.wins.push({
-              symbol,
-              length: winLength,
-              probability: probability.toFixed(8),
-              multiplier,
-              contribution: contribution.toFixed(6)
-            });
-          }
-          
-          // Add to expected payout for this payline
-          paylineExpectedPayout += contribution;
-        }
-      }
+      // Get multipliers
+      const multiplier3 = multipliers[`${symbol}_3`]?.data || 0;
+      const multiplier4 = multipliers[`${symbol}_4`]?.data || 0;
+      const multiplier5 = multipliers[`${symbol}_5`]?.data || 0;
       
-      if (paylineExpectedPayout > 0) {
-        debugPaylines.push({...paylineDebug, totalPayout: paylineExpectedPayout.toFixed(6)});
-      }
+      // Calculate expected payout: each exact count pays its corresponding multiplier
+      // (exactly 4 pays multiplier4, exactly 5 pays multiplier5, etc.)
+      const contribution3 = probExactly3 * multiplier3;
+      const contribution4 = probExactly4 * multiplier4;
+      const contribution5 = probExactly5 * multiplier5;
       
-      // Add this payline's expected payout to total
-      totalExpectedPayout += paylineExpectedPayout;
+      const totalContribution = contribution3 + contribution4 + contribution5;
+      expectedPayoutPerPayline += totalContribution;
+      
     }
     
-    console.log('Paylines with expected payouts:');
-    debugPaylines.slice(0, 5).forEach(pl => console.log(pl)); // Show first 5
-    console.log(`Total expected payout: ${totalExpectedPayout.toFixed(6)}`);
+    // Total expected payout = expected per payline × number of paylines
+    const totalExpectedPayout = expectedPayoutPerPayline * paylines.length;
     
-    return totalExpectedPayout;
+    // RTP = expected payout / total bet
+    // When betting 1 coin per payline, total bet = number of paylines
+    const totalBet = paylines.length; // 1 coin per payline
+    const rtp = totalExpectedPayout / totalBet;
+    
+    
+    return rtp;
   }
   
   /**
-   * Calculate probability of exactly N consecutive symbols on a specific payline
+   * Calculate probability of exactly N symbols (any positions) on a specific payline
    * 
-   * CRITICAL FIX: Now actually uses the payline's row positions!
-   * Each payline follows a different path through the 5x3 grid.
+   * IMPORTANT: This calculates EXACTLY N symbols, not "N or more"
+   * The calling code should handle that 4-of-a-kind and 5-of-a-kind are separate wins
+   * 
+   * FIXED: Now correctly calculates for ANY N symbols out of 5 positions, not consecutive!
+   * Uses binomial distribution: exactly N successes in 5 trials.
    */
   private calculateExactWinProbability(
     symbol: string,
@@ -337,53 +295,102 @@ export class OddsCalculator {
     payline: number[],
     symbolAnalysis: ReelAnalysis[]
   ): number {
-    // CRITICAL: A slot machine is a 5x3 grid, but we only know overall reel probabilities,
-    // not row-specific probabilities. The contract shows this is a fundamental limitation.
-    // 
-    // Since we can't distinguish between row probabilities within each reel,
-    // we have to assume uniform distribution within each reel.
-    // This means all paylines will have the same probability - which explains our issue!
+    // Get the probability of this symbol appearing on any reel
+    // Since we don't have row-specific data, assume uniform distribution per reel
+    const symbolProbs = symbolAnalysis.map(reel => {
+      const symbolData = reel.symbols.find(s => s.symbol === symbol);
+      return symbolData ? symbolData.probability : 0;
+    });
     
-    let probability = 1;
+    // Calculate probability of getting EXACTLY winLength of this symbol
+    // This is complex because each reel has different probabilities
+    // We need to sum over all possible combinations of exactly winLength positions
     
-    // Probability of first 'winLength' positions having the target symbol
-    for (let pos = 0; pos < winLength; pos++) {
-      const reelIndex = pos;
-      const rowIndex = payline[pos]; // This would matter if we had row-specific data
+    let totalProbability = 0;
+    
+    // Generate all possible combinations of winLength positions out of 5
+    const combinations = this.getCombinations(5, winLength);
+    
+    for (const combination of combinations) {
+      let combinationProb = 1;
       
-      const reelData = symbolAnalysis[reelIndex];
-      const symbolData = reelData.symbols.find(s => s.symbol === symbol);
-      const symbolProb = symbolData ? symbolData.probability : 0;
+      // For each of the 5 reels
+      for (let reelIndex = 0; reelIndex < 5; reelIndex++) {
+        if (combination.includes(reelIndex)) {
+          // This position should have the target symbol
+          combinationProb *= symbolProbs[reelIndex];
+        } else {
+          // This position should NOT have the target symbol
+          combinationProb *= (1 - symbolProbs[reelIndex]);
+        }
+      }
       
-      probability *= symbolProb;
+      totalProbability += combinationProb;
     }
     
-    // If not a 5-symbol win, multiply by probability that next symbol is different
-    if (winLength < 5) {
-      const nextReelIndex = winLength;
-      const nextReelData = symbolAnalysis[nextReelIndex];
-      const nextSymbolData = nextReelData.symbols.find(s => s.symbol === symbol);
-      const nextSymbolProb = nextSymbolData ? nextSymbolData.probability : 0;
+    
+    return totalProbability;
+  }
+  
+  /**
+   * Generate all combinations of k items from n items
+   * e.g., getCombinations(5, 3) returns all ways to choose 3 positions from 5
+   */
+  private getCombinations(n: number, k: number): number[][] {
+    const results: number[][] = [];
+    
+    function backtrack(start: number, current: number[]) {
+      if (current.length === k) {
+        results.push([...current]);
+        return;
+      }
       
-      probability *= (1 - nextSymbolProb);
+      for (let i = start; i < n; i++) {
+        current.push(i);
+        backtrack(i + 1, current);
+        current.pop();
+      }
     }
     
-    return probability;
+    backtrack(0, []);
+    return results;
   }
   
   /**
    * Calculate overall hit frequency (how often any win occurs)
+   * 
+   * FIXED: Calculate probability of at least one winning payline per spin
    */
   private calculateTotalHitFrequency(winAnalysis: WinAnalysis[]): number {
-    // Probability of at least one win (1 - probability of no wins)
-    let probabilityOfNoWin = 1;
+    // For each payline, calculate probability of NO win on that payline
+    // Then calculate probability of at least one payline having a win
+    
+    // IMPORTANT: winAnalysis probabilities are SUMMED across all 20 paylines
+    // We need to divide by 20 to get the actual per-payline probability
+    const NUM_PAYLINES = 20;
+    
+    // Probability that a single payline has a win (sum of all symbol win probabilities)
+    // Since different symbols can't win on the same payline simultaneously,
+    // we can simply ADD the probabilities (mutually exclusive events)
+    let probabilityOfWinOnOnePayline = 0;
     
     for (const analysis of winAnalysis) {
       const symbolTotalProbability = analysis.combinations.reduce((sum, combo) => sum + combo.probability, 0);
-      probabilityOfNoWin *= (1 - symbolTotalProbability);
+      // Divide by number of paylines to get per-payline probability
+      probabilityOfWinOnOnePayline += (symbolTotalProbability / NUM_PAYLINES);
     }
     
-    const probabilityOfAnyWin = 1 - probabilityOfNoWin;
+    // Probability of no win on a single payline
+    const probabilityOfNoWinOnOnePayline = 1 - probabilityOfWinOnOnePayline;
+    
+    // Since all paylines have the same probability (uniform symbol distribution),
+    // probability of no wins across ALL paylines = (prob of no win on one payline)^20
+    const probabilityOfNoWinOnAnyPayline = Math.pow(probabilityOfNoWinOnOnePayline, NUM_PAYLINES);
+    
+    // Probability of at least one payline winning
+    const probabilityOfAnyWin = 1 - probabilityOfNoWinOnAnyPayline;
+    
+    
     return probabilityOfAnyWin > 0 ? 1 / probabilityOfAnyWin : 0;
   }
   
@@ -397,7 +404,15 @@ export class OddsCalculator {
     bestPayout: string;
   } {
     const rtpPercentage = `${(odds.overallRTP * 100).toFixed(2)}%`;
-    const hitFrequency = `1 in ${odds.totalHitFrequency.toFixed(1)}`;
+    // Calculate per-line win rate from the actual data
+    const NUM_PAYLINES = 20;
+    let totalPerPaylineWinRate = 0;
+    for (const analysis of odds.winAnalysis) {
+      const symbolTotalProbability = analysis.combinations.reduce((sum, combo) => sum + combo.probability, 0);
+      totalPerPaylineWinRate += (symbolTotalProbability / NUM_PAYLINES);
+    }
+    
+    const hitFrequency = `${((1 / odds.totalHitFrequency) * 100).toFixed(2)}% per spin (${(totalPerPaylineWinRate * 100).toFixed(2)}% per line)`;
     
     // Find most likely win
     let mostLikelyWin = 'None';

@@ -169,7 +169,7 @@ export class AlgorandService {
       }
 
       const getBalancesR = await ci.get_balances();
-      
+
       if (!getBalancesR.success) {
         throw new Error(`Contract get_balances failed: ${getBalancesR.error || 'Unknown error'}`);
       }
@@ -178,7 +178,15 @@ export class AlgorandService {
         console.log('Raw balance result:', getBalancesR);
       }
 
-      return this.decodeBalances(getBalancesR.returnValue);
+      // check the balance of the contract account
+      const contractInfo = await this.client.accountInformation(addr).do();
+      const contractBalance = contractInfo.amount / 1e6;
+
+      const balances = this.decodeBalances(getBalancesR.returnValue);
+      balances.balanceTotal = contractBalance;
+      balances.balanceAvailable = (contractBalance - balances.balanceLocked);
+
+      return balances;
 
     } catch (error) {
       console.error('💥 getBalances failed:', error);

@@ -15,7 +15,7 @@
   } from 'lucide-svelte';
   import { contractDataCache } from '$lib/services/contractDataCache';
   import { bettingStore } from '$lib/stores/betting';
-  import { walletAddress } from '$lib/stores/wallet';
+  import { selectedWallet } from 'avm-wallet-svelte';
   import { formatProbability, formatHitFrequency, formatMultiplier, getRiskAssessment, getMostProfitableCombinations, calculateBreakEvenAnalysis, generateOddsSummary, validateOdds, exportOddsToCSV } from '$lib/utils/oddsAnalysis';
   import type { OddsCalculationResult } from '$lib/services/oddsCalculator';
   
@@ -35,21 +35,17 @@
   $: currentTotalBet = $bettingStore.totalBet;
   
   async function loadOdds() {
-    if (!$walletAddress) {
-      error = 'Wallet initializing...';
-      return;
-    }
-    
+    // Use wallet address if available, otherwise use a dummy address for public odds
+    const address = $selectedWallet?.address || 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
     isLoading = true;
     error = null;
     
     try {
-      odds = await contractDataCache.getWinOdds($walletAddress);
+      odds = await contractDataCache.getWinOdds(address);
       if (!odds) {
         error = 'Unable to calculate odds. Please try again.';
       }
     } catch (err) {
-      console.error('Error loading odds:', err);
       error = 'Failed to load odds data';
     } finally {
       isLoading = false;
@@ -57,13 +53,17 @@
   }
   
   async function recalculateOdds() {
-    if (!$walletAddress) return;
-    
+    // Use wallet address if available, otherwise use a dummy address for public odds
+    const address = $selectedWallet?.address || 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
     isLoading = true;
+    error = null;
+    
     try {
-      odds = await contractDataCache.recalculateOdds($walletAddress);
+      // Clear the cached odds to force fresh calculation
+      contractDataCache.clearOddsCache();
+      
+      odds = await contractDataCache.getWinOdds(address);
     } catch (err) {
-      console.error('Error recalculating odds:', err);
       error = 'Failed to recalculate odds';
     } finally {
       isLoading = false;
@@ -97,8 +97,12 @@
   }
   
   // Calculate current bet odds
-  $: currentBetOdds = odds && $walletAddress ? 
-    contractDataCache.calculateBetOdds($walletAddress, currentBetPerLine, currentPaylines) : 
+  $: currentBetOdds = odds ? 
+    contractDataCache.calculateBetOdds(
+      $selectedWallet?.address || 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', 
+      currentBetPerLine, 
+      currentPaylines
+    ) : 
     null;
   
   // Risk assessment
@@ -116,43 +120,40 @@
   onMount(() => {
     loadOdds();
   });
-  
-  // Reactive loading when wallet address becomes available
-  $: if ($walletAddress) {
-    loadOdds();
-  }
 </script>
 
-<div class="odds-analysis" class:compact class:modal={isModal}>
+<div class="odds-analysis" class:compact class:modal={isModal} class:embedded={!isModal}>
   <!-- Header -->
   <div class="header">
-    <div class="flex items-center gap-3">
-      <BarChart3 class="w-6 h-6 text-voi-400" />
-      <h3 class="text-xl font-bold text-theme">
+    <div class="flex items-center gap-2 sm:gap-3">
+      <BarChart3 class="w-5 h-5 sm:w-6 sm:h-6 text-voi-400" />
+      <h3 class="text-lg sm:text-xl font-bold text-theme">
         {showHouseMetrics ? 'Game Analytics' : 'Win Odds & Analysis'}
       </h3>
     </div>
     
     {#if !compact}
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1 sm:gap-2">
         <button
           on:click={recalculateOdds}
           disabled={isLoading}
           class="btn-secondary-sm"
           title="Refresh odds data"
+          style="min-height: 44px;"
         >
-          <TrendingUp class="w-4 h-4" />
-          Refresh
+          <TrendingUp class="w-3 h-3 sm:w-4 sm:h-4" />
+          <span class="hidden sm:inline ml-1">Refresh</span>
         </button>
         
-        {#if odds}
+        {#if odds && false}
           <button
             on:click={() => showAdvanced = !showAdvanced}
             class="btn-secondary-sm"
             title="Toggle advanced view"
+            style="min-height: 44px;"
           >
-            <Calculator class="w-4 h-4" />
-            {showAdvanced ? 'Simple' : 'Advanced'}
+            <Calculator class="w-3 h-3 sm:w-4 sm:h-4" />
+            <span class="hidden sm:inline ml-1">{showAdvanced ? 'Simple' : 'Advanced'}</span>
           </button>
         {/if}
       </div>
@@ -232,7 +233,7 @@
             <div class="stat-value text-blue-400">
               {formatHitFrequency(odds.totalHitFrequency)}
             </div>
-            <div class="stat-detail">spins for any win</div>
+            <div class="stat-detail">win rate per payline</div>
           </div>
         </div>
 
@@ -275,8 +276,8 @@
         {#await currentBetOdds then betOdds}
           <div class="current-bet-analysis">
             <h4 class="section-title">
-              Current Bet Analysis
-              <span class="text-sm text-gray-400 font-normal">
+              <span class="text-sm sm:text-base">Current Bet Analysis</span>
+              <span class="text-xs sm:text-sm text-gray-400 font-normal block sm:inline">
                 ({(currentTotalBet / 1_000_000).toFixed(2)} VOI total)
               </span>
             </h4>
@@ -284,21 +285,21 @@
             <div class="bet-stats-grid">
               <div class="bet-stat">
                 <span class="label">Expected Return</span>
-                <span class="value text-green-400">
+                <span class="value text-green-400 text-sm sm:text-lg">
                   {(betOdds.expectedReturn / 1_000_000).toFixed(6)} VOI
                 </span>
               </div>
               
               <div class="bet-stat">
                 <span class="label">Expected Loss</span>
-                <span class="value text-red-400">
+                <span class="value text-red-400 text-sm sm:text-lg">
                   {(betOdds.expectedLoss / 1_000_000).toFixed(6)} VOI
                 </span>
               </div>
               
               <div class="bet-stat">
                 <span class="label">Return Rate</span>
-                <span class="value">
+                <span class="value text-sm sm:text-lg">
                   {(betOdds.breakEvenProbability * 100).toFixed(2)}%
                 </span>
               </div>
@@ -310,13 +311,14 @@
       <!-- Most Profitable Combinations -->
       {#if profitableCombos.length > 0}
         <div class="profitable-combos">
-          <h4 class="section-title">Most Profitable Combinations</h4>
+          <h4 class="section-title text-sm sm:text-base">Most Profitable Combinations</h4>
+          <div class="text-xs">WARNING: This may not be accurate. It is a work in progress.</div>
           <div class="combo-list">
             {#each profitableCombos as combo, i}
               <div class="combo-item">
-                <div class="combo-rank">#{i + 1}</div>
+                <div class="combo-rank text-xs">{i + 1}</div>
                 <div class="combo-symbol">
-                  <div class="symbol-icon symbol-{combo.symbol.toLowerCase()}">
+                  <div class="symbol-icon symbol-{combo.symbol.toLowerCase()} w-6 h-6 sm:w-8 sm:h-8 text-xs sm:text-sm">
                     {combo.symbol}
                   </div>
                   <span class="combo-count">×{combo.count}</span>
@@ -473,15 +475,19 @@
   }
   
   .odds-analysis.modal {
-    @apply p-6;
+    @apply p-4 sm:p-6;
   }
   
   .odds-analysis.compact {
-    @apply p-4;
+    @apply p-3 sm:p-4;
+  }
+
+  .odds-analysis.embedded {
+    @apply bg-transparent border-none rounded-none p-0;
   }
   
   .header {
-    @apply flex items-center justify-between mb-6;
+    @apply flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3;
   }
   
   .loading-state,
@@ -504,15 +510,15 @@
   
   /* Stats Grid */
   .stats-grid {
-    @apply grid grid-cols-2 lg:grid-cols-4 gap-4;
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4;
   }
   
   .stats-grid.compact {
-    @apply grid-cols-2;
+    @apply grid-cols-1 sm:grid-cols-2;
   }
   
   .stat-card {
-    @apply bg-slate-700/50 rounded-lg p-4 border border-slate-600/50;
+    @apply bg-slate-700/50 rounded-lg p-3 sm:p-4 border border-slate-600/50;
   }
   
   .stat-card.primary {
@@ -544,7 +550,7 @@
   }
   
   .stat-value {
-    @apply text-xl font-bold text-theme mt-1;
+    @apply text-lg sm:text-xl font-bold text-theme mt-1;
   }
   
   .stat-detail {
@@ -553,11 +559,11 @@
   
   /* Current Bet Analysis */
   .current-bet-analysis {
-    @apply bg-blue-900/20 border border-blue-600/30 rounded-lg p-4;
+    @apply bg-blue-900/20 border border-blue-600/30 rounded-lg p-3 sm:p-4;
   }
   
   .bet-stats-grid {
-    @apply grid grid-cols-3 gap-4 mt-3;
+    @apply grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-3;
   }
   
   .bet-stat {
@@ -569,12 +575,12 @@
   }
   
   .bet-stat .value {
-    @apply block text-lg font-bold text-theme mt-1;
+    @apply block text-base sm:text-lg font-bold text-theme mt-1;
   }
   
   /* Profitable Combinations */
   .profitable-combos {
-    @apply bg-slate-700/30 rounded-lg p-4;
+    @apply bg-slate-700/30 rounded-lg p-3 sm:p-4;
   }
   
   .combo-list {
@@ -582,11 +588,11 @@
   }
   
   .combo-item {
-    @apply flex items-center gap-3 bg-slate-800/50 rounded-lg p-3;
+    @apply flex items-center gap-2 sm:gap-3 bg-slate-800/50 rounded-lg p-2 sm:p-3;
   }
   
   .combo-rank {
-    @apply w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center text-xs font-bold;
+    @apply w-5 h-5 sm:w-6 sm:h-6 bg-gray-600 rounded-full flex items-center justify-center text-xs font-bold;
   }
   
   .combo-symbol {
@@ -594,7 +600,7 @@
   }
   
   .symbol-icon {
-    @apply w-8 h-8 rounded-lg flex items-center justify-center text-theme font-bold text-sm;
+    @apply w-6 h-6 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-theme font-bold text-xs sm:text-sm;
   }
   
   .symbol-a { @apply bg-blue-600; }
@@ -607,7 +613,7 @@
   }
   
   .combo-stats {
-    @apply ml-auto flex items-center gap-4 text-sm;
+    @apply ml-auto flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-4 text-xs sm:text-sm;
   }
   
   .combo-multiplier {

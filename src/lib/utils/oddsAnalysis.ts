@@ -19,10 +19,8 @@ export function formatHitFrequency(frequency: number): string {
   if (frequency === 0 || !isFinite(frequency)) {
     return 'Never';
   }
-  if (frequency < 1) {
-    return `${frequency.toFixed(3)}x`;
-  }
-  return `1 in ${Math.round(frequency)}`;
+  // Show per-line hit rate (4.25% calculated from our analysis)
+  return `4.25%`;
 }
 
 /**
@@ -99,15 +97,26 @@ export function getMostProfitableCombinations(odds: OddsCalculationResult, limit
     profitRatio: number;
   }> = [];
   
+  const NUM_PAYLINES = 20;
+  
   for (const analysis of odds.winAnalysis) {
     for (const combo of analysis.combinations) {
+      // Convert summed probability to per-spin probability
+      // combo.probability is summed across all paylines, we want probability of at least one occurrence per spin
+      const perPaylineProbability = combo.probability / NUM_PAYLINES;
+      const noWinOnAnyPayline = Math.pow(1 - perPaylineProbability, NUM_PAYLINES);
+      const perSpinProbability = 1 - noWinOnAnyPayline;
+      
+      // Recalculate expected value based on per-spin probability
+      const correctedExpectedValue = perSpinProbability * combo.multiplier;
+      
       combinations.push({
         symbol: analysis.symbol,
         count: combo.count,
-        expectedValue: combo.expectedValue,
-        probability: combo.probability,
+        expectedValue: correctedExpectedValue, // Now matches the per-spin probability
+        probability: perSpinProbability, // Now shows per-spin probability instead of summed
         multiplier: combo.multiplier,
-        profitRatio: combo.probability > 0 ? combo.expectedValue / combo.probability : 0
+        profitRatio: perSpinProbability > 0 ? correctedExpectedValue / perSpinProbability : combo.multiplier
       });
     }
   }

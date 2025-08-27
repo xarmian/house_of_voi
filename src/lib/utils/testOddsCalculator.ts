@@ -1,59 +1,46 @@
-// Test the odds calculator with the provided data
+// Test the odds calculator with real contract data
 
 import { oddsCalculator } from '../services/oddsCalculator';
 import { generateOddsSummary, validateOdds } from './oddsAnalysis';
+import { contractDataCache } from '../services/contractDataCache';
 import type { CachedReelData, CachedMultiplier } from '../services/contractDataCache';
 
-// Test data from your provided JSON
-const testData = {
-  paylines: [[0,0,0,0,0],[1,1,1,1,1],[2,2,2,2,2],[0,1,2,1,0],[2,1,0,1,2],[0,0,1,0,0],[2,2,1,2,2],[1,0,1,2,1],[1,2,1,0,1],[0,1,1,1,2],[2,1,1,1,0],[0,1,2,2,2],[2,1,0,0,0],[1,1,0,1,1],[1,1,2,1,1],[0,2,0,2,0],[2,0,2,0,2],[1,2,2,2,1],[1,0,0,0,1],[0,1,0,1,2]],
-  
-  multipliers: {
-    "A_3": { data: 50, timestamp: 1755614247157, symbol: "A", count: 3 },
-    "A_4": { data: 200, timestamp: 1755614247163, symbol: "A", count: 4 },
-    "A_5": { data: 1000, timestamp: 1755614247165, symbol: "A", count: 5 },
-    "C_5": { data: 200, timestamp: 1755614247171, symbol: "C", count: 5 },
-    "B_3": { data: 20, timestamp: 1755614247177, symbol: "B", count: 3 },
-    "D_4": { data: 20, timestamp: 1755614247178, symbol: "D", count: 4 },
-    "D_5": { data: 100, timestamp: 1755614247178, symbol: "D", count: 5 },
-    "C_4": { data: 50, timestamp: 1755614247178, symbol: "C", count: 4 },
-    "B_5": { data: 500, timestamp: 1755614247179, symbol: "B", count: 5 },
-    "B_4": { data: 100, timestamp: 1755614247179, symbol: "B", count: 4 },
-    "D_3": { data: 5, timestamp: 1755614247182, symbol: "D", count: 3 },
-    "C_3": { data: 10, timestamp: 1755614247207, symbol: "C", count: 3 }
-  },
-  
-  reelData: {
-    reelData: "DDD_C___CD_C__C_C__CBDDBC______DD_____D_D_A_DDC_CCDC_D_____BD_DC_C________C__C_C_____B_D_C______C_D__D_D_D___C_____DBC_C_B__D_B_____CAD______D___CDC_CCD__D____CD__C_CCDC___C_C_______C_DBD_D__DC___CD_D_CC_DBD__DC_C___DD_BDD___CA__D___CC_DC__DCD__CCC_C_____DC_B_CD__C________D___DB____C_DC_D____D________DCDBCD_DDD___CC____C__C__CCD_C__C_CBDB__C_DC___C__DD_D________D____CAB____D_C__DDD___C_____C_D________DCDCD_D_BBDDC_____CC__D__D__D_______B_CC___D_CD___BCDC__A_______DCD_C__C__D_____D__D___C_C_CDCC_",
-    reelLength: 100,
-    reelCount: 5,
-    windowLength: 3,
-    timestamp: 1755616776420
-  }
-};
-
 /**
- * Test the odds calculator with the provided data
+ * Test the odds calculator with real contract data
+ * @param address - Wallet address to use for contract calls (optional, uses default if not provided)
  */
-export function testOddsCalculator(): void {
-  console.log('🧪 Testing Odds Calculator with provided data...');
+export async function testOddsCalculator(address?: string): Promise<void> {
+  // Use a default test address if none provided
+  const testAddress = address || 'H7W63MIQJMYBOEYPM5NJEGX3P54H54RZIV2G3OQ2255AULG6U74BE5KFC4';
+  
+  console.log('🧪 Testing Odds Calculator with real contract data...');
+  console.log(`📍 Using address: ${testAddress}`);
   
   try {
-    // Convert test data to proper format
-    const reelData: CachedReelData = testData.reelData;
-    const multipliers: { [key: string]: CachedMultiplier } = testData.multipliers;
-    const paylines: number[][] = testData.paylines;
+    console.log('🔄 Fetching real contract data and calculating odds...');
     
+    // Use the contractDataCache method which fetches all data and calculates odds
+    const startTime = Date.now();
+    const odds = await contractDataCache.getWinOdds(testAddress);
+    const calculationTime = Date.now() - startTime;
+    
+    if (!odds) {
+      throw new Error('Failed to calculate odds - received null result');
+    }
+    
+    // Get individual data for reporting (optional, for display purposes)
+    const [paylines, reelData] = await Promise.all([
+      contractDataCache.getPaylines(testAddress),
+      contractDataCache.getReelData(testAddress)
+    ]);
+    
+    console.log('✅ Contract data fetched and odds calculated successfully!');
     console.log('📊 Input Data Summary:');
     console.log(`- Paylines: ${paylines.length}`);
     console.log(`- Reel Length: ${reelData.reelLength} per reel`);
+    console.log(`- Reel Count: ${reelData.reelCount} reels`);
     console.log(`- Total Reel Data: ${reelData.reelData.length} characters`);
-    console.log(`- Multipliers: ${Object.keys(multipliers).length} combinations`);
-    
-    // Calculate odds
-    const startTime = Date.now();
-    const odds = oddsCalculator.calculateOdds(reelData, multipliers, paylines);
-    const calculationTime = Date.now() - startTime;
+    console.log(`- Symbol combinations calculated: ${odds.winAnalysis.reduce((sum, analysis) => sum + analysis.combinations.length, 0)}`);
     
     console.log(`⏱️ Calculation completed in ${calculationTime}ms`);
     
@@ -119,36 +106,63 @@ export function testOddsCalculator(): void {
       { betPerLine: 5000000, selectedPaylines: 20, description: '5 VOI per line, all paylines' }
     ];
     
-    betScenarios.forEach(scenario => {
-      const betOdds = oddsCalculator.calculateBetOdds(odds, scenario.betPerLine, scenario.selectedPaylines);
+    for (const scenario of betScenarios) {
+      const betOdds = await contractDataCache.calculateBetOdds(testAddress, scenario.betPerLine, scenario.selectedPaylines);
       const totalBet = scenario.betPerLine * scenario.selectedPaylines;
       console.log(`\n${scenario.description}:`);
       console.log(`  Total Bet: ${(totalBet / 1000000).toFixed(1)} VOI`);
       console.log(`  Expected Return: ${(betOdds.expectedReturn / 1000000).toFixed(3)} VOI`);
       console.log(`  Expected Loss: ${(betOdds.expectedLoss / 1000000).toFixed(3)} VOI`);
       console.log(`  Return Rate: ${((betOdds.expectedReturn / totalBet) * 100).toFixed(2)}%`);
-    });
+    }
     
     console.log('\n✅ Odds calculation test completed successfully!');
+    console.log('📝 Note: All data was fetched from the live blockchain contract');
     
     return odds;
     
   } catch (error) {
     console.error('❌ Error during odds calculation test:', error);
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('contract')) {
+        console.error('🔗 This appears to be a contract connectivity issue.');
+        console.error('💡 Make sure you have a valid network connection and the contract is deployed.');
+      } else if (error.message.includes('CORS')) {
+        console.error('🌐 This appears to be a CORS issue.');
+        console.error('💡 Try running this from the deployed application or check your network configuration.');
+      }
+    }
+    
     throw error;
   }
 }
 
 /**
- * Generate a detailed text report
+ * Generate a detailed text report using real contract data
+ * @param address - Wallet address to use for contract calls (optional, uses default if not provided)
  */
-export function generateDetailedReport(): string {
-  const reelData: CachedReelData = testData.reelData;
-  const multipliers: { [key: string]: CachedMultiplier } = testData.multipliers;
-  const paylines: number[][] = testData.paylines;
+export async function generateDetailedReport(address?: string): Promise<string> {
+  // Use a default test address if none provided
+  const testAddress = address || 'H7W63MIQJMYBOEYPM5NJEGX3P54H54RZIV2G3OQ2255AULG6U74BE5KFC4';
   
-  const odds = oddsCalculator.calculateOdds(reelData, multipliers, paylines);
-  const validation = validateOdds(odds);
+  try {
+    console.log('🔄 Fetching contract data for report generation...');
+    
+    // Use the contractDataCache method which fetches all data and calculates odds
+    const odds = await contractDataCache.getWinOdds(testAddress);
+    
+    if (!odds) {
+      throw new Error('Failed to calculate odds for report generation');
+    }
+    
+    const validation = validateOdds(odds);
+    
+    // Get individual data for reporting details
+    const [paylines, reelData] = await Promise.all([
+      contractDataCache.getPaylines(testAddress),
+      contractDataCache.getReelData(testAddress)
+    ]);
   
   const report = `
 SLOT MACHINE ODDS ANALYSIS REPORT
@@ -174,15 +188,50 @@ CALCULATION METADATA:
 Paylines Analyzed: ${paylines.length}
 Symbol Combinations: ${odds.winAnalysis.reduce((sum, analysis) => sum + analysis.combinations.length, 0)}
 Calculation Timestamp: ${odds.calculatedAt}
+Contract Address Used: ${testAddress}
 
-This report was generated using actual blockchain contract data.
+This report was generated using actual blockchain contract data fetched in real-time.
   `.trim();
   
-  return report;
+    return report;
+    
+  } catch (error) {
+    console.error('❌ Error generating detailed report:', error);
+    
+    const errorReport = `
+SLOT MACHINE ODDS ANALYSIS REPORT - ERROR
+=========================================
+Generated: ${new Date().toISOString()}
+
+ERROR: Failed to generate report due to contract data fetching issues.
+
+${error instanceof Error ? error.message : 'Unknown error occurred'}
+
+Please ensure:
+- Network connectivity is available
+- Contract is properly deployed
+- Address is valid: ${testAddress}
+
+This report was attempted using real-time blockchain contract data.
+    `.trim();
+    
+    return errorReport;
+  }
 }
 
-// Export test function for console access
+// Export test functions for console access
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   (window as any).testOdds = testOddsCalculator;
   (window as any).generateOddsReport = generateDetailedReport;
+  
+  // Add helper function for easy testing
+  (window as any).testOddsWithDefaultAddress = () => testOddsCalculator();
+  (window as any).generateReportWithDefaultAddress = () => generateDetailedReport();
+  
+  console.log('🧪 Odds Calculator Test Functions Available:');
+  console.log('  testOdds(address?) - Test odds calculator with real contract data');
+  console.log('  generateOddsReport(address?) - Generate detailed report with real contract data');
+  console.log('  testOddsWithDefaultAddress() - Test with default address (no params needed)');
+  console.log('  generateReportWithDefaultAddress() - Generate report with default address');
+  console.log('💡 All functions now use real blockchain contract data!');
 }

@@ -206,11 +206,12 @@
         {/if}
 
         <!-- Actions -->
-        <div class="flex gap-3">
+        <div class="flex flex-col sm:flex-row gap-3">
           <button
             type="button"
             on:click={closeModal}
-            class="btn-secondary flex-1"
+            class="btn-secondary flex-1 text-sm sm:text-base"
+            style="min-height: 48px;"
             disabled={isProcessing}
           >
             Cancel
@@ -218,7 +219,8 @@
           <button
             type="button"
             on:click={handleDeposit}
-            class="btn-primary flex-1"
+            class="btn-primary flex-1 text-sm sm:text-base"
+            style="min-height: 48px;"
             disabled={!canDeposit}
           >
             {#if isProcessing}
@@ -256,7 +258,18 @@
   }
   
   .btn-primary {
-    @apply bg-voi-600 hover:bg-voi-700 text-theme font-semibold py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-voi-600 hover:bg-voi-700 text-theme font-semibold py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed;
+    min-height: 44px;
+  }
+  
+  .btn-secondary {
+    @apply bg-slate-700 hover:bg-slate-600 text-theme font-semibold py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed;
+    min-height: 44px;
+  }
+  
+  .input-field {
+    @apply bg-slate-700 border border-slate-600 rounded-lg px-3 py-3 text-theme focus:border-voi-400 focus:outline-none transition-colors duration-200;
+    min-height: 44px;
   }
   
   .bg-voi-600 {

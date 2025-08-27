@@ -90,40 +90,42 @@
 
 {#if open}
   <!-- Modal Backdrop -->
-  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-3 sm:p-4 z-50">
     <!-- Modal Content -->
-    <div class="bg-slate-800 rounded-lg shadow-xl max-w-md w-full border border-slate-700">
+    <div class="bg-slate-800 rounded-lg shadow-xl max-w-md w-full border border-slate-700 max-h-[90vh] overflow-y-auto">
       <!-- Header -->
-      <div class="flex items-center justify-between p-6 border-b border-slate-700">
-        <h2 class="text-xl font-bold text-theme">Withdraw YBT Shares</h2>
+      <div class="flex items-center justify-between p-4 sm:p-6 border-b border-slate-700">
+        <h2 class="text-lg sm:text-xl font-bold text-theme">Withdraw YBT Shares</h2>
         <button
           on:click={closeModal}
-          class="text-slate-400 hover:text-theme transition-colors"
+          class="text-slate-400 hover:text-theme transition-colors p-2"
+          style="min-height: 44px; min-width: 44px;"
         >
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
           </svg>
         </button>
       </div>
 
       <!-- Body -->
-      <div class="p-6">
+      <div class="p-4 sm:p-6">
         <!-- Available Shares Display -->
         <div class="mb-4 p-3 bg-slate-700 rounded-lg">
-          <div class="text-sm text-slate-400">Available Shares</div>
-          <div class="text-lg font-bold text-theme">
+          <div class="text-xs sm:text-sm text-slate-400">Available Shares</div>
+          <div class="text-base sm:text-lg font-bold text-theme">
             {maxShares.toFixed(tokenDecimals)} YBT
           </div>
         </div>
 
         <!-- Quick Percentage Buttons -->
         <div class="mb-4">
-          <div class="text-sm text-slate-300 mb-2">Quick Select</div>
+          <div class="text-xs sm:text-sm text-slate-300 mb-2">Quick Select</div>
           <div class="grid grid-cols-4 gap-2">
             <button
               type="button"
               on:click={() => setPercentage(25)}
               class="btn-quick text-xs"
+              style="min-height: 40px;"
               disabled={isProcessing || maxShares === 0}
             >
               25%
@@ -132,6 +134,7 @@
               type="button"
               on:click={() => setPercentage(50)}
               class="btn-quick text-xs"
+              style="min-height: 40px;"
               disabled={isProcessing || maxShares === 0}
             >
               50%
@@ -140,6 +143,7 @@
               type="button"
               on:click={() => setPercentage(75)}
               class="btn-quick text-xs"
+              style="min-height: 40px;"
               disabled={isProcessing || maxShares === 0}
             >
               75%
@@ -148,6 +152,7 @@
               type="button"
               on:click={setMaxAmount}
               class="btn-quick text-xs"
+              style="min-height: 40px;"
               disabled={isProcessing || maxShares === 0}
             >
               MAX
@@ -157,7 +162,7 @@
 
         <!-- Amount Input -->
         <div class="mb-4">
-          <label for="withdrawAmount" class="block text-sm font-medium text-slate-300 mb-2">
+          <label for="withdrawAmount" class="block text-xs sm:text-sm font-medium text-slate-300 mb-2">
             Shares to Withdraw
           </label>
           <div class="relative">
@@ -169,13 +174,15 @@
               max={maxShares}
               bind:value={withdrawAmount}
               placeholder={"0." + "0".repeat(tokenDecimals)}
-              class="input-field w-full pr-16"
+              class="input-field w-full pr-12 sm:pr-16 text-sm sm:text-base"
+              style="min-height: 44px;"
               disabled={isProcessing}
             />
             <button
               type="button"
               on:click={setMaxAmount}
-              class="absolute right-2 top-1/2 transform -translate-y-1/2 text-voi-400 text-sm font-medium hover:text-voi-300"
+              class="absolute right-2 top-1/2 transform -translate-y-1/2 text-voi-400 text-xs sm:text-sm font-medium hover:text-voi-300 px-2 py-1"
+              style="min-height: 32px;"
               disabled={isProcessing || maxShares === 0}
             >
               MAX
@@ -231,11 +238,12 @@
         {/if}
 
         <!-- Actions -->
-        <div class="flex gap-3">
+        <div class="flex flex-col sm:flex-row gap-3">
           <button
             type="button"
             on:click={closeModal}
-            class="btn-secondary flex-1"
+            class="btn-secondary flex-1 text-sm sm:text-base"
+            style="min-height: 48px;"
             disabled={isProcessing}
           >
             Cancel
@@ -243,7 +251,8 @@
           <button
             type="button"
             on:click={handleWithdraw}
-            class="btn-withdraw flex-1"
+            class="btn-withdraw flex-1 text-sm sm:text-base"
+            style="min-height: 48px;"
             disabled={!canWithdraw}
           >
             {#if isProcessing}
@@ -281,10 +290,22 @@
   }
   
   .btn-quick {
-    @apply bg-slate-600 hover:bg-slate-500 text-theme py-1 px-2 rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-slate-600 hover:bg-slate-500 text-theme py-2 px-2 rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+    min-height: 40px;
   }
   
   .btn-withdraw {
-    @apply bg-red-600 hover:bg-red-700 text-theme font-semibold py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-red-600 hover:bg-red-700 text-theme font-semibold py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed;
+    min-height: 44px;
+  }
+  
+  .btn-secondary {
+    @apply bg-slate-700 hover:bg-slate-600 text-theme font-semibold py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed;
+    min-height: 44px;
+  }
+  
+  .input-field {
+    @apply bg-slate-700 border border-slate-600 rounded-lg px-3 py-3 text-theme focus:border-voi-400 focus:outline-none transition-colors duration-200;
+    min-height: 44px;
   }
 </style>

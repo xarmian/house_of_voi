@@ -36,9 +36,12 @@
   }
 </script>
 
-<div class="card p-6">
-  <div class="flex items-center justify-between mb-4">
-    <h2 class="text-2xl font-bold text-theme">House Contract Overview</h2>
+<div class="card p-4">
+  <div class="flex items-center justify-between mb-3">
+    <div>
+      <h2 class="text-lg font-bold text-theme">Contract Health</h2>
+      <p class="text-xs text-slate-400 mt-1">YBT token and house balance status</p>
+    </div>
     <button
       on:click={async () => {
         await loadGlobalState();
@@ -47,16 +50,15 @@
         }
       }}
       disabled={isLoadingGlobal || balanceLoading}
-      class="btn-secondary text-sm"
+      class="btn-secondary text-xs px-2 py-1"
     >
       {#if isLoadingGlobal || balanceLoading}
-        <svg class="animate-spin -ml-1 mr-1 h-3 w-3 text-theme" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
-        Refreshing...
       {:else}
-        Refresh
+        ↻
       {/if}
     </button>
   </div>
@@ -79,141 +81,100 @@
       </div>
     </div>
   {:else if globalState}
-    <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <!-- Token Name -->
-      <div class="bg-slate-700 rounded-lg p-4">
-        <div class="text-slate-400 text-sm font-medium mb-1">Token Name</div>
-        <div class="text-lg font-bold text-theme truncate">
+    <div class="grid grid-cols-2 gap-3">
+      <!-- Token Info -->
+      <div class="bg-slate-700 rounded-lg p-3">
+        <div class="text-slate-400 text-xs font-medium mb-1">Token</div>
+        <div class="text-sm font-bold text-theme">
           {globalState.name}
         </div>
-        <div class="text-xs text-slate-500 mt-1">({globalState.symbol})</div>
+        <div class="text-xs text-slate-500">({globalState.symbol})</div>
       </div>
 
       <!-- Total Supply -->
-      <div class="bg-slate-700 rounded-lg p-4">
-        <div class="text-slate-400 text-sm font-medium mb-1">Total Supply</div>
-        <div class="text-lg font-bold text-voi-400">
+      <div class="bg-slate-700 rounded-lg p-3">
+        <div class="text-slate-400 text-xs font-medium mb-1">Supply</div>
+        <div class="text-sm font-bold text-voi-400">
           {formatSupply($totalSupply)}
         </div>
-        <div class="text-xs text-slate-500 mt-1">YBT Tokens</div>
-      </div>
-
-      <!-- Decimals -->
-      <div class="bg-slate-700 rounded-lg p-4">
-        <div class="text-slate-400 text-sm font-medium mb-1">Precision</div>
-        <div class="text-lg font-bold text-blue-400">
-          {globalState.decimals}
-        </div>
-        <div class="text-xs text-slate-500 mt-1">Decimal Places</div>
-      </div>
-
-      <!-- Yield Source -->
-      <div class="bg-slate-700 rounded-lg p-4">
-        <div class="text-slate-400 text-sm font-medium mb-1">Yield Source</div>
-        <div class="text-lg font-bold text-yellow-400">
-          {globalState.yieldBearingSource || 'Not Set'}
-        </div>
-        <div class="text-xs text-slate-500 mt-1">App ID</div>
+        <div class="text-xs text-slate-500">Total Shares</div>
       </div>
     </div>
 
     <!-- Contract Balances -->
-    <div class="mt-6">
-      <h3 class="text-lg font-semibold text-theme mb-4">Contract Balances</h3>
+    <div class="mt-4">
+      <h3 class="text-sm font-semibold text-theme mb-3 flex items-center gap-2">
+        Contract Balances
+        {#if houseBalance}
+          <span class="text-xs px-2 py-1 rounded-full {houseBalance.isOperational ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}">
+            {houseBalance.isOperational ? '● Operational' : '● Below Min'}
+          </span>
+        {/if}
+      </h3>
       {#if balanceLoading}
-        <div class="flex items-center justify-center py-8">
-          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-voi-400"></div>
+        <div class="flex items-center justify-center py-4">
+          <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-voi-400"></div>
         </div>
       {:else if houseBalance}
-        <div class="grid md:grid-cols-3 gap-4">
-          <div class="bg-slate-700 rounded-lg p-4">
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-xs text-gray-400 uppercase tracking-wide">Available</span>
-              <span class="text-xs text-green-400">●</span>
-            </div>
-            <div class="text-xl font-bold text-theme">
-              {(houseBalance.available / 1e6).toLocaleString(undefined, { 
-                minimumFractionDigits: 2, 
-                maximumFractionDigits: 6 
-              })}
-            </div>
-            <div class="text-xs text-gray-400">VOI</div>
+        <div class="space-y-2">
+          <div class="flex items-center justify-between p-2 bg-slate-700/50 rounded">
+            <span class="text-xs text-gray-400">Total</span>
+            <span class="text-sm font-bold text-theme">
+              {(houseBalance.total / 1e6).toFixed(2)} VOI
+            </span>
           </div>
           
-          <div class="bg-slate-700 rounded-lg p-4">
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-xs text-gray-400 uppercase tracking-wide">Locked</span>
-              <span class="text-xs text-yellow-400">●</span>
+          <!-- Visual Fund Distribution -->
+          <div class="p-2 bg-slate-700/50 rounded">
+            <div class="flex justify-between text-xs text-gray-400 mb-2">
+              <span>Fund Distribution</span>
+              <span>Available / Locked</span>
             </div>
-            <div class="text-xl font-bold text-theme">
-              {(houseBalance.locked / 1e6).toLocaleString(undefined, { 
-                minimumFractionDigits: 2, 
-                maximumFractionDigits: 6 
-              })}
+            <div class="w-full bg-slate-600 rounded-full h-3 overflow-hidden">
+              <div class="h-full flex">
+                <div 
+                  class="bg-gradient-to-r from-green-500 to-green-400 transition-all duration-500"
+                  style="width: {houseBalance.total > 0 ? (houseBalance.available / houseBalance.total) * 100 : 0}%"
+                ></div>
+                <div 
+                  class="bg-gradient-to-r from-yellow-500 to-yellow-400 transition-all duration-500"
+                  style="width: {houseBalance.total > 0 ? (houseBalance.locked / houseBalance.total) * 100 : 0}%"
+                ></div>
+              </div>
             </div>
-            <div class="text-xs text-gray-400">VOI</div>
-          </div>
-          
-          <div class="bg-slate-700 rounded-lg p-4">
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-xs text-gray-400 uppercase tracking-wide">Total</span>
-              <span class="text-xs {houseBalance.isOperational ? 'text-green-400' : 'text-red-400'}">●</span>
+            <div class="flex justify-between text-xs mt-1">
+              <span class="text-green-400">{(houseBalance.available / 1e6).toFixed(1)} VOI</span>
+              <span class="text-yellow-400">{(houseBalance.locked / 1e6).toFixed(1)} VOI</span>
             </div>
-            <div class="text-xl font-bold text-theme">
-              {(houseBalance.total / 1e6).toLocaleString(undefined, { 
-                minimumFractionDigits: 2, 
-                maximumFractionDigits: 6 
-              })}
-            </div>
-            <div class="text-xs text-gray-400">VOI</div>
-          </div>
-        </div>
-        
-        <div class="mt-4 p-3 bg-slate-800/50 rounded-lg">
-          <div class="flex items-center gap-2 text-sm">
-            <span class="text-gray-400">Status:</span>
-            {#if houseBalance.isOperational}
-              <span class="text-green-400 font-medium">● Operational</span>
-            {:else}
-              <span class="text-red-400 font-medium">● Below Minimum</span>
-            {/if}
-          </div>
-          <div class="text-xs text-gray-500 mt-1">
-            Available: Funds ready for payouts • Locked: Funds reserved for pending bets • Total: All contract funds
           </div>
         </div>
       {:else}
-        <div class="text-center py-8 text-gray-400">
-          <p>Unable to load contract balance information</p>
+        <div class="text-center py-4 text-gray-400 text-sm">
+          <p>Unable to load balance data</p>
         </div>
       {/if}
     </div>
 
-    <!-- Additional Info -->
-    <div class="mt-6 p-4 bg-slate-900 rounded-lg">
-      <h3 class="text-lg font-semibold text-theme mb-3">How YBT Works</h3>
-      <div class="grid md:grid-cols-3 gap-4 text-sm">
-        <div class="flex items-start">
-          <div class="w-2 h-2 bg-voi-400 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-          <div>
-            <div class="text-theme font-medium">Deposit Funds</div>
-            <div class="text-slate-400">Deposit VOI to receive YBT shares proportional to your contribution</div>
-          </div>
+    <!-- Documentation Link -->
+    <div class="mt-4 p-3 bg-slate-800/30 rounded-lg border border-slate-700/50">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-voi-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <span class="text-sm text-slate-300">Yield-bearing token that earns from house profits</span>
         </div>
-        <div class="flex items-start">
-          <div class="w-2 h-2 bg-voi-400 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-          <div>
-            <div class="text-theme font-medium">Earn Yield</div>
-            <div class="text-slate-400">Your shares earn yield from house profits and gaming activities</div>
-          </div>
-        </div>
-        <div class="flex items-start">
-          <div class="w-2 h-2 bg-voi-400 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-          <div>
-            <div class="text-theme font-medium">Withdraw Anytime</div>
-            <div class="text-slate-400">Redeem your shares for the underlying VOI value plus any earned yield</div>
-          </div>
-        </div>
+        <a 
+          href="https://docs.houseofvoi.com" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          class="text-voi-400 hover:text-voi-300 text-sm font-medium transition-colors duration-200 flex items-center gap-1"
+        >
+          Learn more
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+          </svg>
+        </a>
       </div>
     </div>
   {/if}

@@ -11,6 +11,8 @@
   import GameHeader from '$lib/components/game/GameHeader.svelte';
   import SoundSettingsIcon from '$lib/components/ui/SoundSettingsIcon.svelte';
   import VoiRadioPlayer from '$lib/components/app/VoiRadioPlayer.svelte';
+  import Leaderboard from '$lib/components/game/Leaderboard.svelte';
+  import PlayerStats from '$lib/components/game/PlayerStats.svelte';
   
   export let data;
   
@@ -19,6 +21,8 @@
   
   let hasPreloadedCache = false;
   let walletUnsubscribe: (() => void) | null = null;
+  let showLeaderboard = false;
+  let showPlayerStats = false;
 
   // Generate dynamic background style based on current theme - using background-image instead of background
   $: backgroundStyle = $currentTheme?.background?.via 
@@ -79,10 +83,45 @@
           <SlotMachine disabled={false} />
         </div>
         
-        <!-- Right sidebar: Wallet and Queue - aligned with game status bar -->
+        <!-- Right sidebar: Wallet and Tabbed panels -->
         <div class="col-span-4 space-y-4 relative">
           <WalletManager />
-          <GameQueue maxHeight="calc(100vh - 20rem)" />
+          
+          <!-- Tabbed panels -->
+          <div class="tabbed-panels">
+            <!-- Tab buttons -->
+            <div class="tab-buttons">
+              <button 
+                class="tab-button {!showLeaderboard && !showPlayerStats ? 'active' : ''}"
+                on:click={() => { showLeaderboard = false; showPlayerStats = false; }}
+              >
+                Game Queue
+              </button>
+              <button 
+                class="tab-button {showLeaderboard ? 'active' : ''}"
+                on:click={() => { showLeaderboard = true; showPlayerStats = false; }}
+              >
+                Leaderboard
+              </button>
+              <button 
+                class="tab-button {showPlayerStats ? 'active' : ''}"
+                on:click={() => { showPlayerStats = true; showLeaderboard = false; }}
+              >
+                My Stats
+              </button>
+            </div>
+            
+            <!-- Tab content -->
+            <div class="tab-content">
+              {#if showLeaderboard}
+                <Leaderboard compact={true} />
+              {:else if showPlayerStats}
+                <PlayerStats compact={true} />
+              {:else}
+                <GameQueue maxHeight="calc(100vh - 22rem)" />
+              {/if}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -113,3 +152,43 @@
     <VoiRadioPlayer />
   {/if}
 </main>
+
+<style>
+  .tabbed-panels {
+    @apply bg-slate-800 rounded-xl border border-slate-700 overflow-hidden;
+  }
+
+  .tab-buttons {
+    @apply flex border-b border-slate-700;
+  }
+
+  .tab-button {
+    @apply flex-1 px-4 py-3 text-sm font-medium text-gray-400 hover:text-theme hover:bg-slate-700/50 transition-all duration-200 border-b-2 border-transparent;
+  }
+
+  .tab-button.active {
+    @apply text-voi-400 border-voi-400 bg-slate-700/30;
+  }
+
+  .tab-content {
+    @apply overflow-hidden;
+    min-height: calc(100vh - 22rem);
+  }
+
+  /* VOI color utility */
+  .text-voi-400 {
+    color: #10b981;
+  }
+
+  .border-voi-400 {
+    border-color: #10b981;
+  }
+
+  .bg-voi-600 {
+    background-color: #059669;
+  }
+
+  .bg-voi-500\/20 {
+    background-color: rgba(16, 185, 129, 0.2);
+  }
+</style>

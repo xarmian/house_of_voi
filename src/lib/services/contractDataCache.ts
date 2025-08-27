@@ -327,12 +327,17 @@ export class ContractDataCache {
 
     // Convert BigInt array to number array and reshape to paylines
     const flatPaylines = (result.returnValue as bigint[]).map(x => Number(x));
+    console.log(`📊 Contract returned flat paylines array length: ${flatPaylines.length}`);
+    console.log(`📋 First 20 payline values:`, flatPaylines.slice(0, 20));
     
     // Convert flat array to 2D array (assuming 20 paylines with 5 positions each)
     const paylines: number[][] = [];
     for (let i = 0; i < flatPaylines.length; i += 5) {
       paylines.push(flatPaylines.slice(i, i + 5));
     }
+
+    console.log(`✅ Parsed into ${paylines.length} paylines`);
+    console.log(`📈 First 3 paylines:`, paylines.slice(0, 3));
 
     return paylines;
   }
@@ -377,6 +382,18 @@ export class ContractDataCache {
     const reelCount = Number(reelCountResult.returnValue);
     const windowLength = 3; // Standard window length
 
+    console.log(`🎰 Contract reel data:`, {
+      totalLength: reelData.length,
+      reelLength,
+      reelCount,
+      windowLength,
+      first50Chars: reelData.substring(0, 50),
+      uniqueSymbols: [...new Set(reelData)].sort(),
+      symbolCounts: [...new Set(reelData)].map(symbol => 
+        `${symbol}:${(reelData.match(new RegExp(`\\${symbol}`, 'g')) || []).length}`
+      )
+    });
+
     return { reelData, reelLength, reelCount, windowLength };
   }
 
@@ -384,6 +401,8 @@ export class ContractDataCache {
    * Fetch payout multiplier directly from contract
    */
   private async fetchMultiplierFromContract(symbol: string, count: number, address: string): Promise<number> {
+    console.log(`🔍 Fetching multiplier from contract: ${symbol}_${count}`);
+    
     // Create Ulujs CONTRACT instance
     const ci = new CONTRACT(
       this.appId,
@@ -398,11 +417,15 @@ export class ContractDataCache {
     
     // Convert symbol to byte
     const symbolByte = new TextEncoder().encode(symbol)[0];
+    console.log(`📝 Symbol "${symbol}" converted to byte: ${symbolByte}`);
 
     // Call get_payout_multiplier method - gets return value without submitting
     const result = await ci.get_payout_multiplier(symbolByte, BigInt(count));
+    const multiplier = Number(result.returnValue);
+    
+    console.log(`✅ Contract returned multiplier for ${symbol}_${count}: ${multiplier}`);
 
-    return Number(result.returnValue);
+    return multiplier;
   }
 
   /**
@@ -620,6 +643,26 @@ export class ContractDataCache {
 
       await Promise.all(multiplierPromises);
 
+      // DEBUG: Log all the data we're about to use for calculation
+      console.log('🔍 CONTRACT DATA DEBUG - About to calculate odds with:');
+      console.log('📊 Reel Data:', {
+        length: reelData.reelData.length,
+        reelCount: reelData.reelCount,
+        reelLength: reelData.reelLength,
+        sample: reelData.reelData.substring(0, 50) + '...'
+      });
+      console.log('📈 Paylines:', {
+        count: paylines.length,
+        first5: paylines.slice(0, 5),
+        samplePattern: paylines[0]
+      });
+      console.log('🎰 Multipliers loaded:', {
+        count: Object.keys(this.cache.multipliers).length,
+        keys: Object.keys(this.cache.multipliers).sort(),
+        values: Object.fromEntries(Object.entries(this.cache.multipliers).map(([k, v]) => [k, v.data])),
+        fullCache: this.cache.multipliers
+      });
+
       // Calculate odds
       const odds = oddsCalculator.calculateOdds(reelData, this.cache.multipliers, paylines);
       
@@ -690,6 +733,15 @@ export class ContractDataCache {
       localStorage.removeItem(this.CACHE_KEY);
     }
     console.log('🧹 Contract data cache cleared');
+  }
+
+  /**
+   * Clear only the odds cache to force recalculation
+   */
+  clearOddsCache(): void {
+    this.cache.odds = null;
+    this.saveToStorage();
+    console.log('🗑️ Odds cache cleared - will force fresh calculation');
   }
   
   /**

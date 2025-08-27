@@ -1,0 +1,646 @@
+<script lang="ts">
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import { fly, fade } from 'svelte/transition';
+  import { 
+    TrendingUp, 
+    TrendingDown, 
+    Trophy, 
+    Crown, 
+    Medal, 
+    Users,
+    Coins,
+    Target,
+    ChevronLeft,
+    ChevronRight,
+    RefreshCw,
+    Search,
+    BarChart3,
+    Maximize2
+  } from 'lucide-svelte';
+  import LeaderboardModal from './LeaderboardModal.svelte';
+  import PlayerStatsModal from './PlayerStatsModal.svelte';
+  import { hovStatsStore, leaderboard, connectionStatus } from '$lib/stores/hovStats';
+  import { walletStore } from '$lib/stores/wallet';
+  import type { LeaderboardEntry } from '$lib/types/hovStats';
+  import { formatVOI } from '$lib/constants/betting';
+
+  // Props
+  export let compact = false;
+  export let showPlayerHighlight = true;
+  export let autoRefresh = true;
+
+  const dispatch = createEventDispatcher();
+
+  // State
+  let selectedMetric: 'total_won' | 'total_bet' | 'largest_win' | 'net_result' | 'total_spins' = 'total_won';
+  let currentPage = 0;
+  let itemsPerPage = compact ? 10 : 20;
+  let searchTerm = '';
+  let refreshing = false;
+  let autoRefreshInterval: NodeJS.Timeout | null = null;
+  let highlightedPlayer: string | null = null;
+  
+  // Modal state
+  let showLeaderboardModal = false;
+  let showPlayerStatsModal = false;
+  let selectedPlayerAddress: string | null = null;
+  $: playerAddress = $walletStore.account?.address;
+  
+  // Filtered and paginated data
+  $: filteredData = ($leaderboard.data || []).filter(entry => {
+    if (!searchTerm) return true;
+    return entry.who.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           entry.who.slice(0, 8).toLowerCase().includes(searchTerm.toLowerCase()) ||
+           entry.who.slice(-8).toLowerCase().includes(searchTerm.toLowerCase());
+  });
+  
+  $: totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  $: paginatedData = filteredData.slice(
+    currentPage * itemsPerPage,
+    (currentPage + 1) * itemsPerPage
+  );
+  
+  // Find current player's rank
+  $: playerEntry = playerAddress ? filteredData.find(entry => entry.who === playerAddress) : null;
+  $: playerRank = playerEntry?.rank_position || null;
+
+  // Metric configurations (reordered as requested)
+  const metrics = {
+    total_won: {
+      label: 'Total Won',
+      icon: Trophy,
+      color: 'text-yellow-400',
+      format: (value: bigint) => formatVOI(Number(value), 2),
+      unit: 'VOI',
+      property: 'total_amount_won'
+    },
+    total_bet: {
+      label: 'Total Bet',
+      icon: Coins,
+      color: 'text-orange-400',
+      format: (value: bigint) => formatVOI(Number(value), 2),
+      unit: 'VOI',
+      property: 'total_amount_bet'
+    },
+    largest_win: {
+      label: 'Biggest Win',
+      icon: Crown,
+      color: 'text-purple-400',
+      format: (value: bigint) => formatVOI(Number(value), 2),
+      unit: 'VOI',
+      property: 'largest_single_win'
+    },
+    net_result: {
+      label: 'Net Result',
+      icon: TrendingUp,
+      color: 'text-green-400',
+      format: (value: bigint) => formatVOI(Number(value), 2),
+      unit: 'VOI',
+      property: 'net_result'
+    },
+    total_spins: {
+      label: 'Total Spins',
+      icon: Target,
+      color: 'text-blue-400',
+      format: (value: bigint) => value.toString(),
+      unit: 'spins',
+      property: 'total_spins'
+    }
+  };
+
+  onMount(async () => {
+    if (autoRefresh) {
+      startAutoRefresh();
+    }
+    // Always refresh data on mount to ensure we have correct metric data
+    if ($connectionStatus.initialized) {
+      refresh();
+    }
+  });
+
+  // Reactive statement to load data once connection is initialized
+  $: if ($connectionStatus.initialized && !$leaderboard.data && !$leaderboard.loading) {
+    refresh();
+  }
+
+  // Ensure data is refreshed for the current metric
+  let lastLoadedMetric: string | null = null;
+  $: if ($connectionStatus.initialized && selectedMetric && selectedMetric !== lastLoadedMetric) {
+    lastLoadedMetric = selectedMetric;
+    refresh();
+  }
+
+  onDestroy(() => {
+    stopAutoRefresh();
+  });
+
+  function startAutoRefresh() {
+    stopAutoRefresh();
+    autoRefreshInterval = setInterval(() => {
+      if (!$leaderboard.loading && $connectionStatus.isConnected) {
+        hovStatsStore.refreshLeaderboard(selectedMetric, Math.max(100, filteredData.length));
+      }
+    }, 60000); // Refresh every minute
+  }
+
+  function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      autoRefreshInterval = null;
+    }
+  }
+
+  async function refresh() {
+    // Don't refresh if not initialized or already refreshing
+    if (!$connectionStatus.initialized || refreshing) return;
+    
+    refreshing = true;
+    try {
+      await hovStatsStore.refreshLeaderboard(selectedMetric, 100);
+    } finally {
+      refreshing = false;
+    }
+  }
+
+  async function changeMetric(metric: typeof selectedMetric) {
+    if (metric === selectedMetric) return;
+    selectedMetric = metric;
+    currentPage = 0;
+    await refresh();
+  }
+
+  function goToPage(page: number) {
+    currentPage = Math.max(0, Math.min(page, totalPages - 1));
+  }
+
+  function getRankIcon(rank: bigint) {
+    const rankNum = Number(rank);
+    if (rankNum === 1) return Crown;
+    if (rankNum === 2) return Trophy;
+    if (rankNum === 3) return Medal;
+    return null;
+  }
+
+  function getRankColor(rank: bigint) {
+    const rankNum = Number(rank);
+    if (rankNum === 1) return 'text-yellow-400';
+    if (rankNum === 2) return 'text-gray-300';
+    if (rankNum === 3) return 'text-amber-600';
+    return 'text-slate-400';
+  }
+
+  function formatAddress(address: string): string {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  }
+
+  // Modal functions
+  function expandLeaderboard() {
+    showLeaderboardModal = true;
+  }
+
+  function viewPlayerStats(address: string) {
+    selectedPlayerAddress = address;
+    showPlayerStatsModal = true;
+  }
+
+  function handleLeaderboardModalPlayerStats(event: CustomEvent) {
+    // Don't close leaderboard modal when viewing player stats
+    viewPlayerStats(event.detail.address);
+  }
+
+  function highlightPlayer(address: string) {
+    highlightedPlayer = highlightedPlayer === address ? null : address;
+  }
+
+  $: metricConfig = metrics[selectedMetric];
+  $: Icon = metricConfig.icon;
+</script>
+
+<div class="leaderboard-container {compact ? 'compact' : ''}">
+  <!-- Header -->
+  <div class="leaderboard-header">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
+      <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+        <Trophy class="w-5 h-5 sm:w-6 sm:h-6 text-yellow-400" />
+        <h3 class="text-lg sm:text-xl font-bold text-theme">
+          {compact ? 'Top Players' : 'Leaderboard'}
+        </h3>
+        {#if $connectionStatus.fallbackActive}
+          <span class="px-1.5 py-0.5 sm:px-2 sm:py-1 text-xs bg-amber-900/50 text-amber-300 rounded-full border border-amber-600/30">
+            <span class="hidden sm:inline">Limited Data</span>
+            <span class="sm:hidden">Limited</span>
+          </span>
+        {/if}
+      </div>
+      
+      <div class="flex items-center gap-1 sm:gap-2 flex-1 justify-end">
+        <!-- Search -->
+        {#if !compact}
+          <div class="relative flex-1 max-w-xs">
+            <Search class="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search..."
+              bind:value={searchTerm}
+              class="pl-6 sm:pl-9 pr-2 sm:pr-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-xs sm:text-sm focus:border-voi-400 focus:outline-none w-full"
+              style="min-height: 44px;"
+            />
+          </div>
+        {/if}
+
+        <!-- Expand -->
+        <button
+          on:click={expandLeaderboard}
+          class="btn-secondary text-xs sm:text-sm p-2 sm:p-3"
+          title="Expand leaderboard"
+          style="min-height: 44px; min-width: 44px;"
+        >
+          <Maximize2 class="w-3 h-3 sm:w-4 sm:h-4" />
+        </button>
+
+        <!-- Refresh -->
+        <button
+          on:click={refresh}
+          disabled={$leaderboard.loading || refreshing}
+          class="btn-secondary text-xs sm:text-sm p-2 sm:p-3"
+          title="Refresh leaderboard"
+          style="min-height: 44px; min-width: 44px;"
+        >
+          <RefreshCw class="w-3 h-3 sm:w-4 sm:h-4 {($leaderboard.loading || refreshing) ? 'animate-spin' : ''}" />
+        </button>
+      </div>
+    </div>
+
+    <!-- Metric selection -->
+    <div class="metric-filters">
+      <div class="grid grid-cols-2 lg:grid-cols-3 xl:flex xl:flex-wrap gap-2 mb-4">
+        {#each Object.entries(metrics) as [key, config]}
+          <button
+            on:click={() => changeMetric(key as typeof selectedMetric)}
+            class="metric-button {selectedMetric === key ? 'active' : ''}"
+            disabled={$leaderboard.loading}
+          >
+            <svelte:component this={config.icon} class="w-3 h-3 sm:w-4 sm:h-4" />
+            <span class="text-xs sm:text-sm">{config.label}</span>
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    <!-- Player rank highlight -->
+    {#if showPlayerHighlight && playerRank && playerAddress}
+      <div class="player-rank-card mt-4" transition:fly={{ y: -20, duration: 300 }}>
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-2 sm:gap-3">
+            <div class="w-6 h-6 sm:w-8 sm:h-8 bg-voi-500/20 rounded-full flex items-center justify-center">
+              <Users class="w-3 h-3 sm:w-4 sm:h-4 text-voi-400" />
+            </div>
+            <div>
+              <div class="text-xs sm:text-sm text-gray-400">Your Rank</div>
+              <div class="text-base sm:text-lg font-bold text-voi-400">#{playerRank}</div>
+            </div>
+          </div>
+          <div class="text-left sm:text-right">
+            <div class="text-xs sm:text-sm text-gray-400">{metricConfig.label}</div>
+            <div class="text-sm sm:text-base font-semibold text-theme">
+              {playerEntry ? (selectedMetric === 'win_rate' 
+                ? metricConfig.format(playerEntry[metricConfig.property])
+                : metricConfig.format(playerEntry[metricConfig.property] as bigint)
+              ) : '--'}
+            </div>
+          </div>
+        </div>
+      </div>
+    {/if}
+  </div>
+
+  <!-- Loading state -->
+  {#if $leaderboard.loading && !$leaderboard.data}
+    <div class="loading-container">
+      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-voi-400 mx-auto mb-4"></div>
+      <p class="text-gray-400 text-center">Loading leaderboard...</p>
+    </div>
+  {:else if $leaderboard.error && !$leaderboard.data}
+    <!-- Error state -->
+    <div class="error-container">
+      <div class="text-red-400 text-center mb-2">Failed to load leaderboard</div>
+      <p class="text-sm text-gray-400 text-center mb-4">{$leaderboard.error}</p>
+      <button on:click={refresh} class="btn-primary text-sm mx-auto block">
+        Retry
+      </button>
+    </div>
+  {:else if paginatedData.length === 0}
+    <!-- Empty state -->
+    <div class="empty-container">
+      <Trophy class="w-16 h-16 text-gray-600 mx-auto mb-4" />
+      <p class="text-gray-400 text-center">
+        {searchTerm ? 'No players found matching your search' : 'No leaderboard data available'}
+      </p>
+    </div>
+  {:else}
+    <!-- Leaderboard list -->
+    <div class="leaderboard-list">
+      {#each paginatedData as entry, i (entry.who)}
+        <div 
+          class="leaderboard-entry {playerAddress === entry.who ? 'player-entry' : ''}"
+          transition:fly={{ y: 20, duration: 200, delay: i * 50 }}
+        >
+          <!-- Mobile Layout (< sm) -->
+          <div class="block sm:hidden">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <!-- Rank -->
+                {#if getRankIcon(entry.rank_position)}
+                  <svelte:component 
+                    this={getRankIcon(entry.rank_position)} 
+                    class="w-4 h-4 {getRankColor(entry.rank_position)}" 
+                  />
+                {:else}
+                  <span class="text-sm font-bold {getRankColor(entry.rank_position)}">
+                    #{entry.rank_position}
+                  </span>
+                {/if}
+                
+                <!-- Player Address -->
+                <div class="player-address" title={entry.who}>
+                  <span class="text-sm font-mono">{formatAddress(entry.who)}</span>
+                  {#if playerAddress === entry.who}
+                    <span class="you-badge">YOU</span>
+                  {/if}
+                </div>
+              </div>
+              
+              <!-- Action Button -->
+              <button
+                on:click={() => viewPlayerStats(entry.who)}
+                class="action-btn"
+                title="View player stats"
+              >
+                <BarChart3 class="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2 text-xs text-gray-400">
+                <Target class="w-3 h-3" />
+                <span>{entry.total_spins} spins</span>
+              </div>
+              
+              <!-- Metric value -->
+              <div class="text-right">
+                <div class="text-sm font-bold {metricConfig.color}">
+                  {selectedMetric === 'win_rate' 
+                    ? metricConfig.format(entry[metricConfig.property])
+                    : metricConfig.format(entry[metricConfig.property] as bigint)
+                  }
+                </div>
+                <div class="text-xs text-gray-400">{metricConfig.unit}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Desktop Layout (>= sm) -->
+          <div class="hidden sm:flex sm:items-center sm:justify-between sm:w-full sm:gap-4">
+            <!-- Rank -->
+            <div class="flex-shrink-0 w-16">
+              {#if getRankIcon(entry.rank_position)}
+                <svelte:component 
+                  this={getRankIcon(entry.rank_position)} 
+                  class="w-6 h-6 {getRankColor(entry.rank_position)}" 
+                />
+              {:else}
+                <span class="rank-number {getRankColor(entry.rank_position)}">
+                  #{entry.rank_position}
+                </span>
+              {/if}
+            </div>
+
+            <!-- Player info -->
+            <div class="flex-1 min-w-0">
+              <div class="player-address" title={entry.who}>
+                {formatAddress(entry.who)}
+                {#if playerAddress === entry.who}
+                  <span class="you-badge">YOU</span>
+                {/if}
+              </div>
+              <div class="player-stats">
+                <span class="stat-item">
+                  <Target class="w-3 h-3" />
+                  {entry.total_spins} spins
+                </span>
+              </div>
+            </div>
+
+            <!-- Metric value -->
+            <div class="flex-shrink-0 text-right w-32">
+              <div class="value {metricConfig.color}">
+                {selectedMetric === 'win_rate' 
+                  ? metricConfig.format(entry[metricConfig.property])
+                  : metricConfig.format(entry[metricConfig.property] as bigint)
+                }
+              </div>
+              <div class="unit">{metricConfig.unit}</div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex-shrink-0 w-12">
+              <button
+                on:click={() => viewPlayerStats(entry.who)}
+                class="action-btn"
+                title="View player stats"
+              >
+                <BarChart3 class="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      {/each}
+    </div>
+
+    <!-- Pagination -->
+    {#if totalPages > 1 && !compact}
+      <div class="pagination">
+        <button
+          on:click={() => goToPage(currentPage - 1)}
+          disabled={currentPage === 0}
+          class="pagination-btn"
+        >
+          <ChevronLeft class="w-4 h-4" />
+        </button>
+        
+        <span class="page-info">
+          {currentPage + 1} of {totalPages}
+        </span>
+        
+        <button
+          on:click={() => goToPage(currentPage + 1)}
+          disabled={currentPage >= totalPages - 1}
+          class="pagination-btn"
+        >
+          <ChevronRight class="w-4 h-4" />
+        </button>
+      </div>
+    {/if}
+  {/if}
+</div>
+
+<!-- Modals -->
+{#if showLeaderboardModal}
+  <LeaderboardModal 
+    bind:isVisible={showLeaderboardModal}
+    initialMetric={selectedMetric}
+    on:close={() => showLeaderboardModal = false}
+    on:viewPlayerStats={handleLeaderboardModalPlayerStats}
+  />
+{/if}
+
+{#if showPlayerStatsModal && selectedPlayerAddress}
+  <PlayerStatsModal
+    bind:isVisible={showPlayerStatsModal}
+    playerAddress={selectedPlayerAddress}
+    on:close={() => {
+      showPlayerStatsModal = false;
+      selectedPlayerAddress = null;
+    }}
+  />
+{/if}
+
+<style>
+  .leaderboard-container {
+    @apply w-full;
+  }
+  
+  .leaderboard-container:not(.compact) {
+    @apply bg-slate-800 rounded-xl border border-slate-700 overflow-hidden;
+  }
+
+  .compact {
+    @apply text-sm;
+  }
+
+  .leaderboard-header {
+    @apply p-3 sm:p-4;
+  }
+  
+  .leaderboard-container:not(.compact) .leaderboard-header {
+    @apply border-b border-slate-700 bg-slate-800/50;
+  }
+
+  .metric-filters {
+    @apply space-y-2;
+  }
+
+  .metric-button {
+    @apply flex items-center justify-center gap-1 sm:gap-2 px-2 py-2 bg-slate-700 border border-slate-600 rounded-lg text-xs sm:text-sm transition-all duration-200;
+    min-height: 44px;
+  }
+  
+  @media (min-width: 640px) {
+    .metric-button {
+      @apply px-3;
+    }
+  }
+
+  .metric-button:hover {
+    @apply bg-slate-600 border-slate-500;
+  }
+
+  .metric-button.active {
+    @apply bg-voi-600 border-voi-500 text-white;
+  }
+
+  .player-rank-card {
+    @apply p-2 sm:p-3 bg-voi-900/30 border border-voi-600/30 rounded-lg;
+  }
+
+  .loading-container, .error-container, .empty-container {
+    @apply p-8 text-center;
+  }
+
+  .leaderboard-list {
+    @apply divide-y divide-slate-700;
+  }
+
+  .leaderboard-entry {
+    @apply p-3 sm:p-4 hover:bg-slate-700/50 transition-all duration-200 relative;
+  }
+
+  .leaderboard-entry.player-entry {
+    @apply bg-voi-900/20 border-l-4 border-voi-500;
+  }
+
+  .leaderboard-entry.highlighted {
+    @apply bg-slate-700/50;
+    grid-template-columns: 1fr;
+  }
+
+  .rank-section {
+    @apply flex items-center justify-center w-12;
+  }
+
+  .rank-number {
+    @apply font-bold text-lg;
+  }
+
+  .player-info {
+    @apply min-w-0;
+  }
+
+  .player-address {
+    @apply font-mono font-semibold text-theme flex items-center gap-2;
+  }
+
+  .you-badge {
+    @apply px-2 py-0.5 text-xs bg-voi-600 text-white rounded-full;
+  }
+
+  .player-stats {
+    @apply flex items-center gap-3 mt-1 text-xs text-gray-400;
+  }
+
+  .stat-item {
+    @apply flex items-center gap-1;
+  }
+
+  .metric-value {
+    @apply text-right;
+  }
+
+  .metric-value .value {
+    @apply font-bold text-lg;
+  }
+
+  .metric-value .unit {
+    @apply text-xs text-gray-400;
+  }
+
+  .entry-actions {
+    @apply flex items-center gap-1;
+  }
+
+  .action-btn {
+    @apply p-2 text-gray-400 hover:text-theme hover:bg-slate-600 rounded-lg transition-all duration-200;
+    min-height: 44px;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .pagination {
+    @apply flex items-center justify-center gap-4 p-4 border-t border-slate-700 bg-slate-800/50;
+  }
+
+  .pagination-btn {
+    @apply p-2 text-gray-400 hover:text-theme hover:bg-slate-600 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+    min-height: 44px;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .page-info {
+    @apply text-sm text-gray-400 font-medium;
+  }
+</style>

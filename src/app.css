@@ -20,11 +20,15 @@
   .btn-primary {
     @apply bg-theme-primary hover:bg-theme-secondary font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
     color: var(--theme-text, #ffffff);
+    min-height: 44px;
+    touch-action: manipulation;
   }
   
   .btn-secondary {
     @apply bg-surface-secondary hover:bg-surface-hover font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
     color: var(--theme-text, #ffffff);
+    min-height: 44px;
+    touch-action: manipulation;
   }
   
   .btn-outline {
@@ -51,6 +55,7 @@
   /* Theme-aware input variants */
   .input-field {
     @apply bg-surface-secondary border border-surface-border rounded-lg px-3 py-2 text-theme-text placeholder-gray-400 focus:border-theme-primary focus:ring-1 focus:ring-theme-primary;
+    min-height: 44px;
   }
   
   .input-search {
