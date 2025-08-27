@@ -5,24 +5,29 @@
   import { queueStore } from '$lib/stores/queue';
   import { ExternalLink, Copy, Clock, CheckCircle, XCircle } from 'lucide-svelte';
   import { BLOCKCHAIN_CONFIG } from '$lib/constants/network';
+  import { ensureBase32TxId, formatTxIdForDisplay } from '$lib/utils/transactionUtils';
   
   $: completedSpins = $queueStore.spins.filter(spin => 
     spin.txId && ['completed', 'failed', 'ready_to_claim'].includes(spin.status)
   );
   
   function getExplorerUrl(txId: string): string {
-    return `${BLOCKCHAIN_CONFIG.explorerUrl}/transaction/${txId}`;
+    // Ensure we use the base32 format for the explorer URL
+    const base32TxId = ensureBase32TxId(txId);
+    return `${BLOCKCHAIN_CONFIG.explorerUrl}/transaction/${base32TxId}`;
   }
   
   async function copyTxId(txId: string) {
     try {
-      await navigator.clipboard.writeText(txId);
+      // Copy the base32 version of the transaction ID
+      const base32TxId = ensureBase32TxId(txId);
+      await navigator.clipboard.writeText(base32TxId);
       // Show success feedback (could add toast notification here)
       console.log('Transaction ID copied to clipboard');
     } catch (error) {
       console.error('Failed to copy transaction ID:', error);
       // Fallback for older browsers
-      fallbackCopyTextToClipboard(txId);
+      fallbackCopyTextToClipboard(ensureBase32TxId(txId));
     }
   }
   
@@ -48,7 +53,8 @@
   }
   
   function formatTxId(txId: string): string {
-    return txId.length > 16 ? `${txId.slice(0, 8)}...${txId.slice(-8)}` : txId;
+    // Use the utility function that handles conversion and formatting
+    return formatTxIdForDisplay(txId, 8);
   }
   
   function formatAmount(amount: number): string {

@@ -16,12 +16,14 @@
     Clock,
     Activity,
     Award,
-    Percent
+    Percent,
+    History
   } from 'lucide-svelte';
   import { hovStatsStore, connectionStatus } from '$lib/stores/hovStats';
   import { walletStore } from '$lib/stores/wallet';
   import { walletService } from '$lib/services/wallet';
   import { queueStats } from '$lib/stores/queue';
+  import PlayerHistoryModal from './PlayerHistoryModal.svelte';
   import type { PlayerStats } from '$lib/types/hovStats';
   import { formatVOI } from '$lib/constants/betting';
 
@@ -50,6 +52,7 @@
   let refreshing = false;
   let autoRefreshInterval: NodeJS.Timeout | null = null;
   let hasLoaded = false;
+  let showHistoryModal = false;
 
   // Local stats for comparison/fallback
   $: localStats = $queueStats;
@@ -245,6 +248,14 @@
           </span>
         {/if}
         <button
+          on:click={() => showHistoryModal = true}
+          disabled={!targetAddress || usingFallback}
+          class="btn-secondary text-sm"
+          title="View full playing history"
+        >
+          <History class="w-4 h-4" />
+        </button>
+        <button
           on:click={refresh}
           disabled={loading || refreshing || !targetAddress}
           class="btn-secondary text-sm"
@@ -426,7 +437,7 @@
             </p>
             
             {#if Number(stats.total_spins) > 0}
-              <p class="text-sm text-gray-400">
+              <p class="text-sm text-gray-400 mb-3">
                 {#if stats.longest_winning_streak > 5}
                   🔥 Impressive {stats.longest_winning_streak}-win streak!
                 {:else if Number(stats.largest_single_win) > Number(stats.average_bet_size) * 10}
@@ -435,6 +446,16 @@
                   🎲 Active for {formatTimespan(stats.days_active)} with {stats.total_paylines_played} total paylines played
                 {/if}
               </p>
+
+              <!-- View History button -->
+              <button
+                on:click={() => showHistoryModal = true}
+                class="btn-primary text-sm flex items-center gap-2"
+                title="View complete playing history"
+              >
+                <History class="w-4 h-4" />
+                View Full History
+              </button>
             {/if}
           </div>
         </div>
@@ -457,6 +478,13 @@
     </div>
   {/if}
 </div>
+
+<!-- Player History Modal -->
+<PlayerHistoryModal 
+  bind:isVisible={showHistoryModal}
+  {playerAddress}
+  on:close={() => showHistoryModal = false}
+/>
 
 <style>
   .player-stats-container {

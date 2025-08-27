@@ -11,6 +11,7 @@ import type {
   PlatformStats,
   LeaderboardEntry,
   PlayerStats,
+  PlayerSpin,
   TimeStats,
   HotColdPlayer,
   WhalePlayer,
@@ -28,6 +29,19 @@ interface StoreState<T> {
   fromCache: boolean;
 }
 
+interface PlayerSpinsData {
+  spins: PlayerSpin[];
+  currentPage: number;
+  pageSize: number;
+  totalCount: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+  // Aggregate stats from PlayerStats
+  totalAmountBet: bigint;
+  totalAmountWon: bigint;
+  winRate: number;
+}
+
 interface HovStatsState {
   platformStats: StoreState<PlatformStats>;
   leaderboard: StoreState<LeaderboardEntry[]>;
@@ -35,6 +49,7 @@ interface HovStatsState {
   hotColdPlayers: StoreState<HotColdPlayer[]>;
   whales: StoreState<WhalePlayer[]>;
   paylineAnalysis: StoreState<PaylineAnalysis[]>;
+  playerSpins: StoreState<PlayerSpinsData> & { playerAddress: string | null };
   isInitialized: boolean;
   connectionStatus: 'connected' | 'disconnected' | 'connecting' | 'error';
   fallbackActive: boolean;
@@ -48,6 +63,14 @@ const initialState: HovStatsState = {
   hotColdPlayers: { data: null, loading: false, error: null, lastUpdated: null, fromCache: false },
   whales: { data: null, loading: false, error: null, lastUpdated: null, fromCache: false },
   paylineAnalysis: { data: null, loading: false, error: null, lastUpdated: null, fromCache: false },
+  playerSpins: { 
+    data: null, 
+    loading: false, 
+    error: null, 
+    lastUpdated: null, 
+    fromCache: false,
+    playerAddress: null
+  },
   isInitialized: false,
   connectionStatus: 'disconnected',
   fallbackActive: false
@@ -247,6 +270,161 @@ function createHovStatsStore() {
   }
 
   /**
+   * Load player spins with pagination
+   */
+  async function loadPlayerSpins(
+    playerAddress: string, 
+    page: number = 0, 
+    pageSize: number = 50
+  ): Promise<void> {
+    // Check if already loading for this player
+    const currentState = get({ subscribe });
+    if (currentState.playerSpins.loading && currentState.playerSpins.playerAddress === playerAddress) {
+      return;
+    }
+
+    // Set loading state
+    update(state => ({
+      ...state,
+      playerSpins: {
+        ...state.playerSpins,
+        loading: true,
+        error: null,
+        playerAddress
+      }
+    }));
+
+    try {
+      // First get player stats to know total count and aggregates
+      const playerStats = await hovStatsService.getPlayerStats({
+        p_app_id: DEFAULT_APP_ID,
+        p_player_address: playerAddress
+      });
+
+      if (!playerStats) {
+        throw new Error('Failed to load player statistics');
+      }
+
+      // Get the spins for this page
+      const spins = await hovStatsService.getPlayerSpins({
+        p_app_id: DEFAULT_APP_ID,
+        p_player_address: playerAddress,
+        p_limit: pageSize,
+        p_offset: page * pageSize
+      });
+
+      // Calculate pagination info using real total count
+      const totalCount = Number(playerStats.total_spins);
+      const hasNextPage = (page + 1) * pageSize < totalCount;
+      const hasPreviousPage = page > 0;
+
+      const playerSpinsData: PlayerSpinsData = {
+        spins: spins,
+        currentPage: page,
+        pageSize,
+        totalCount: totalCount,
+        hasNextPage,
+        hasPreviousPage,
+        // Include aggregate stats from PlayerStats
+        totalAmountBet: playerStats.total_amount_bet,
+        totalAmountWon: playerStats.total_amount_won,
+        winRate: playerStats.win_rate
+      };
+
+      update(state => ({
+        ...state,
+        playerSpins: {
+          data: playerSpinsData,
+          loading: false,
+          error: null,
+          lastUpdated: new Date(),
+          fromCache: false,
+          playerAddress
+        }
+      }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load player spins';
+      
+      update(state => ({
+        ...state,
+        playerSpins: {
+          ...state.playerSpins,
+          loading: false,
+          error: errorMessage
+        }
+      }));
+
+      if (PUBLIC_DEBUG_MODE === 'true') {
+        console.warn('Failed to load player spins:', errorMessage);
+      }
+    }
+  }
+
+  /**
+   * Load next page of player spins
+   */
+  async function loadNextPlayerSpinsPage(): Promise<void> {
+    const currentState = get({ subscribe });
+    const { playerSpins } = currentState;
+    
+    if (!playerSpins.data || !playerSpins.playerAddress || !playerSpins.data.hasNextPage) {
+      return;
+    }
+
+    await loadPlayerSpins(
+      playerSpins.playerAddress,
+      playerSpins.data.currentPage + 1,
+      playerSpins.data.pageSize
+    );
+  }
+
+  /**
+   * Load previous page of player spins
+   */
+  async function loadPreviousPlayerSpinsPage(): Promise<void> {
+    const currentState = get({ subscribe });
+    const { playerSpins } = currentState;
+    
+    if (!playerSpins.data || !playerSpins.playerAddress || !playerSpins.data.hasPreviousPage) {
+      return;
+    }
+
+    await loadPlayerSpins(
+      playerSpins.playerAddress,
+      playerSpins.data.currentPage - 1,
+      playerSpins.data.pageSize
+    );
+  }
+
+  /**
+   * Refresh current player spins page
+   */
+  async function refreshPlayerSpins(): Promise<void> {
+    const currentState = get({ subscribe });
+    const { playerSpins } = currentState;
+    
+    if (!playerSpins.playerAddress) {
+      return;
+    }
+
+    // Clear cache first
+    hovStatsService.clearCache();
+    
+    await loadPlayerSpins(
+      playerSpins.playerAddress,
+      playerSpins.data?.currentPage ?? 0,
+      playerSpins.data?.pageSize ?? 50
+    );
+  }
+
+  // Helper function to get current state
+  function get<T>(store: { subscribe: (fn: (value: T) => void) => () => void }): T {
+    let value: T;
+    store.subscribe((v) => value = v)();
+    return value!;
+  }
+
+  /**
    * Generic store section update helper
    */
   async function updateStoreSection<T>(
@@ -392,6 +570,11 @@ function createHovStatsStore() {
     getPlayerStats,
     refreshPlayerStats,
     getLeaderboard,
+    // Player spins actions
+    loadPlayerSpins,
+    loadNextPlayerSpinsPage,
+    loadPreviousPlayerSpinsPage,
+    refreshPlayerSpins,
     refreshAll,
     reset,
     healthCheck
@@ -460,6 +643,18 @@ export const timeStats = derived(
     loading: $hovStats.timeStats.loading,
     error: $hovStats.timeStats.error,
     lastUpdated: $hovStats.timeStats.lastUpdated,
+    available: !$hovStats.fallbackActive
+  })
+);
+
+export const playerSpins = derived(
+  hovStatsStore,
+  $hovStats => ({
+    data: $hovStats.playerSpins.data,
+    loading: $hovStats.playerSpins.loading,
+    error: $hovStats.playerSpins.error,
+    lastUpdated: $hovStats.playerSpins.lastUpdated,
+    playerAddress: $hovStats.playerSpins.playerAddress,
     available: !$hovStats.fallbackActive
   })
 );

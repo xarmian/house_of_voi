@@ -54,7 +54,7 @@ export const BLOCKCHAIN_CONFIG = {
   
   // VOI Network specific
   blockTime: 3000, // ~3 seconds per round
-  explorerUrl: 'https://voi.observer/explorer',
+  explorerUrl: 'https://block.voi.network/explorer',
   
   // Contract interaction
   maxExtraPayment: 1_000_000, // 1 VOI for transaction fees

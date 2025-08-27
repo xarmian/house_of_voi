@@ -5,6 +5,7 @@
   import { queueStore, queueStats, pendingSpins, recentSpins, allSpins } from '$lib/stores/queue';
   import { currentSpinId } from '$lib/stores/game';
   import { formatVOI } from '$lib/constants/betting';
+  import { ensureBase32TxId, formatTxIdForDisplay } from '$lib/utils/transactionUtils';
   import { SpinStatus } from '$lib/types/queue';
   import type { QueuedSpin } from '$lib/types/queue';
   import { playButtonClick } from '$lib/services/soundService';
@@ -218,11 +219,14 @@
   }
 
   function getExplorerUrl(txId: string): string {
-    return `https://block.voi.network/explorer/transaction/${txId}`;
+    // Ensure we use the base32 format for the explorer URL
+    const base32TxId = ensureBase32TxId(txId);
+    return `https://block.voi.network/explorer/transaction/${base32TxId}`;
   }
 
   function formatTxId(txId: string): string {
-    return txId.length > 16 ? `${txId.slice(0, 8)}...${txId.slice(-8)}` : txId;
+    // Use the utility function that handles conversion and formatting
+    return formatTxIdForDisplay(txId, 8);
   }
   
   async function handleShareSpin(spin: QueuedSpin) {
