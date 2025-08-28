@@ -18,6 +18,7 @@
   
   // Import odds test utility for development
   import '$lib/utils/testOddsWithRealData';
+    import ModernSlotMachine from '$lib/components/game/ModernSlotMachine.svelte';
   
   let hasPreloadedCache = false;
   let walletUnsubscribe: (() => void) | null = null;
@@ -80,7 +81,8 @@
       <div class="grid grid-cols-12 gap-6 items-start">
         <!-- Main game area -->
         <div class="col-span-8 relative">
-          <SlotMachine disabled={false} />
+          <!--<SlotMachine disabled={false} />-->
+          <ModernSlotMachine width={400} height={400} compact={false} disabled={false} />
         </div>
         
         <!-- Right sidebar: Wallet and Tabbed panels -->
