@@ -17,7 +17,10 @@ export const BETTING_CONSTANTS = {
   
   // Formatting
   VOI_DECIMALS: 6,
-  DISPLAY_DECIMALS: 2
+  DISPLAY_DECIMALS: 2,
+  
+  // Staking reserve
+  STAKING_RESERVE_AMOUNT: 1_000_000 // 1 VOI reserved for unstaking transaction fees
 } as const;
 
 export const BETTING_ERRORS = {

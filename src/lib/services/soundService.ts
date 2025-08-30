@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import { soundStore, getEffectiveVolume, getSoundCategory, type SoundType } from '$lib/stores/sound';
+import { PUBLIC_DEBUG_MODE } from '$env/static/public';
 
 // Sound file paths
 const SOUND_PATHS: Record<SoundType, string> = {
@@ -39,7 +40,9 @@ class SoundService {
 
   async init(): Promise<void> {
     // Don't initialize AudioContext immediately - wait for user interaction
-    console.log('Sound service initialized - AudioContext will be created on first user interaction');
+    if (PUBLIC_DEBUG_MODE === 'true') {
+      console.log('Sound service initialized - AudioContext will be created on first user interaction');
+    }
   }
 
   // Initialize AudioContext on first user interaction

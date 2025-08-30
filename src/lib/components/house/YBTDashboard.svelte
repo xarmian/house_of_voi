@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, createEventDispatcher } from 'svelte';
   import { ybtStore, userShares, sharePercentage, totalSupply, isYBTLoading } from '$lib/stores/ybt';
-  import { walletStore } from '$lib/stores/walletAdapter';
+  import { walletStore as gamingWalletStore } from '$lib/stores/wallet';
   import { selectedWallet } from 'avm-wallet-svelte';
   import { ybtService } from '$lib/services/ybt';
   import YBTStats from './YBTStats.svelte';
@@ -14,6 +14,9 @@
   export let houseBalance: HouseBalanceData | null = null;
   export let balanceLoading = false;
   export let onRefreshBalance: (() => Promise<void>) | null = null;
+  export let isGamingWalletLocked = false;
+  export let showConnectedView = false;
+  export let hasWalletConnected = false;
 
   const dispatch = createEventDispatcher();
 
@@ -66,6 +69,12 @@
   });
 
   $: hasShares = $userShares > BigInt(0);
+  
+  // Use the prop instead of computing wallet availability internally
+  $: hasAnyWallet = hasWalletConnected;
+  
+  // Check if wallet operations are blocked due to locked gaming wallet
+  $: isWalletOperationBlocked = isGamingWalletLocked;
 </script>
 
 <div class="space-y-4 sm:space-y-6">
@@ -93,12 +102,26 @@
       </button>
     </div>
 
-    {#if $isYBTLoading}
+    <!-- Show different content based on wallet connection and loading state -->
+    {#if !hasWalletConnected}
+      <!-- No wallet connected - show message -->
+      <div class="text-center py-8">
+        <div class="text-slate-400 mb-4">
+          <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path>
+          </svg>
+          <p class="text-lg font-medium mb-2">Connect Wallet to View Portfolio</p>
+          <p class="text-sm">Connect your wallet using the selector above to see your YBT holdings and manage your investments.</p>
+        </div>
+      </div>
+    {:else if $isYBTLoading}
+      <!-- Loading state -->
       <div class="text-center py-8">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-voi-500 mx-auto"></div>
         <p class="text-slate-400 mt-2">Loading your YBT data...</p>
       </div>
     {:else}
+      <!-- Main content - wallet connected and loaded -->
       <!-- Portfolio Value Highlight -->
       <div class="bg-gradient-to-r from-slate-700 to-slate-600 rounded-lg p-4 sm:p-6 border border-yellow-400/20 mb-4 sm:mb-6">
         <div class="text-slate-400 text-xs sm:text-sm font-medium mb-2">Portfolio Value</div>
@@ -188,7 +211,7 @@
         <button
           on:click={() => showDepositModal = true}
           class="btn-primary-large w-full"
-          disabled={!$selectedWallet || $isMaintenanceMode}
+          disabled={!hasAnyWallet || $isMaintenanceMode || isWalletOperationBlocked}
         >
           <svg class="w-4 h-4 sm:w-5 sm:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
@@ -196,11 +219,13 @@
           <span class="text-sm sm:text-base">
             {#if $isMaintenanceMode}
               Deposit Disabled (Maintenance)
+            {:else if isWalletOperationBlocked}
+              Unlock Wallet to Deposit
             {:else}
               Deposit VOI
             {/if}
           </span>
-          {#if !$isMaintenanceMode}
+          {#if !$isMaintenanceMode && !isWalletOperationBlocked}
             <span class="text-xs opacity-75 ml-1 sm:ml-2 hidden sm:inline">→ Earn yield</span>
           {/if}
         </button>
@@ -208,7 +233,7 @@
         <button
           on:click={() => showWithdrawModal = true}
           class="btn-secondary-large w-full"
-          disabled={!hasShares || !$selectedWallet || $isMaintenanceMode}
+          disabled={!hasShares || !hasAnyWallet || $isMaintenanceMode || isWalletOperationBlocked}
         >
           <svg class="w-4 h-4 sm:w-5 sm:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 12H6"></path>
@@ -216,15 +241,34 @@
           <span class="text-sm sm:text-base">
             {#if $isMaintenanceMode}
               Withdraw Disabled (Maintenance)
+            {:else if isWalletOperationBlocked}
+              Unlock Wallet to Withdraw
             {:else}
               Withdraw VOI
             {/if}
           </span>
-          {#if hasShares && !$isMaintenanceMode}
+          {#if hasShares && !$isMaintenanceMode && !isWalletOperationBlocked}
             <span class="text-xs opacity-75 ml-1 sm:ml-2 hidden sm:inline">Available</span>
           {/if}
         </button>
       </div>
+
+      <!-- Gaming Wallet Locked Notice -->
+      {#if isWalletOperationBlocked}
+        <div class="mt-4 p-3 sm:p-4 bg-amber-900/20 border border-amber-500/30 rounded-lg">
+          <div class="flex items-start gap-2">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m0 0v2m0-2h2m-2 0H10m4-8V7a4 4 0 10-8 0v2m0 0v2m0-2h2m-2 0H10"></path>
+            </svg>
+            <div class="text-xs sm:text-sm">
+              <p class="font-medium text-amber-300">Gaming Wallet is Locked</p>
+              <p class="text-amber-400 mt-1">
+                Use the unlock button above to access your gaming wallet and enable deposits/withdrawals.
+              </p>
+            </div>
+          </div>
+        </div>
+      {/if}
 
       {#if !hasShares}
         <div class="mt-4 p-3 sm:p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
@@ -243,25 +287,24 @@
       {/if}
     {/if}
 
-    {#if $ybtStore.error}
-      <div class="mt-4 p-3 sm:p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
-        <div class="flex">
-          <svg class="w-4 h-4 sm:w-5 sm:h-5 text-red-400 mt-0.5 mr-2 sm:mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
-          </svg>
-          <div class="text-xs sm:text-sm">
-            <p class="text-red-300 font-medium">Error loading YBT data</p>
-            <p class="text-red-400 mt-1">{$ybtStore.error}</p>
-          </div>
+    <!-- Error state - always rendered, shown based on error -->
+    <div class:hidden={!$ybtStore.error} class="mt-4 p-3 sm:p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
+      <div class="flex">
+        <svg class="w-4 h-4 sm:w-5 sm:h-5 text-red-400 mt-0.5 mr-2 sm:mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+        </svg>
+        <div class="text-xs sm:text-sm">
+          <p class="text-red-300 font-medium">Error loading YBT data</p>
+          <p class="text-red-400 mt-1">{$ybtStore.error || ''}</p>
         </div>
-        <button
-          on:click={() => ybtStore.clearError()}
-          class="text-red-400 text-xs sm:text-sm underline mt-2 min-h-[44px] flex items-center"
-        >
-          Dismiss
-        </button>
       </div>
-    {/if}
+      <button
+        on:click={() => ybtStore.clearError()}
+        class="text-red-400 text-xs sm:text-sm underline mt-2 min-h-[44px] flex items-center"
+      >
+        Dismiss
+      </button>
+    </div>
   </div>
 </div>
 

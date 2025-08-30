@@ -35,6 +35,11 @@
   $: currentTotalBet = $bettingStore.totalBet;
   
   async function loadOdds() {
+    // Don't load if we already have odds and they're not stale
+    if (odds && !error) {
+      return;
+    }
+    
     // Use wallet address if available, otherwise use a dummy address for public odds
     const address = $selectedWallet?.address || 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
     isLoading = true;

@@ -36,12 +36,15 @@ function createWalletAdapter() {
     
     // Subscribe to balance change events
     balanceChangeUnsubscribe = balanceManager.onBalanceChange((event) => {
-      // Update the store when balance changes
-      update(state => ({
-        ...state,
-        balance: event.newBalance,
-        lastUpdated: event.timestamp
-      }));
+      // Only update if this event is for the monitored address
+      if (event.address === currentMonitoredAddress) {
+        // Update the store when balance changes
+        update(state => ({
+          ...state,
+          balance: event.newBalance,
+          lastUpdated: event.timestamp
+        }));
+      }
     });
   };
 

@@ -9,10 +9,10 @@
   import SlotMachine from '$lib/components/game/SlotMachine.svelte';
   import GameQueue from '$lib/components/game/GameQueue.svelte';
   import GameHeader from '$lib/components/game/GameHeader.svelte';
-  import SoundSettingsIcon from '$lib/components/ui/SoundSettingsIcon.svelte';
   import VoiRadioPlayer from '$lib/components/app/VoiRadioPlayer.svelte';
   import Leaderboard from '$lib/components/game/Leaderboard.svelte';
   import PlayerStats from '$lib/components/game/PlayerStats.svelte';
+  import GameStaking from '$lib/components/game/GameStaking.svelte';
   
   export let data;
   
@@ -23,6 +23,7 @@
   let walletUnsubscribe: (() => void) | null = null;
   let showLeaderboard = false;
   let showPlayerStats = false;
+  let showStaking = false;
 
   // Generate dynamic background style based on current theme - using background-image instead of background
   $: backgroundStyle = $currentTheme?.background?.via 
@@ -92,22 +93,28 @@
             <!-- Tab buttons -->
             <div class="tab-buttons">
               <button 
-                class="tab-button {!showLeaderboard && !showPlayerStats ? 'active' : ''}"
-                on:click={() => { showLeaderboard = false; showPlayerStats = false; }}
+                class="tab-button {!showLeaderboard && !showPlayerStats && !showStaking ? 'active' : ''}"
+                on:click={() => { showLeaderboard = false; showPlayerStats = false; showStaking = false; }}
               >
-                Game Queue
+                Queue
               </button>
               <button 
                 class="tab-button {showLeaderboard ? 'active' : ''}"
-                on:click={() => { showLeaderboard = true; showPlayerStats = false; }}
+                on:click={() => { showLeaderboard = true; showPlayerStats = false; showStaking = false; }}
               >
                 Leaderboard
               </button>
               <button 
                 class="tab-button {showPlayerStats ? 'active' : ''}"
-                on:click={() => { showPlayerStats = true; showLeaderboard = false; }}
+                on:click={() => { showPlayerStats = true; showLeaderboard = false; showStaking = false; }}
               >
-                My Stats
+                Stats
+              </button>
+              <button 
+                class="tab-button {showStaking ? 'active' : ''}"
+                on:click={() => { showStaking = true; showLeaderboard = false; showPlayerStats = false; }}
+              >
+                Staking
               </button>
             </div>
             
@@ -117,6 +124,8 @@
                 <Leaderboard compact={true} />
               {:else if showPlayerStats}
                 <PlayerStats compact={true} />
+              {:else if showStaking}
+                <GameStaking compact={true} />
               {:else}
                 <GameQueue />
               {/if}
@@ -128,16 +137,9 @@
     
     <!-- Mobile Layout: Fixed viewport optimized -->
     <div class="lg:hidden min-h-screen flex flex-col safe-area-top safe-area-bottom">
-      <!-- Fixed header with compact wallet and sound settings -->
-      <div class="flex-shrink-0 px-2 py-1 safe-area-left safe-area-right mb-2">
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex-1">
-            <WalletManager compact={true} />
-          </div>
-          <div class="flex-shrink-0">
-            <SoundSettingsIcon />
-          </div>
-        </div>
+      <!-- Compact wallet header -->
+      <div class="flex-shrink-0 px-2 py-2 safe-area-left safe-area-right">
+        <WalletManager compact={true} />
       </div>
       
       <!-- Main game area - allows natural scrolling -->

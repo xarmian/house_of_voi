@@ -14,14 +14,16 @@
   $: currentPath = $page.url.pathname;
   $: shouldShowModal = modalPages.includes(currentPath);
 
-  onMount(() => {
-    // Only show modal for modal pages if not previously dismissed
-    if (shouldShowModal) {
-      const warningDismissed = localStorage.getItem('hov-warning-dismissed');
-      if (!warningDismissed || warningDismissed !== 'true') {
-        showWarningModal = true;
-      }
+  // Check if modal should be shown whenever we navigate to a modal page
+  $: if (shouldShowModal) {
+    const warningDismissed = localStorage.getItem('hov-warning-dismissed');
+    if (!warningDismissed || warningDismissed !== 'true') {
+      showWarningModal = true;
     }
+  }
+
+  onMount(() => {
+    // Initial check handled by reactive statement above
   });
 
   function handleWarningDismiss(event: CustomEvent<{ dontShowAgain: boolean }>) {

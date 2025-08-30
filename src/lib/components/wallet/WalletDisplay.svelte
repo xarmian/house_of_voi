@@ -4,9 +4,10 @@
   import { walletService } from '$lib/services/wallet';
   import { algorandService } from '$lib/services/algorand';
   import { balanceManager } from '$lib/services/balanceManager';
-  import { Wallet, MoreHorizontal, RefreshCw, Unlock, Lock } from 'lucide-svelte';
+  import { Wallet, MoreHorizontal, RefreshCw, Unlock, Lock, TrendingUp } from 'lucide-svelte';
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import WalletDetailsModal from './WalletDetailsModal.svelte';
+  import GamingWalletStakingModal from './GamingWalletStakingModal.svelte';
   import BalanceUpdateAnimation from './BalanceUpdateAnimation.svelte';
   import { playDeposit, playBalanceIncrease } from '$lib/services/soundService';
   import { formatVOI } from '$lib/constants/betting';
@@ -16,6 +17,7 @@
   export let compact = false;
   
   let showDetailsModal = false;
+  let showStakingModal = false;
   let isRefreshing = false;
   
   // Balance animation state
@@ -50,19 +52,17 @@
   
   // Load public wallet data for guest mode with existing wallet
   async function loadPublicWalletData() {
-    if ($walletStore.isGuest && $hasExistingWallet) {
-      publicWalletData = walletService.getPublicWalletData();
-      
-      if (publicWalletData?.address && algorandService) {
-        loadingPublicBalance = true;
-        try {
-          publicBalance = await balanceManager.getBalance(publicWalletData.address);
-        } catch (err) {
-          console.error('Failed to load public wallet balance:', err);
-          publicBalance = null;
-        } finally {
-          loadingPublicBalance = false;
-        }
+    publicWalletData = walletService.getPublicWalletData();
+    
+    if (publicWalletData?.address && algorandService) {
+      loadingPublicBalance = true;
+      try {
+        publicBalance = await balanceManager.getBalance(publicWalletData.address);
+      } catch (err) {
+        console.error('Failed to load public wallet balance:', err);
+        publicBalance = null;
+      } finally {
+        loadingPublicBalance = false;
       }
     }
   }
@@ -97,17 +97,15 @@
     }
   });
   
-  // Load public data once when component mounts and wallet conditions are met
-  let hasLoadedPublicData = false;
-  
-  $: if ($walletStore.isGuest && $hasExistingWallet && !hasLoadedPublicData) {
-    hasLoadedPublicData = true;
+  // Load public data when in guest mode with existing wallet
+  $: if ($walletStore.isGuest && $hasExistingWallet) {
     loadPublicWalletData();
   }
   
-  // Reset flag when wallet state changes significantly
+  // Clear public data when not in the right state
   $: if (!$walletStore.isGuest || !$hasExistingWallet) {
-    hasLoadedPublicData = false;
+    publicWalletData = null;
+    publicBalance = null;
   }
   
   async function refreshBalance() {
@@ -127,6 +125,16 @@
       // Connected wallet - show details modal
       showDetailsModal = true;
     }
+  }
+  
+  function openStakingModal() {
+    showStakingModal = true;
+  }
+  
+  function handleStakingSuccess(event) {
+    // Refresh wallet balance after successful staking/unstaking
+    refreshBalance();
+    dispatch('stakingSuccess', event.detail);
   }
 </script>
 
@@ -169,13 +177,23 @@
         Retry
       </button>
     {:else}
-      <button
-        on:click={openDetailsModal}
-        class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
-        title="Wallet options"
-      >
-        <MoreHorizontal class="w-4 h-4" />
-      </button>
+      <div class="flex items-center gap-1">
+        <button
+          on:click={openStakingModal}
+          class="px-2 py-1 bg-voi-600 hover:bg-voi-700 text-white text-xs font-medium rounded transition-colors flex items-center gap-1"
+          title="Stake VOI"
+        >
+          <TrendingUp class="w-3 h-3" />
+          Stake
+        </button>
+        <button
+          on:click={openDetailsModal}
+          class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
+          title="Wallet options"
+        >
+          <MoreHorizontal class="w-4 h-4" />
+        </button>
+      </div>
     {/if}
   </div>
 {:else}
@@ -313,11 +331,19 @@
   </div>
 {/if}
 
-<!-- Unified Modal -->
+<!-- Modals -->
 {#if showDetailsModal}
   <WalletDetailsModal
     bind:isVisible={showDetailsModal}
     on:close={() => showDetailsModal = false}
+  />
+{/if}
+
+{#if showStakingModal}
+  <GamingWalletStakingModal
+    bind:isVisible={showStakingModal}
+    on:close={() => showStakingModal = false}
+    on:success={handleStakingSuccess}
   />
 {/if}
 
@@ -329,5 +355,14 @@
   
   :global(.btn-secondary) {
     @apply px-4 py-2 bg-surface-secondary hover:bg-surface-hover text-theme font-medium rounded-lg transition-colors duration-200;
+  }
+  
+  /* VOI branding colors */
+  .bg-voi-600 {
+    background-color: #059669;
+  }
+  
+  .hover\:bg-voi-700:hover {
+    background-color: #047857;
   }
 </style>

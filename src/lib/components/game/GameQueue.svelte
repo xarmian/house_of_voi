@@ -15,7 +15,7 @@
   
   // Removed unused auto refresh interval
   let showCompleted = true;
-  let selectedTab: 'recent' | 'stats' = 'recent';
+  let selectedTab: 'recent' = 'recent';
   let showSpinDetailsModal = false;
   let selectedSpin: QueuedSpin | null = null;
   
@@ -300,12 +300,8 @@
   $: startIndex = currentPage * itemsPerPage;
   $: endIndex = Math.min(startIndex + itemsPerPage, totalSpins);
   
-  $: displaySpins = selectedTab === 'recent' ? allRecentSpins.slice(startIndex, endIndex) : [];
+  $: displaySpins = allRecentSpins.slice(startIndex, endIndex);
   
-  // Calculate additional stats for the Stats tab
-  $: largestWin = Math.max(0, ...$queueStats.totalSpins > 0 ? allRecentSpins.filter(s => s.winnings).map(s => s.winnings!) : [0]);
-  $: totalWins = allRecentSpins.filter(s => s.winnings && s.winnings > 0).length;
-  $: winRate = $queueStats.totalSpins > 0 ? (totalWins / $queueStats.totalSpins) * 100 : 0;
 </script>
 
 <div class="game-queue-container">
@@ -333,56 +329,17 @@
     </div>
   </div>
   
-  <!-- Quick Stats -->
-  <div class="queue-stats">
-    <div class="stat">
-      <div class="stat-value">{totalSpins}</div>
-      <div class="stat-label">Total</div>
-    </div>
-    
-    <div class="stat">
-      <div class="stat-value text-blue-400">{$queueStats.pendingSpins}</div>
-      <div class="stat-label">In Progress</div>
-    </div>
-    
-    <div class="stat">
-      <div class="stat-value text-green-400">{totalWins}</div>
-      <div class="stat-label">Wins</div>
-    </div>
-    
-    <div class="stat">
-      <div class="stat-value" 
-           class:text-green-400={$queueStats.netProfit >= 0}
-           class:text-red-400={$queueStats.netProfit < 0}>
-        {$queueStats.netProfit >= 0 ? '+' : ''}{formatVOI($queueStats.netProfit)}
-      </div>
-      <div class="stat-label">Net</div>
-    </div>
-  </div>
   
-  <!-- Tabs -->
-  <div class="queue-tabs">
-    <button
-      class="tab"
-      class:active={selectedTab === 'recent'}
-      on:click={() => selectedTab = 'recent'}
-    >
+  <!-- Header Info -->
+  <div class="queue-info">
+    <div class="text-sm text-theme-text opacity-70 px-4 py-2 bg-slate-800/30">
       All Spins ({totalSpins > 0 ? `${startIndex + 1}-${endIndex} of ${totalSpins}` : '0'})
-    </button>
-    <button
-      class="tab"
-      class:active={selectedTab === 'stats'}
-      on:click={() => selectedTab = 'stats'}
-    >
-      Stats
-    </button>
+    </div>
   </div>
   
   
-  <!-- Content -->
-  {#if selectedTab === 'recent'}
-    <!-- Spin List -->
-    <div class="spin-list">
+  <!-- Spin List -->
+  <div class="spin-list">
       {#each displaySpins as spin (spin.id)}
         <div 
           class="spin-item"
@@ -512,76 +469,6 @@
         </button>
       </div>
     {/if}
-  {:else if selectedTab === 'stats'}
-    <!-- Stats View -->
-    <div class="stats-content">
-      <div class="stats-grid">
-        <!-- Basic Stats -->
-        <div class="stat-card">
-          <div class="stat-icon">🎰</div>
-          <div class="stat-info">
-            <div class="stat-title">Total Spins</div>
-            <div class="stat-value">{$queueStats.totalSpins}</div>
-          </div>
-        </div>
-        
-        <div class="stat-card">
-          <div class="stat-icon">🏆</div>
-          <div class="stat-info">
-            <div class="stat-title">Total Wins</div>
-            <div class="stat-value">{totalWins}</div>
-          </div>
-        </div>
-        
-        <div class="stat-card">
-          <div class="stat-icon">📊</div>
-          <div class="stat-info">
-            <div class="stat-title">Win Rate</div>
-            <div class="stat-value">{winRate.toFixed(1)}%</div>
-          </div>
-        </div>
-        
-        <div class="stat-card">
-          <div class="stat-icon">💎</div>
-          <div class="stat-info">
-            <div class="stat-title">Largest Win</div>
-            <div class="stat-value">{formatVOI(largestWin)} VOI</div>
-          </div>
-        </div>
-        
-        <!-- Financial Stats -->
-        <div class="stat-card wide">
-          <div class="stat-icon">💰</div>
-          <div class="stat-info">
-            <div class="stat-title">Total Wagered</div>
-            <div class="stat-value">{formatVOI($queueStats.totalWagered)} VOI</div>
-          </div>
-        </div>
-        
-        <div class="stat-card wide">
-          <div class="stat-icon">💸</div>
-          <div class="stat-info">
-            <div class="stat-title">Total Winnings</div>
-            <div class="stat-value text-green-400">{formatVOI($queueStats.totalWinnings)} VOI</div>
-          </div>
-        </div>
-        
-        <!-- Net Profit/Loss -->
-        <div class="stat-card wide">
-          <div class="stat-icon">{$queueStats.netProfit >= 0 ? '📈' : '📉'}</div>
-          <div class="stat-info">
-            <div class="stat-title">Net Result</div>
-            <div class="stat-value" 
-                 class:text-green-400={$queueStats.netProfit >= 0}
-                 class:text-red-400={$queueStats.netProfit < 0}>
-              {$queueStats.netProfit >= 0 ? '+' : ''}{formatVOI($queueStats.netProfit)} VOI
-            </div>
-          </div>
-        </div>
-        
-      </div>
-    </div>
-  {/if}
 </div>
 
 <!-- Spin Details Modal -->
@@ -711,33 +598,9 @@
     @apply bg-blue-600 text-theme text-xs font-bold px-2 py-1 rounded-full;
   }
   
-  .queue-stats {
-    @apply grid grid-cols-4 gap-3 p-3 bg-slate-700/30 border-t border-slate-700;
-  }
   
-  .stat {
-    @apply text-center;
-  }
-  
-  .stat-value {
-    @apply text-sm font-bold text-theme;
-  }
-  
-  .stat-label {
-    @apply text-xs text-theme-text opacity-70;
-    margin-top: 0.25rem;
-  }
-  
-  .queue-tabs {
-    @apply flex border-b border-slate-700 bg-slate-800/30;
-  }
-  
-  .tab {
-    @apply flex-1 py-3 px-4 text-sm font-medium text-theme-text opacity-70 hover:opacity-100 hover:bg-slate-700/50 transition-all duration-200;
-  }
-  
-  .tab.active {
-    @apply text-voi-400 bg-slate-700/30 border-b-2 border-voi-400;
+  .queue-info {
+    @apply border-b border-slate-700;
   }
   
   
@@ -863,49 +726,6 @@
     background: rgba(16, 185, 129, 0.7);
   }
   
-  /* Stats view styles */
-  .stats-content {
-    @apply p-4;
-  }
-  
-  .stats-grid {
-    @apply grid grid-cols-2 gap-3;
-  }
-  
-  .stat-card {
-    @apply bg-slate-700/50 rounded-lg p-3 border border-slate-600/50 flex items-center gap-3;
-  }
-  
-  .stat-card.wide {
-    @apply col-span-2;
-  }
-  
-  .stat-icon {
-    @apply text-2xl flex-shrink-0;
-  }
-  
-  .stat-info {
-    @apply flex-1 min-w-0;
-  }
-  
-  .stat-title {
-    @apply text-xs text-theme-text opacity-70 font-medium;
-  }
-  
-  .stat-value {
-    @apply text-lg font-bold text-theme;
-    margin-top: 0.25rem;
-  }
-  
-  @media (min-width: 640px) {
-    .stats-grid {
-      @apply grid-cols-2;
-    }
-    
-    .stat-card.wide {
-      @apply col-span-1;
-    }
-  }
 
   .share-button {
     @apply flex-shrink-0 p-1 rounded-full bg-slate-700 hover:bg-slate-600 text-theme-text opacity-60 hover:opacity-100 transition-all duration-200 disabled:cursor-not-allowed;

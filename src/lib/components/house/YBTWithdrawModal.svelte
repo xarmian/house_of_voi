@@ -1,11 +1,13 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
-  import { walletStore } from '$lib/stores/walletAdapter';
+  import { walletStore as externalWalletStore } from '$lib/stores/walletAdapter';
+  import { walletStore as gamingWalletStore } from '$lib/stores/wallet';
   import { ybtService } from '$lib/services/ybt';
   import type { YBTWithdrawParams } from '$lib/types/ybt';
 
   export let open = false;
   export let userShares: bigint = BigInt(0);
+  export let selectedWalletSource: 'gaming' | 'external' = 'external';
   
   let tokenDecimals = 9; // Default to 9, will be fetched
   let totalSupply = BigInt(0);
@@ -17,15 +19,37 @@
   let isProcessing = false;
   let error = '';
 
+  // Get wallet context from YBT service to ensure we use the wallet that will actually be used
+  let actualWalletContext: any = null;
+  let walletBalance = 0;
+  let walletAccount: any = null;
+
+  async function loadWalletContext() {
+    try {
+      actualWalletContext = await ybtService.getWalletContext();
+      if (actualWalletContext) {
+        if (actualWalletContext.type === 'gaming') {
+          walletBalance = $gamingWalletStore.balance;
+          walletAccount = $gamingWalletStore.account;
+        } else {
+          walletBalance = $externalWalletStore.balance;
+          walletAccount = $externalWalletStore.account;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading wallet context:', error);
+    }
+  }
+
   $: sharesAmount = parseFloat(withdrawAmount) || 0;
   $: sharesBigInt = BigInt(Math.floor(sharesAmount * (10 ** tokenDecimals)));
   $: transactionFee = BigInt(6000); // 6000 microAlgos for app call + inner payment
-  $: canWithdraw = sharesAmount > 0 && sharesBigInt <= userShares && !isProcessing && $walletStore.account && $walletStore.balance >= Number(transactionFee);
+  $: canWithdraw = sharesAmount > 0 && sharesBigInt <= userShares && !isProcessing && walletAccount && walletBalance >= Number(transactionFee);
   $: maxShares = Number(userShares) / (10 ** tokenDecimals);
   $: voiAmount = ybtService.calculateUserPortfolioValue(sharesBigInt, totalSupply, contractValue);
 
   async function handleWithdraw() {
-    if (!canWithdraw || !$walletStore.account) return;
+    if (!canWithdraw || !walletAccount) return;
 
     isProcessing = true;
     error = '';
@@ -82,9 +106,10 @@
     }
   }
   
-  // Load token data when modal opens
+  // Load token data and wallet context when modal opens
   $: if (open) {
     loadTokenData();
+    loadWalletContext();
   }
 </script>
 

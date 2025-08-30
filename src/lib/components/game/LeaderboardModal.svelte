@@ -63,12 +63,6 @@
       color: 'text-purple-400', 
       property: 'largest_single_win'
     },
-    net_result: {
-      label: 'Net Result',
-      icon: TrendingUp,
-      color: 'text-green-400',
-      property: 'net_result'
-    },
     rtp: {
       label: 'RTP',
       icon: Percent,
@@ -169,7 +163,7 @@
     const value = entry[config.property as keyof LeaderboardEntry];
     
     if (typeof value === 'bigint') {
-      if (metric === 'total_won' || metric === 'largest_win' || metric === 'net_result' || metric === 'total_bet') {
+      if (metric === 'total_won' || metric === 'largest_win' || metric === 'total_bet') {
         return formatVOI(Number(value)) + ' VOI';
       }
       return value.toString();
@@ -398,15 +392,8 @@
                         <span class="font-mono text-sm text-theme">{formatAddress(entry.who)}</span>
                       </td>
                       <td class="py-3 px-4 text-right">
-                        <div class="space-y-1">
-                          <div class="font-semibold {metricConfig.color}">
-                            {formatMetricValue(entry, selectedMetric)}
-                          </div>
-                          {#if selectedMetric === 'rtp'}
-                            <div class="text-xs text-gray-400">
-                              Net: {formatVOI(Number(entry.net_result))} VOI
-                            </div>
-                          {/if}
+                        <div class="font-semibold {metricConfig.color}">
+                          {formatMetricValue(entry, selectedMetric)}
                         </div>
                       </td>
                       <td class="py-3 px-4 text-right text-gray-300">

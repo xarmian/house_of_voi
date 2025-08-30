@@ -3,6 +3,7 @@ import * as algokit from '@algorandfoundation/algokit-utils';
 import { YieldBearingTokenClient, APP_SPEC as YBTAppSpec } from '../../clients/YieldBearingTokenClient.js';
 import { CONTRACT } from 'ulujs';
 import { NETWORK_CONFIG, CONTRACT_CONFIG } from '$lib/constants/network';
+import { BETTING_CONSTANTS } from '$lib/constants/betting';
 import { selectedWallet, signAndSendTransactions, signTransactions } from 'avm-wallet-svelte';
 import { get } from 'svelte/store';
 import type { WalletAccount } from '$lib/types/wallet';
@@ -13,6 +14,15 @@ import type {
   YBTWithdrawParams 
 } from '$lib/types/ybt';
 
+// Wallet context types
+export type WalletContextType = 'gaming' | 'third-party';
+
+export interface WalletContext {
+  type: WalletContextType;
+  address: string;
+  privateKey?: string; // Only for gaming wallets
+}
+
 // Import ybtStore for triggering balance refresh
 // Note: Using dynamic import to avoid circular dependency
 let ybtStore: any = null;
@@ -20,6 +30,7 @@ let ybtStore: any = null;
 class YBTService {
   private algodClient: algosdk.Algodv2;
   private ybtClient: YieldBearingTokenClient | null = null;
+  private preferredWalletType: 'gaming' | 'third-party' | 'auto' = 'auto';
   private ybtABI = {
     name: "Yield Bearing Token",
     desc: "A yield bearing token contract",
@@ -34,6 +45,148 @@ class YBTService {
       NETWORK_CONFIG.nodeUrl,
       NETWORK_CONFIG.port
     );
+  }
+
+  /**
+   * Set preferred wallet type for operations
+   */
+  setPreferredWalletType(type: 'gaming' | 'third-party' | 'auto') {
+    this.preferredWalletType = type;
+  }
+
+  /**
+   * Get wallet context from current wallet state
+   */
+  async getWalletContext(): Promise<WalletContext | null> {
+    const { walletStore } = await import('$lib/stores/wallet');
+    const { walletService } = await import('$lib/services/wallet');
+    const gamingWallet = get(walletStore);
+    const thirdPartyWallet = get(selectedWallet);
+    
+    const gamingAvailable = gamingWallet.isConnected && gamingWallet.account?.address;
+    const gamingLocked = !gamingAvailable && walletService.hasStoredWallet();
+    const gamingAddress = gamingAvailable ? 
+      gamingWallet.account.address : 
+      (gamingLocked ? walletService.getStoredWalletAddress() : null);
+    const thirdPartyAvailable = thirdPartyWallet?.address;
+    
+    // Respect preferred wallet type
+    if (this.preferredWalletType === 'gaming' && gamingAddress) {
+      return {
+        type: 'gaming',
+        address: gamingAddress,
+        privateKey: gamingAvailable ? gamingWallet.account.privateKey : undefined
+      };
+    }
+    
+    if (this.preferredWalletType === 'third-party' && thirdPartyAvailable) {
+      return {
+        type: 'third-party',
+        address: thirdPartyWallet.address
+      };
+    }
+    
+    // Auto mode: prefer gaming wallet first, then third-party
+    if (this.preferredWalletType === 'auto') {
+      if (gamingAddress) {
+        return {
+          type: 'gaming',
+          address: gamingAddress,
+          privateKey: gamingAvailable ? gamingWallet.account.privateKey : undefined
+        };
+      }
+      
+      if (thirdPartyAvailable) {
+        return {
+          type: 'third-party',
+          address: thirdPartyWallet.address
+        };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Get wallet context for a specific address (for read operations)
+   */
+  private async getWalletContextForAddress(address: string): Promise<WalletContext | null> {
+    // Try gaming wallet first
+    const { walletStore } = await import('$lib/stores/wallet');
+    const gamingWallet = get(walletStore);
+    
+    if (gamingWallet.account?.address === address) {
+      return {
+        type: 'gaming',
+        address: gamingWallet.account.address,
+        privateKey: gamingWallet.account.privateKey
+      };
+    }
+    
+    // Fall back to third-party wallet
+    const thirdPartyWallet = get(selectedWallet);
+    if (thirdPartyWallet?.address === address) {
+      return {
+        type: 'third-party',
+        address: thirdPartyWallet.address
+      };
+    }
+    
+    return null;
+  }
+
+  /**
+   * Sign and send transactions based on wallet context
+   */
+  private async signAndSendTransactions(txns: string[], context: WalletContext): Promise<{ txId: string }> {
+    if (context.type === 'gaming') {
+      // Gaming wallet: direct signing
+      if (!context.privateKey) {
+        throw new Error('Gaming wallet private key not available');
+      }
+      
+      const privateKeyBytes = this.hexToUint8Array(context.privateKey);
+      
+      const signedTxns = txns.map((txnBlob: string) => {
+        // Convert base64 string to Uint8Array (browser-compatible)
+        const binaryString = atob(txnBlob);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes;
+      }).map((txnBytes: Uint8Array) => {
+        // Decode and sign the transaction
+        const txn = algosdk.decodeUnsignedTransaction(txnBytes);
+        return algosdk.signTransaction(txn, privateKeyBytes).blob;
+      });
+
+      // Send signed transactions
+      const result = await this.algodClient.sendRawTransaction(signedTxns).do();
+      return { txId: result.txId };
+    } else {
+      // Third-party wallet: use avm-wallet-svelte
+      const decodedTxns = txns.map((txnBlob: string) => {
+        const binaryString = atob(txnBlob);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes;
+      }).map((txnBytes: Uint8Array) => {
+        return algosdk.decodeUnsignedTransaction(txnBytes);
+      });
+      
+      const signedTxns = await signTransactions([decodedTxns]);
+      const result = await this.algodClient.sendRawTransaction(signedTxns).do();
+      return { txId: result.txId };
+    }
+  }
+
+  /**
+   * Convert hex string to Uint8Array
+   */
+  private hexToUint8Array(hex: string): Uint8Array {
+    return new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
   }
 
   private async getYBTStore() {
@@ -218,8 +371,8 @@ class YBTService {
 
   async getDepositCost(): Promise<bigint> {
     try {
-      const wallet = get(selectedWallet);
-      if (!wallet) {
+      const context = await this.getWalletContext();
+      if (!context) {
         throw new Error('No wallet connected');
       }
 
@@ -230,12 +383,12 @@ class YBTService {
         undefined, // No indexer needed for read-only calls
         this.ybtABI,
         {
-          addr: wallet.address,
+          addr: context.address,
           sk: new Uint8Array(0) // Empty key for read-only operations
         }
       );
 
-      const bal_result = await ci.arc200_balanceOf(wallet.address);
+      const bal_result = await ci.arc200_balanceOf(context.address);
       if (!bal_result.success && bal_result.returnValue > BigInt(0)) {
         return BigInt(0);
       }
@@ -256,8 +409,8 @@ class YBTService {
 
   async deposit(params: YBTDepositParams): Promise<YBTTransactionResult> {
     try {
-      const wallet = get(selectedWallet);
-      if (!wallet) {
+      const context = await this.getWalletContext();
+      if (!context) {
         throw new Error('No wallet connected');
       }
 
@@ -268,8 +421,8 @@ class YBTService {
         undefined,
         this.ybtABI,
         {
-          addr: wallet.address,
-          sk: new Uint8Array(0) // Will be signed by wallet
+          addr: context.address,
+          sk: new Uint8Array(0) // Will be signed based on context
         }
       );
 
@@ -292,25 +445,8 @@ class YBTService {
         throw new Error('No transactions generated by ulujs');
       }
 
-      // Decode the unsigned transactions using the same method as algorand service
-      const decodedTxns = result.txns.map((txnBlob: string) => {
-        // Convert base64 string to Uint8Array (browser-compatible)
-        const binaryString = atob(txnBlob);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        return bytes;
-      }).map((txnBytes: Uint8Array) => {
-        // Decode the unsigned transaction
-        return algosdk.decodeUnsignedTransaction(txnBytes);
-      });
-      
-      // Send decoded transactions to wallet for signing and submission
-      const signedTxns = await signTransactions([decodedTxns]);
-
-      // Send signed transactions to node for submission
-      const sendResult = await this.algodClient.sendRawTransaction(signedTxns).do();
+      // Sign and send transactions using the unified method
+      const sendResult = await this.signAndSendTransactions(result.txns, context);
 
       if (!sendResult || !sendResult.txId) {
         throw new Error('Transaction signing failed or was cancelled');
@@ -341,8 +477,8 @@ class YBTService {
 
   async withdraw(params: YBTWithdrawParams): Promise<YBTTransactionResult> {
     try {
-      const wallet = get(selectedWallet);
-      if (!wallet) {
+      const context = await this.getWalletContext();
+      if (!context) {
         throw new Error('No wallet connected');
       }
 
@@ -353,8 +489,8 @@ class YBTService {
         undefined,
         this.ybtABI,
         {
-          addr: wallet.address,
-          sk: new Uint8Array(0) // Will be signed by wallet
+          addr: context.address,
+          sk: new Uint8Array(0) // Will be signed based on context
         }
       );
 
@@ -375,25 +511,8 @@ class YBTService {
         throw new Error('No transactions generated by ulujs');
       }
 
-      // Decode the unsigned transactions using the same method as deposit
-      const decodedTxns = result.txns.map((txnBlob: string) => {
-        // Convert base64 string to Uint8Array (browser-compatible)
-        const binaryString = atob(txnBlob);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        return bytes;
-      }).map((txnBytes: Uint8Array) => {
-        // Decode the unsigned transaction
-        return algosdk.decodeUnsignedTransaction(txnBytes);
-      });
-
-      // Send decoded transactions to wallet for signing and submission
-      const signedTxns = await signTransactions([decodedTxns]);
-
-      // Send signed transactions to node for submission
-      const sendResult = await this.algodClient.sendRawTransaction(signedTxns).do();
+      // Sign and send transactions using the unified method
+      const sendResult = await this.signAndSendTransactions(result.txns, context);
 
       if (!sendResult || !sendResult.txId) {
         throw new Error('Transaction signing failed or was cancelled');
@@ -542,6 +661,38 @@ class YBTService {
       console.error('Error calculating user portfolio value:', error);
       return BigInt(0);
     }
+  }
+
+  /**
+   * Validates a staking amount to ensure user keeps at least 1 VOI for transaction fees
+   */
+  validateStakingAmount(amount: bigint, balance: bigint): { valid: boolean; error?: string } {
+    const reserveAmount = BigInt(BETTING_CONSTANTS.STAKING_RESERVE_AMOUNT);
+    
+    if (balance <= reserveAmount) {
+      return {
+        valid: false,
+        error: `Insufficient balance. You need at least ${(Number(reserveAmount) / 1_000_000).toFixed(6)} VOI in your wallet.`
+      };
+    }
+    
+    const maxStakeAmount = balance - reserveAmount;
+    
+    if (amount > maxStakeAmount) {
+      return {
+        valid: false,
+        error: `Amount exceeds available balance. Maximum stakeable: ${(Number(maxStakeAmount) / 1_000_000).toFixed(6)} VOI (keeping 1 VOI for transaction fees).`
+      };
+    }
+    
+    if (amount <= BigInt(0)) {
+      return {
+        valid: false,
+        error: 'Stake amount must be greater than 0.'
+      };
+    }
+    
+    return { valid: true };
   }
 }
 

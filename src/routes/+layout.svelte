@@ -5,13 +5,17 @@
   import { fade } from 'svelte/transition';
   import { MetaTags, deepMerge } from 'svelte-meta-tags';
   import { soundService } from '$lib/services/soundService';
-  import SoundToggleButton from '$lib/components/ui/SoundToggleButton.svelte';
   import WarningProvider from '$lib/components/ui/WarningProvider.svelte';
+  import UnifiedHeader from '$lib/components/navigation/UnifiedHeader.svelte';
+  import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
   import { checkForPurchaseResult, clearPurchaseParams, showPurchaseNotification } from '$lib/utils/voiPurchase';
+  import { updateDetector } from '$lib/services/updateDetector';
   
   export let data;
   
   $: isGameRoute = $page.route.id?.startsWith('/app');
+  $: isHouseRoute = $page.route.id?.startsWith('/house');
+  $: showUnifiedHeader = isGameRoute || isHouseRoute;
   $: metaTags = deepMerge(data.baseMetaTags, $page.data.pageMetaTags || {});
   
   let mounted = false;
@@ -28,6 +32,14 @@
       // Clean up URL parameters
       clearPurchaseParams();
     }
+    
+    // Start the update detector
+    updateDetector.start();
+    
+    return () => {
+      // Clean up update detector on component destroy
+      updateDetector.stop();
+    };
   });
 </script>
 
@@ -44,15 +56,21 @@
     class="min-h-screen bg-slate-900 relative"
     in:fade={{ duration: 300 }}
   >
-    <!-- Sound Toggle - Desktop: full button top-right, Mobile: handled in app page -->
-    <div class="hidden lg:block fixed top-4 right-4 z-50">
-      <SoundToggleButton showSettings />
-    </div>
+    <!-- Unified Header for app and house routes -->
+    {#if showUnifiedHeader}
+      <UnifiedHeader />
+    {/if}
     
-    <slot />
+    <!-- Main content with padding when header is shown -->
+    <div class="{showUnifiedHeader ? 'pt-0' : ''}">
+      <slot />
+    </div>
     
     <!-- Global warning provider -->
     <WarningProvider />
+    
+    <!-- Toast notifications -->
+    <ToastContainer />
   </div>
 {:else}
   <!-- Loading screen -->

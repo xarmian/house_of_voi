@@ -5,6 +5,7 @@ import { CONTRACT } from 'ulujs';
 import algosdk from 'algosdk';
 import { NETWORK_CONFIG, CONTRACT_CONFIG } from '$lib/constants/network';
 import { oddsCalculator, type OddsCalculationResult } from './oddsCalculator';
+import { PUBLIC_DEBUG_MODE } from '$env/static/public';
 
 // Import the actual ABI from SlotMachineClient like React component does
 import { APP_SPEC as SlotMachineAppSpec } from '../../clients/SlotMachineClient.js';
@@ -102,6 +103,14 @@ export class ContractDataCache {
     );
     this.appId = CONTRACT_CONFIG.slotMachineAppId;
     this.CACHE_DURATION = CONTRACT_CONFIG.cacheDuration;
+    
+    // Initialize session versions to avoid cache misses
+    this.sessionVersions = {
+      contractVersion: null,
+      deploymentVersion: null,
+      publicVersion: CONTRACT_CONFIG.version
+    };
+    
     // Load from storage asynchronously (fire and forget)
     this.loadFromStorage().catch(error => {
       console.warn('Failed to load cache from storage:', error);
@@ -122,7 +131,9 @@ export class ContractDataCache {
         
         // Validate cached versions against current contract versions
         if (this.cache.versions && !(await this.validateCachedVersions())) {
-          console.log('🔄 Cached versions are outdated, clearing cache');
+          if (PUBLIC_DEBUG_MODE === 'true') {
+            console.log('🔄 Cached versions are outdated, clearing cache');
+          }
           this.clearCache();
         }
       }
@@ -222,16 +233,18 @@ export class ContractDataCache {
       return false;
     }
 
-    // If no versions cached, cache is invalid
+    // If no versions cached, use a more lenient approach
     if (!this.cache.versions) {
-      console.log('🔄 No cached versions found, invalidating cache');
-      return false;
+      // Cache is valid if it's recent and we haven't checked versions yet
+      return Date.now() - timestamp < this.CACHE_DURATION;
     }
 
     // Check if PUBLIC_CONTRACT_VERSION changed (this is the only version we can check synchronously)
     const currentPublicVersion = CONTRACT_CONFIG.version;
     if (this.cache.versions.publicVersion !== currentPublicVersion) {
-      console.log(`🔄 Public contract version changed from ${this.cache.versions.publicVersion} to ${currentPublicVersion}, invalidating cache`);
+      if (PUBLIC_DEBUG_MODE === 'true') {
+        console.log(`🔄 Public contract version changed from ${this.cache.versions.publicVersion} to ${currentPublicVersion}, invalidating cache`);
+      }
       return false;
     }
 
@@ -254,19 +267,25 @@ export class ContractDataCache {
 
       // Check if contract_version changed
       if (cached.contractVersion !== contractVersion) {
-        console.log(`🔄 Contract version changed from ${cached.contractVersion} to ${contractVersion}, invalidating cache`);
+        if (PUBLIC_DEBUG_MODE === 'true') {
+          console.log(`🔄 Contract version changed from ${cached.contractVersion} to ${contractVersion}, invalidating cache`);
+        }
         return false;
       }
 
       // Check if deployment_version changed
       if (cached.deploymentVersion !== deploymentVersion) {
-        console.log(`🔄 Deployment version changed from ${cached.deploymentVersion} to ${deploymentVersion}, invalidating cache`);
+        if (PUBLIC_DEBUG_MODE === 'true') {
+          console.log(`🔄 Deployment version changed from ${cached.deploymentVersion} to ${deploymentVersion}, invalidating cache`);
+        }
         return false;
       }
 
       // Check if PUBLIC_CONTRACT_VERSION changed
       if (cached.publicVersion !== currentPublicVersion) {
-        console.log(`🔄 Public contract version changed from ${cached.publicVersion} to ${currentPublicVersion}, invalidating cache`);
+        if (PUBLIC_DEBUG_MODE === 'true') {
+          console.log(`🔄 Public contract version changed from ${cached.publicVersion} to ${currentPublicVersion}, invalidating cache`);
+        }
         return false;
       }
 
@@ -327,8 +346,6 @@ export class ContractDataCache {
 
     // Convert BigInt array to number array and reshape to paylines
     const flatPaylines = (result.returnValue as bigint[]).map(x => Number(x));
-    console.log(`📊 Contract returned flat paylines array length: ${flatPaylines.length}`);
-    console.log(`📋 First 20 payline values:`, flatPaylines.slice(0, 20));
     
     // Convert flat array to 2D array (assuming 20 paylines with 5 positions each)
     const paylines: number[][] = [];
@@ -336,8 +353,12 @@ export class ContractDataCache {
       paylines.push(flatPaylines.slice(i, i + 5));
     }
 
-    console.log(`✅ Parsed into ${paylines.length} paylines`);
-    console.log(`📈 First 3 paylines:`, paylines.slice(0, 3));
+    if (PUBLIC_DEBUG_MODE === 'true') {
+      console.log(`📊 Contract returned flat paylines array length: ${flatPaylines.length}`);
+      console.log(`📋 First 20 payline values:`, flatPaylines.slice(0, 20));
+      console.log(`✅ Parsed into ${paylines.length} paylines`);
+      console.log(`📈 First 3 paylines:`, paylines.slice(0, 3));
+    }
 
     return paylines;
   }
@@ -382,17 +403,19 @@ export class ContractDataCache {
     const reelCount = Number(reelCountResult.returnValue);
     const windowLength = 3; // Standard window length
 
-    console.log(`🎰 Contract reel data:`, {
-      totalLength: reelData.length,
-      reelLength,
-      reelCount,
-      windowLength,
-      first50Chars: reelData.substring(0, 50),
-      uniqueSymbols: [...new Set(reelData)].sort(),
-      symbolCounts: [...new Set(reelData)].map(symbol => 
-        `${symbol}:${(reelData.match(new RegExp(`\\${symbol}`, 'g')) || []).length}`
-      )
-    });
+    if (PUBLIC_DEBUG_MODE === 'true') {
+      console.log(`🎰 Contract reel data:`, {
+        totalLength: reelData.length,
+        reelLength,
+        reelCount,
+        windowLength,
+        first50Chars: reelData.substring(0, 50),
+        uniqueSymbols: [...new Set(reelData)].sort(),
+        symbolCounts: [...new Set(reelData)].map(symbol => 
+          `${symbol}:${(reelData.match(new RegExp(`\\${symbol}`, 'g')) || []).length}`
+        )
+      });
+    }
 
     return { reelData, reelLength, reelCount, windowLength };
   }
@@ -401,31 +424,43 @@ export class ContractDataCache {
    * Fetch payout multiplier directly from contract
    */
   private async fetchMultiplierFromContract(symbol: string, count: number, address: string): Promise<number> {
-    console.log(`🔍 Fetching multiplier from contract: ${symbol}_${count}`);
-    
-    // Create Ulujs CONTRACT instance
-    const ci = new CONTRACT(
-      this.appId,
-      this.client,
-      undefined, // Use undefined for indexer
-      slotMachineABI,
-      readOnlyAccount
-    );
+    try {
+      // Create Ulujs CONTRACT instance
+      const ci = new CONTRACT(
+        this.appId,
+        this.client,
+        undefined, // Use undefined for indexer
+        slotMachineABI,
+        readOnlyAccount
+      );
 
-    // Configure CONTRACT instance 
-    ci.setEnableRawBytes(true);
-    
-    // Convert symbol to byte
-    const symbolByte = new TextEncoder().encode(symbol)[0];
-    console.log(`📝 Symbol "${symbol}" converted to byte: ${symbolByte}`);
+      // Configure CONTRACT instance 
+      ci.setEnableRawBytes(true);
+      
+      // Convert symbol to byte
+      const symbolByte = new TextEncoder().encode(symbol)[0];
 
-    // Call get_payout_multiplier method - gets return value without submitting
-    const result = await ci.get_payout_multiplier(symbolByte, BigInt(count));
-    const multiplier = Number(result.returnValue);
-    
-    console.log(`✅ Contract returned multiplier for ${symbol}_${count}: ${multiplier}`);
+      // Call get_payout_multiplier method - gets return value without submitting
+      const result = await ci.get_payout_multiplier(symbolByte, BigInt(count));
+      
+      // Validate and convert result
+      if (!result || result.returnValue === undefined || result.returnValue === null) {
+        console.warn(`⚠️ Contract returned undefined multiplier for ${symbol}_${count}`);
+        return 0; // Default to 0 for invalid multipliers
+      }
 
-    return multiplier;
+      const multiplier = Number(result.returnValue);
+      
+      if (isNaN(multiplier)) {
+        console.warn(`⚠️ Contract returned NaN multiplier for ${symbol}_${count}, result was:`, result.returnValue);
+        return 0; // Default to 0 for NaN multipliers
+      }
+      
+      return multiplier;
+    } catch (error) {
+      console.error(`❌ Failed to fetch multiplier for ${symbol}_${count}:`, error);
+      return 0; // Default to 0 on error
+    }
   }
 
   /**
@@ -434,12 +469,16 @@ export class ContractDataCache {
   async getPaylines(address: string): Promise<number[][]> {
     // Check cache first
     if (this.cache.paylines && this.isValidCache(this.cache.paylines.timestamp)) {
-      console.log('📦 Using cached paylines data');
+      if (PUBLIC_DEBUG_MODE === 'true') {
+        console.log('📦 Using cached paylines data');
+      }
       return this.cache.paylines.data;
     }
 
     // Cache miss - fetch from contract
-    console.log('🔄 Fetching paylines from contract');
+    if (PUBLIC_DEBUG_MODE === 'true') {
+      console.log('🔄 Fetching paylines from contract');
+    }
     try {
       const paylines = await this.fetchPaylinesFromContract(address);
       
@@ -473,7 +512,9 @@ export class ContractDataCache {
   }> {
     // Check cache first
     if (this.cache.reelData && this.isValidCache(this.cache.reelData.timestamp)) {
-      console.log('📦 Using cached reel data');
+      if (PUBLIC_DEBUG_MODE === 'true') {
+        console.log('📦 Using cached reel data');
+      }
       return {
         reelData: this.cache.reelData.reelData,
         reelLength: this.cache.reelData.reelLength,
@@ -483,7 +524,9 @@ export class ContractDataCache {
     }
 
     // Cache miss - fetch from contract
-    console.log('🔄 Fetching reel data from contract');
+    if (PUBLIC_DEBUG_MODE === 'true') {
+      console.log('🔄 Fetching reel data from contract');
+    }
     try {
       const reelData = await this.fetchReelDataFromContract(address);
       
@@ -494,12 +537,14 @@ export class ContractDataCache {
       };
       this.saveToStorage();
 
-      console.log('✅ Fetched and cached reel data:', {
-        reelDataLength: reelData.reelData.length,
-        reelLength: reelData.reelLength,
-        reelCount: reelData.reelCount,
-        windowLength: reelData.windowLength
-      });
+      if (PUBLIC_DEBUG_MODE === 'true') {
+        console.log('✅ Fetched and cached reel data:', {
+          reelDataLength: reelData.reelData.length,
+          reelLength: reelData.reelLength,
+          reelCount: reelData.reelCount,
+          windowLength: reelData.windowLength
+        });
+      }
 
       return reelData;
     } catch (error) {
@@ -522,17 +567,31 @@ export class ContractDataCache {
    * Get cached payout multiplier or fetch from contract
    */
   async getPayoutMultiplier(symbol: string, count: number, address: string): Promise<number> {
-    const cacheKey = this.getMultiplierKey(symbol, count);
+    const PAYOUTS = {
+      A: { 3: 200, 4: 1000, 5: 10000 },
+      B: { 3: 60,  4: 200, 5: 1000 },
+      C: { 3: 30,  4: 100, 5: 500 },
+      D: { 3: 10,  4: 55,  5: 250 },
+      _: {}
+    };
+
+    return PAYOUTS[symbol as keyof typeof PAYOUTS][count as keyof typeof PAYOUTS[typeof symbol]] || 0;
+
+    /*const cacheKey = this.getMultiplierKey(symbol, count);
 
     // Check cache first
     if (this.cache.multipliers[cacheKey] && 
         this.isValidCache(this.cache.multipliers[cacheKey].timestamp)) {
-      console.log(`📦 Using cached multiplier for ${symbol}x${count}`);
+      if (PUBLIC_DEBUG_MODE === 'true') {
+        console.log(`📦 Using cached multiplier for ${symbol}x${count}`);
+      }
       return this.cache.multipliers[cacheKey].data;
     }
 
     // Cache miss - fetch from contract
-    console.log(`🔄 Fetching multiplier for ${symbol}x${count} from contract`);
+    if (PUBLIC_DEBUG_MODE === 'true') {
+      console.log(`🔄 Fetching multiplier for ${symbol}x${count} from contract`);
+    }
     try {
       const multiplier = await this.fetchMultiplierFromContract(symbol, count, address);
       
@@ -554,7 +613,7 @@ export class ContractDataCache {
         return this.cache.multipliers[cacheKey].data;
       }
       throw error;
-    }
+    }*/
   }
 
   /**
@@ -563,18 +622,24 @@ export class ContractDataCache {
   async preloadContractData(address: string): Promise<void> {
     // Prevent concurrent preload operations
     if (this.isPreloading) {
-      console.log('⏳ Contract data preload already in progress, skipping...');
+      if (PUBLIC_DEBUG_MODE === 'true') {
+        console.log('⏳ Contract data preload already in progress, skipping...');
+      }
       return;
     }
 
     // Check if we already have recent cached data
     if (this.cache.paylines && this.isValidCache(this.cache.paylines.timestamp)) {
-      console.log('📦 Contract data already cached and valid, skipping preload');
+      if (PUBLIC_DEBUG_MODE === 'true') {
+        console.log('📦 Contract data already cached and valid, skipping preload');
+      }
       return;
     }
 
     this.isPreloading = true;
-    console.log('🚀 Pre-loading contract data...');
+    if (PUBLIC_DEBUG_MODE === 'true') {
+      console.log('🚀 Pre-loading contract data...');
+    }
     
     try {
       // Update cache versions once at the beginning
@@ -600,7 +665,9 @@ export class ContractDataCache {
 
       await Promise.all(multiplierPromises);
       
-      console.log('✅ Contract data pre-loading completed');
+      if (PUBLIC_DEBUG_MODE === 'true') {
+        console.log('✅ Contract data pre-loading completed');
+      }
     } catch (error) {
       console.error('❌ Contract data pre-loading failed:', error);
       // Don't throw - pre-loading failure shouldn't block the app
@@ -615,13 +682,17 @@ export class ContractDataCache {
   async getWinOdds(address: string): Promise<OddsCalculationResult | null> {
     // Check cache first
     if (this.cache.odds && this.isValidCache(this.cache.odds.calculatedAt)) {
-      console.log('📦 Using cached odds data');
+      if (PUBLIC_DEBUG_MODE === 'true') {
+        console.log('📦 Using cached odds data');
+      }
       return this.cache.odds;
     }
 
     // Need fresh data to calculate odds
     try {
-      console.log('🔄 Calculating new odds from current data');
+      if (PUBLIC_DEBUG_MODE === 'true') {
+        console.log('🔄 Calculating new odds from current data');
+      }
       
       // Get all required data in parallel
       const [paylines, reelData] = await Promise.all([
@@ -644,24 +715,26 @@ export class ContractDataCache {
       await Promise.all(multiplierPromises);
 
       // DEBUG: Log all the data we're about to use for calculation
-      console.log('🔍 CONTRACT DATA DEBUG - About to calculate odds with:');
-      console.log('📊 Reel Data:', {
-        length: reelData.reelData.length,
-        reelCount: reelData.reelCount,
-        reelLength: reelData.reelLength,
-        sample: reelData.reelData.substring(0, 50) + '...'
-      });
-      console.log('📈 Paylines:', {
-        count: paylines.length,
-        first5: paylines.slice(0, 5),
-        samplePattern: paylines[0]
-      });
-      console.log('🎰 Multipliers loaded:', {
-        count: Object.keys(this.cache.multipliers).length,
-        keys: Object.keys(this.cache.multipliers).sort(),
-        values: Object.fromEntries(Object.entries(this.cache.multipliers).map(([k, v]) => [k, v.data])),
-        fullCache: this.cache.multipliers
-      });
+      if (PUBLIC_DEBUG_MODE === 'true') {
+        console.log('🔍 CONTRACT DATA DEBUG - About to calculate odds with:');
+        console.log('📊 Reel Data:', {
+          length: reelData.reelData.length,
+          reelCount: reelData.reelCount,
+          reelLength: reelData.reelLength,
+          sample: reelData.reelData.substring(0, 50) + '...'
+        });
+        console.log('📈 Paylines:', {
+          count: paylines.length,
+          first5: paylines.slice(0, 5),
+          samplePattern: paylines[0]
+        });
+        console.log('🎰 Multipliers loaded:', {
+          count: Object.keys(this.cache.multipliers).length,
+          keys: Object.keys(this.cache.multipliers).sort(),
+          values: Object.fromEntries(Object.entries(this.cache.multipliers).map(([k, v]) => [k, v.data])),
+          fullCache: this.cache.multipliers
+        });
+      }
 
       // Calculate odds
       const odds = oddsCalculator.calculateOdds(reelData, this.cache.multipliers, paylines);

@@ -32,12 +32,13 @@
   const dispatch = createEventDispatcher();
 
   // State
-  let selectedMetric: 'total_won' | 'total_bet' | 'largest_win' | 'net_result' | 'rtp' | 'total_spins' = 'total_won';
+  let selectedMetric: 'total_won' | 'total_bet' | 'largest_win' | 'rtp' | 'total_spins' = 'total_won';
   let currentPage = 0;
   let itemsPerPage = compact ? 10 : 20;
   let searchTerm = '';
   let refreshing = false;
   let highlightedPlayer: string | null = null;
+  let debounceTimer: NodeJS.Timeout | null = null;
   
   // Modal state
   let showLeaderboardModal = false;
@@ -45,14 +46,8 @@
   let selectedPlayerAddress: string | null = null;
   $: playerAddress = $walletStore.account?.address;
   
-  // Filtered and paginated data
-  $: filteredData = ($leaderboard.data || []).filter(entry => {
-    if (!searchTerm) return true;
-    return entry.who.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           entry.who.slice(0, 8).toLowerCase().includes(searchTerm.toLowerCase()) ||
-           entry.who.slice(-8).toLowerCase().includes(searchTerm.toLowerCase());
-  });
-  
+  // Use server data directly - no client-side filtering to preserve server order
+  $: filteredData = $leaderboard.data || [];
   $: totalPages = Math.ceil(filteredData.length / itemsPerPage);
   $: paginatedData = filteredData.slice(
     currentPage * itemsPerPage,
@@ -89,14 +84,6 @@
       unit: 'VOI',
       property: 'largest_single_win'
     },
-    net_result: {
-      label: 'Net Result',
-      icon: TrendingUp,
-      color: 'text-green-400',
-      format: (value: bigint) => formatVOI(Number(value), 2),
-      unit: 'VOI',
-      property: 'net_result'
-    },
     rtp: {
       label: 'RTP',
       icon: Percent,
@@ -116,32 +103,32 @@
   };
 
   onMount(async () => {
-    // Load data on mount to ensure we have correct metric data
-    if ($connectionStatus.initialized) {
+    // Set initial metric in store
+    hovStatsStore.setLeaderboardMetric(selectedMetric);
+    
+    // Only load data if not already loaded or loading
+    if ($connectionStatus.initialized && !$leaderboard.data && !$leaderboard.loading) {
       refresh();
     }
   });
 
-  // Reactive statement to load data once connection is initialized
-  $: if ($connectionStatus.initialized && !$leaderboard.data && !$leaderboard.loading) {
-    refresh();
-  }
-
-  // Ensure data is refreshed for the current metric
-  let lastLoadedMetric: string | null = null;
-  $: if ($connectionStatus.initialized && selectedMetric && selectedMetric !== lastLoadedMetric) {
-    lastLoadedMetric = selectedMetric;
+  // Reactive statement to load data once connection is initialized - only if data is missing
+  $: if ($connectionStatus.initialized && !$leaderboard.data && !$leaderboard.loading && !refreshing) {
     refresh();
   }
 
   onDestroy(() => {
-    // Cleanup if needed
+    // Clean up debounce timer
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
   });
 
 
   async function refresh() {
-    // Don't refresh if not initialized or already refreshing
-    if (!$connectionStatus.initialized || refreshing) return;
+    // Don't refresh if not initialized, already refreshing, or already loading
+    if (!$connectionStatus.initialized || refreshing || $leaderboard.loading) return;
     
     refreshing = true;
     try {
@@ -152,10 +139,23 @@
   }
 
   async function changeMetric(metric: typeof selectedMetric) {
-    if (metric === selectedMetric) return;
+    if (metric === selectedMetric || refreshing || $leaderboard.loading) return;
+    
     selectedMetric = metric;
     currentPage = 0;
-    await refresh();
+    
+    // Set the metric in the store so periodic refresh uses the correct one
+    hovStatsStore.setLeaderboardMetric(metric);
+    
+    // Debounce metric changes to prevent rapid fire requests
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+    
+    debounceTimer = setTimeout(async () => {
+      await refresh();
+      debounceTimer = null;
+    }, 300); // 300ms debounce
   }
 
   function goToPage(page: number) {
@@ -242,19 +242,8 @@
       </div>
       
       <div class="flex items-center gap-1 sm:gap-2 flex-1 justify-end">
-        <!-- Search -->
-        {#if !compact}
-          <div class="relative flex-1 max-w-xs">
-            <Search class="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search..."
-              bind:value={searchTerm}
-              class="pl-6 sm:pl-9 pr-2 sm:pr-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-xs sm:text-sm focus:border-voi-400 focus:outline-none w-full"
-              style="min-height: 44px;"
-            />
-          </div>
-        {/if}
+        <!-- Search disabled - would break server-side sorting -->
+        <!-- TODO: Implement server-side search in the SQL function if needed -->
 
         <!-- Expand -->
         <button
@@ -356,7 +345,7 @@
     <div class="empty-container">
       <Trophy class="w-16 h-16 text-gray-600 mx-auto mb-4" />
       <p class="text-gray-400 text-center">
-        {searchTerm ? 'No players found matching your search' : 'No leaderboard data available'}
+        No leaderboard data available
       </p>
     </div>
   {:else}

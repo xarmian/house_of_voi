@@ -53,6 +53,7 @@ interface HovStatsState {
   isInitialized: boolean;
   connectionStatus: 'connected' | 'disconnected' | 'connecting' | 'error';
   fallbackActive: boolean;
+  currentLeaderboardMetric: string;
 }
 
 // Initial state
@@ -73,7 +74,8 @@ const initialState: HovStatsState = {
   },
   isInitialized: false,
   connectionStatus: 'disconnected',
-  fallbackActive: false
+  fallbackActive: false,
+  currentLeaderboardMetric: 'total_won'
 };
 
 // Configuration
@@ -95,6 +97,8 @@ function createHovStatsStore() {
   // Track intervals for cleanup
   let intervals: { [key: string]: NodeJS.Timeout } = {};
   let initialized = false;
+  let refreshPromises: { [key: string]: Promise<void> } = {};
+  let loadingStates: { [key: string]: boolean } = {};
 
   /**
    * Initialize the store
@@ -152,25 +156,69 @@ function createHovStatsStore() {
    * Refresh platform statistics
    */
   async function refreshPlatformStats(): Promise<void> {
-    return updateStoreSection('platformStats', async () => {
-      return await hovStatsService.getPlatformStats({ p_app_id: DEFAULT_APP_ID });
-    });
+    // Deduplicate concurrent requests
+    const promiseKey = 'platformStats';
+    if (refreshPromises[promiseKey]) {
+      return refreshPromises[promiseKey];
+    }
+    
+    const refreshPromise = (async () => {
+      try {
+        // Only clear platform stats cache to avoid affecting leaderboard
+        hovStatsService.clearPlatformStatsCache();
+        
+        return await updateStoreSection('platformStats', async () => {
+          return await hovStatsService.getPlatformStats({ p_app_id: DEFAULT_APP_ID });
+        });
+      } finally {
+        delete refreshPromises[promiseKey];
+      }
+    })();
+    
+    refreshPromises[promiseKey] = refreshPromise;
+    return refreshPromise;
+  }
+
+  /**
+   * Set the current leaderboard metric
+   */
+  function setLeaderboardMetric(metric: string): void {
+    update(state => ({
+      ...state,
+      currentLeaderboardMetric: metric
+    }));
   }
 
   /**
    * Refresh leaderboard
    */
   async function refreshLeaderboard(metric: string = 'net_result', limit: number = 100): Promise<void> {
-    // Clear cache first to force fresh data
-    hovStatsService.clearCache();
+    const promiseKey = `leaderboard_${metric}_${limit}`;
     
-    return updateStoreSection('leaderboard', async () => {
-      return await hovStatsService.getLeaderboard({
-        p_app_id: DEFAULT_APP_ID,
-        p_metric: metric as any,
-        p_limit: limit
-      });
-    });
+    // Return existing promise if already refreshing this exact request
+    if (refreshPromises[promiseKey]) {
+      return refreshPromises[promiseKey];
+    }
+
+    const refreshPromise = (async () => {
+      try {
+        // Only clear leaderboard cache, not all caches to avoid race conditions
+        hovStatsService.clearLeaderboardCache();
+        
+        return await updateStoreSection('leaderboard', async () => {
+          return await hovStatsService.getLeaderboard({
+            p_app_id: DEFAULT_APP_ID,
+            p_metric: metric as any,
+            p_limit: limit
+          });
+        });
+      } finally {
+        delete refreshPromises[promiseKey];
+      }
+    })();
+
+    refreshPromises[promiseKey] = refreshPromise;
+    return refreshPromise;
   }
 
   /**
@@ -431,6 +479,14 @@ function createHovStatsStore() {
     section: keyof Omit<HovStatsState, 'isInitialized' | 'connectionStatus' | 'fallbackActive'>,
     fetcher: () => Promise<T>
   ): Promise<void> {
+    // Prevent concurrent updates for the same section
+    const sectionKey = String(section);
+    if (loadingStates[sectionKey]) {
+      return; // Already loading, skip this update
+    }
+    
+    loadingStates[sectionKey] = true;
+    
     // Set loading state
     update(state => ({
       ...state,
@@ -444,36 +500,54 @@ function createHovStatsStore() {
     try {
       const data = await fetcher();
       
-      update(state => ({
-        ...state,
-        [section]: {
-          data,
-          loading: false,
-          error: null,
-          lastUpdated: new Date(),
-          fromCache: false
-        },
-        connectionStatus: 'connected',
-        fallbackActive: false
-      }));
+      update(state => {
+        // Only update connection status if it actually needs to change
+        const needsConnectionUpdate = state.connectionStatus !== 'connected' || state.fallbackActive;
+        
+        return {
+          ...state,
+          [section]: {
+            data,
+            loading: false,
+            error: null,
+            lastUpdated: new Date(),
+            fromCache: false
+          },
+          // Only update connection status if needed to prevent unnecessary reactivity
+          ...(needsConnectionUpdate && {
+            connectionStatus: 'connected' as const,
+            fallbackActive: false
+          })
+        };
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const isNetworkError = (error as HovStatsError)?.code === 'NETWORK_ERROR';
 
-      update(state => ({
-        ...state,
-        [section]: {
-          ...state[section],
-          loading: false,
-          error: errorMessage
-        },
-        connectionStatus: isNetworkError ? 'disconnected' : 'error',
-        fallbackActive: true
-      }));
+      update(state => {
+        const newConnectionStatus = isNetworkError ? 'disconnected' : 'error';
+        const needsConnectionUpdate = state.connectionStatus !== newConnectionStatus || !state.fallbackActive;
+        
+        return {
+          ...state,
+          [section]: {
+            ...state[section],
+            loading: false,
+            error: errorMessage
+          },
+          // Only update connection status if needed
+          ...(needsConnectionUpdate && {
+            connectionStatus: newConnectionStatus as const,
+            fallbackActive: true
+          })
+        };
+      });
 
       if (PUBLIC_DEBUG_MODE === 'true') {
         console.warn(`Failed to refresh ${section}:`, errorMessage);
       }
+    } finally {
+      loadingStates[sectionKey] = false;
     }
   }
 
@@ -492,9 +566,10 @@ function createHovStatsStore() {
       refreshPlatformStats();
     }, REFRESH_INTERVALS.platformStats);
 
-    // Leaderboard
+    // Leaderboard - use current metric
     intervals.leaderboard = setInterval(() => {
-      refreshLeaderboard();
+      const currentState = get({ subscribe });
+      refreshLeaderboard(currentState.currentLeaderboardMetric);
     }, REFRESH_INTERVALS.leaderboard);
 
     // Time stats
@@ -563,6 +638,7 @@ function createHovStatsStore() {
     initialize,
     refreshPlatformStats,
     refreshLeaderboard,
+    setLeaderboardMetric,
     refreshTimeStats,
     refreshHotColdPlayers,
     refreshWhales,
@@ -625,15 +701,51 @@ export const platformStats = derived(
   }
 );
 
+// Helper function for deep comparison with BigInt support
+function deepEqualStore(a: any, b: any): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return a === b;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    return a.every((item, index) => deepEqualStore(item, b[index]));
+  }
+  if (typeof a === 'object' && typeof b === 'object') {
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+    if (keysA.length !== keysB.length) return false;
+    return keysA.every(key => deepEqualStore(a[key], b[key]));
+  }
+  return false;
+}
+
+// Create memoization for derived stores - simplified to prevent loops
+let lastLeaderboardState: any = null;
+let lastLeaderboardResult: any = null;
+
 export const leaderboard = derived(
   hovStatsStore,
-  $hovStats => ({
-    data: $hovStats.leaderboard.data,
-    loading: $hovStats.leaderboard.loading,
-    error: $hovStats.leaderboard.error,
-    lastUpdated: $hovStats.leaderboard.lastUpdated,
-    available: !$hovStats.fallbackActive
-  })
+  $hovStats => {
+    const currentState = {
+      data: $hovStats.leaderboard.data,
+      loading: $hovStats.leaderboard.loading,
+      error: $hovStats.leaderboard.error,
+      lastUpdated: $hovStats.leaderboard.lastUpdated,
+      available: !$hovStats.fallbackActive
+    };
+    
+    // Use deep comparison to check if leaderboard section actually changed
+    if (lastLeaderboardState && 
+        lastLeaderboardState.loading === currentState.loading &&
+        lastLeaderboardState.error === currentState.error &&
+        lastLeaderboardState.available === currentState.available &&
+        deepEqualStore(lastLeaderboardState.data, currentState.data)) {
+      return lastLeaderboardResult;
+    }
+    
+    lastLeaderboardState = currentState;
+    lastLeaderboardResult = { ...currentState };
+    return lastLeaderboardResult;
+  }
 );
 
 export const timeStats = derived(

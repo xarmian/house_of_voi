@@ -1,13 +1,16 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { Web3Wallet, selectedWallet, connectedWallets } from 'avm-wallet-svelte';
+  import { selectedWallet, connectedWallets } from 'avm-wallet-svelte';
   import { ybtStore } from '$lib/stores/ybt';
+  import { ybtService } from '$lib/services/ybt';
+  import { walletStore, isWalletConnected } from '$lib/stores/wallet';
   import { NETWORK_CONFIG } from '$lib/constants/network';
   import { houseBalanceService } from '$lib/services/houseBalance';
   import { houseBalanceManager } from '$lib/stores/houseBalance';
   import YBTDashboard from '$lib/components/house/YBTDashboard.svelte';
   import YBTStats from '$lib/components/house/YBTStats.svelte';
-  import OddsAnalysis from '$lib/components/analytics/OddsAnalysis.svelte';
+  import WalletSourceSelector from '$lib/components/house/WalletSourceSelector.svelte';
+  // import OddsAnalysis from '$lib/components/analytics/OddsAnalysis.svelte';
   import LoadingOverlay from '$lib/components/ui/LoadingOverlay.svelte';
   import Leaderboard from '$lib/components/game/Leaderboard.svelte';
   import algosdk from 'algosdk';
@@ -22,6 +25,9 @@
   let houseBalance: any = null;
   let balanceLoading = true;
   let activeTab = 'portfolio';
+  let selectedWalletSource: 'gaming' | 'external' = 'external';
+  let isSelectedWalletLocked = false;
+  let refreshDebounceTimer: NodeJS.Timeout | null = null;
   
   // Initialize Algorand client for avm-wallet-svelte
   algodClient = new algosdk.Algodv2(
@@ -34,7 +40,10 @@
   const availableWallets = ['Kibisis', 'LuteWallet', 'WalletConnect'];
 
   onMount(async () => {
-    // Initialize YBT store - wallet connection will be handled by avm-wallet-svelte
+    // Initialize gaming wallet store - this now preserves existing unlocked state
+    await walletStore.initialize();
+    
+    // Initialize YBT store - wallet connection will be handled by avm-wallet-svelte  
     await ybtStore.initialize();
     
     // Initialize HOV stats store
@@ -47,6 +56,12 @@
   });
 
   onDestroy(() => {
+    // Clear debounce timers
+    if (refreshDebounceTimer) {
+      clearTimeout(refreshDebounceTimer);
+      refreshDebounceTimer = null;
+    }
+    
     // Clear YBT store intervals and reset state
     ybtStore.reset();
     
@@ -80,8 +95,85 @@
     }
   }
   
-  // Reactive statements to track wallet connection
-  $: isWalletConnected = $selectedWallet !== null;
+  // Stable wallet connection state - only update when actually changed
+  let stableWalletState = false;
+  let lastWalletCheck = { thirdParty: false, gaming: false };
+  
+  $: {
+    const thirdPartyConnected = $selectedWallet !== null;
+    const gamingConnected = $isWalletConnected;
+    
+    // Only update if the connection states actually changed
+    if (thirdPartyConnected !== lastWalletCheck.thirdParty || gamingConnected !== lastWalletCheck.gaming) {
+      lastWalletCheck = { thirdParty: thirdPartyConnected, gaming: gamingConnected };
+      stableWalletState = thirdPartyConnected || gamingConnected;
+    }
+  }
+  
+  // Use stable state for display
+  $: anyWalletConnected = stableWalletState;
+  
+  // Handle wallet source changes with debouncing
+  async function handleWalletSourceChange(event) {
+    const { source, isLocked } = event.detail;
+    const previousSource = selectedWalletSource;
+    const previousLocked = isSelectedWalletLocked;
+    
+    selectedWalletSource = source;
+    isSelectedWalletLocked = isLocked;
+    
+    // If only the lock state changed (wallet unlocked), just update the preferred wallet type
+    // No need to refresh portfolio data since it's the same wallet
+    if (source === previousSource && previousLocked && !isLocked) {
+      // Just unlocked the same wallet - only update wallet type, don't refresh
+      const walletType = selectedWalletSource === 'external' ? 'third-party' : 'gaming';
+      ybtService.setPreferredWalletType(walletType);
+      return;
+    }
+    
+    // Actual wallet source change - need to refresh data
+    // Debounce wallet source changes to prevent rapid updates
+    if (refreshDebounceTimer) {
+      clearTimeout(refreshDebounceTimer);
+    }
+    
+    refreshDebounceTimer = setTimeout(async () => {
+      // Set the preferred wallet type in YBT service (convert 'external' to 'third-party')
+      const walletType = selectedWalletSource === 'external' ? 'third-party' : 'gaming';
+      ybtService.setPreferredWalletType(walletType);
+      // Force refresh YBT data with new wallet source
+      await ybtStore.refresh();
+      refreshDebounceTimer = null;
+    }, 200); // 200ms debounce
+  }
+  
+  // Track last wallet state to prevent loops
+  let lastWalletState = { connected: false, source: 'external' };
+  
+  // Only refresh when wallet state actually changes
+  $: {
+    const currentState = { connected: anyWalletConnected, source: selectedWalletSource };
+    if (isLoaded && 
+        (currentState.connected !== lastWalletState.connected || 
+         currentState.source !== lastWalletState.source)) {
+      
+      lastWalletState = currentState;
+      
+      if (currentState.connected) {
+        // Clear any existing timer
+        if (refreshDebounceTimer) {
+          clearTimeout(refreshDebounceTimer);
+        }
+        
+        refreshDebounceTimer = setTimeout(() => {
+          const walletType = selectedWalletSource === 'external' ? 'third-party' : 'gaming';
+          ybtService.setPreferredWalletType(walletType);
+          ybtStore.refresh();
+          refreshDebounceTimer = null;
+        }, 300);
+      }
+    }
+  }
 </script>
 
 <svelte:head>
@@ -107,64 +199,18 @@
         </p>
       </div>
 
-      <!-- Maintenance Mode Banner -->
-      {#if $isMaintenanceMode && $maintenanceModeMessage}
-        <div class="bg-gradient-to-r from-amber-900/90 to-orange-900/90 border border-amber-600/50 rounded-lg p-4 mb-4 sm:mb-6">
-          <div class="flex items-start gap-3">
-            <AlertTriangle class="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
-            <div class="flex-1">
-              <h3 class="text-amber-300 font-semibold text-sm sm:text-base mb-1">Platform Under Maintenance</h3>
-              <p class="text-amber-200 text-xs sm:text-sm leading-relaxed">{$maintenanceModeMessage}</p>
-            </div>
-          </div>
-        </div>
-      {/if}
-
-      <!-- Compact Wallet Header Bar -->
-      <div class="wallet-header-bar">
-        <div class="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-0">
-          <!-- Wallet Status & Connection -->
-          <div class="flex items-center gap-2 sm:gap-4 w-full sm:w-auto justify-center sm:justify-start">
-            <div class="flex items-center gap-2">
-              <svg class="w-4 h-4 sm:w-5 sm:h-5 text-voi-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V8a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-              </svg>
-              {#if $selectedWallet}
-                <div class="flex flex-col sm:flex-row items-center gap-1 sm:gap-3">
-                  <div class="text-center sm:text-left">
-                    <span class="text-xs text-gray-400 block sm:inline">Connected:</span>
-                    <span class="font-mono text-xs sm:text-sm text-theme sm:ml-1">
-                      {$selectedWallet.address.slice(0, 6)}...{$selectedWallet.address.slice(-4)}
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <div class="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-400 rounded-full"></div>
-                    <span class="text-xs text-voi-400 font-medium">{$selectedWallet.app}</span>
-                  </div>
-                </div>
-              {:else}
-                <span class="text-xs sm:text-sm text-gray-400">Connect Wallet</span>
-              {/if}
-            </div>
-          </div>
-          
-          <!-- Wallet Component (Compact) -->
-          <div class="avm-wallet-container w-full sm:w-auto">
-            <Web3Wallet 
-              {algodClient} 
-              {availableWallets}
-              allowWatchAccounts={true}
-              wcProject={{
-                projectId: PUBLIC_WALLETCONNECT_PROJECT_ID,
-                projectName: 'House of Voi',
-                projectDescription: 'House of Voi',
-                projectUrl: 'https://demo.houseofvoi.com',
-                projectIcons: ['https://demo.houseofvoi.com/android-chrome-192x192.png']
-              }}
-            />
+      <!-- Maintenance Mode Banner - always rendered, shown when needed -->
+      <div class:hidden={!($isMaintenanceMode && $maintenanceModeMessage)} class="bg-gradient-to-r from-amber-900/90 to-orange-900/90 border border-amber-600/50 rounded-lg p-4 mb-4 sm:mb-6">
+        <div class="flex items-start gap-3">
+          <AlertTriangle class="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+          <div class="flex-1">
+            <h3 class="text-amber-300 font-semibold text-sm sm:text-base mb-1">Platform Under Maintenance</h3>
+            <p class="text-amber-200 text-xs sm:text-sm leading-relaxed">{$maintenanceModeMessage || ''}</p>
           </div>
         </div>
       </div>
+
+
 
 
       <!-- Public Content Always Visible -->
@@ -190,14 +236,14 @@
                   <span class="hidden sm:inline">Leaderboard</span>
                   <span class="sm:hidden text-xs">Leaders</span>
                 </button>
-                <button 
+                <!--<button 
                   class="tab-button {activeTab === 'analytics' ? 'active' : ''}" 
                   on:click={() => activeTab = 'analytics'}
                 >
                   <PieChart class="w-4 h-4 sm:w-5 sm:h-5" />
                   <span class="hidden sm:inline">Analytics</span>
                   <span class="sm:hidden text-xs">Stats</span>
-                </button>
+                </button>-->
               </div>
             </div>
 
@@ -205,15 +251,38 @@
             <div class="tab-content">
               <!-- Portfolio Tab - Mixed Public/Private Content -->
               <div class:hidden={activeTab !== 'portfolio'}>
-                {#if isWalletConnected}
-                  <!-- Full YBT Dashboard for connected users -->
-                  <YBTDashboard 
-                    {houseBalance} 
-                    {balanceLoading} 
-                    onRefreshBalance={refreshHouseBalance}
-                    on:balanceChanged={loadHouseBalance} 
+                <!-- Wallet Source Selector - only show when wallet connected -->
+                {#if anyWalletConnected}
+                <div class="mb-6">
+                  <WalletSourceSelector 
+                    bind:selectedSource={selectedWalletSource}
+                    on:change={handleWalletSourceChange}
+                    {algodClient}
+                    {availableWallets}
+                    wcProject={{
+                      projectId: PUBLIC_WALLETCONNECT_PROJECT_ID,
+                      projectName: 'House of Voi',
+                      projectDescription: 'House of Voi',
+                      projectUrl: 'https://demo.houseofvoi.com',
+                      projectIcons: ['https://demo.houseofvoi.com/android-chrome-192x192.png']
+                    }}
                   />
-                {:else}
+                </div>
+                {/if}
+                
+                <!-- YBT Dashboard - always rendered and visible -->
+                <YBTDashboard 
+                  {houseBalance} 
+                  {balanceLoading} 
+                  onRefreshBalance={refreshHouseBalance}
+                  on:balanceChanged={loadHouseBalance}
+                  isGamingWalletLocked={selectedWalletSource === 'gaming' && isSelectedWalletLocked}
+                  showConnectedView={true}
+                  hasWalletConnected={anyWalletConnected}
+                />
+                
+                <!-- Public YBT Dashboard - show when no wallet connected -->
+                <div class:hidden={anyWalletConnected}>
                   <!-- Public YBT Dashboard - adapted from YBTDashboard.svelte -->
                   <div class="space-y-4 sm:space-y-6">
                     <!-- Unified Portfolio Overview ---->
@@ -244,23 +313,23 @@
                       <div class="bg-gradient-to-r from-slate-700 to-slate-600 rounded-lg p-4 sm:p-6 border border-yellow-400/20 mb-4 sm:mb-6">
                         <div class="text-slate-400 text-xs sm:text-sm font-medium mb-2">Total Contract Value</div>
                         <div class="text-2xl sm:text-3xl md:text-4xl font-bold text-yellow-400 mb-2">
-                          {#if balanceLoading || !houseBalance}
-                            <div class="flex items-center">
-                              <svg class="animate-spin h-8 w-8 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              Loading...
-                            </div>
-                          {:else}
-                            {(houseBalance.total / 1_000_000).toFixed(6)} VOI
-                          {/if}
-                        </div>
-                        {#if !balanceLoading && houseBalance}
-                          <div class="text-xs sm:text-sm text-slate-400">
-                            Total pool available to YBT holders
+                          <!-- Loading state -->
+                          <div class:hidden={!(balanceLoading || !houseBalance)} class="flex items-center">
+                            <svg class="animate-spin h-8 w-8 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 818-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Loading...
                           </div>
-                        {/if}
+                          <!-- Loaded content -->
+                          <div class:hidden={balanceLoading || !houseBalance}>
+                            {houseBalance ? (houseBalance.total / 1_000_000).toFixed(6) : '0.000000'} VOI
+                          </div>
+                        </div>
+                        <!-- Pool info - always rendered, shown when loaded -->
+                        <div class:hidden={balanceLoading || !houseBalance} class="text-xs sm:text-sm text-slate-400">
+                          Total pool available to YBT holders
+                        </div>
                       </div>
 
                       <!-- Key Metrics Grid -->
@@ -280,24 +349,25 @@
                         <div class="bg-slate-700 rounded-lg p-3 sm:p-4">
                           <div class="text-slate-400 text-xs font-medium mb-2 flex items-center gap-1 sm:gap-2">
                             Contract Balance
-                            {#if houseBalance}
-                              <span class="text-xs px-1.5 py-0.5 sm:px-2 rounded-full {houseBalance.isOperational ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}">
-                                {houseBalance.isOperational ? '●' : '⚠'}
-                              </span>
-                            {/if}
+                            <!-- Status indicator - always rendered, shown when balance exists -->
+                            <span class:hidden={!houseBalance} class="text-xs px-1.5 py-0.5 sm:px-2 rounded-full {houseBalance?.isOperational ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}">
+                              {houseBalance?.isOperational ? '●' : '⚠'}
+                            </span>
                           </div>
-                          {#if balanceLoading || !houseBalance}
-                            <div class="text-lg sm:text-xl font-bold text-slate-400">Loading...</div>
-                          {:else}
+                          <!-- Loading state -->
+                          <div class:hidden={!(balanceLoading || !houseBalance)} class="text-lg sm:text-xl font-bold text-slate-400">Loading...</div>
+                          
+                          <!-- Loaded content -->
+                          <div class:hidden={balanceLoading || !houseBalance}>
                             <div class="text-lg sm:text-xl font-bold text-theme mb-1">
-                              {(houseBalance.total / 1e6).toFixed(2)} VOI
+                              {houseBalance ? (houseBalance.total / 1e6).toFixed(2) : '0.00'} VOI
                             </div>
                             <div class="text-xs text-slate-500">
-                              <span class="block sm:inline">{(houseBalance.available / 1e6).toFixed(1)} available</span>
+                              <span class="block sm:inline">{houseBalance ? (houseBalance.available / 1e6).toFixed(1) : '0.0'} available</span>
                               <span class="hidden sm:inline"> • </span>
-                              <span class="block sm:inline">{(houseBalance.locked / 1e6).toFixed(1)} locked</span>
+                              <span class="block sm:inline">{houseBalance ? (houseBalance.locked / 1e6).toFixed(1) : '0.0'} locked</span>
                             </div>
-                          {/if}
+                          </div>
                         </div>
 
                         <!-- Documentation -->
@@ -318,6 +388,23 @@
                         </div>
                       </div>
 
+                      <!-- Gaming Wallet Notice -->
+                      <div class="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4 mb-4">
+                        <div class="flex">
+                          <svg class="w-4 h-4 sm:w-5 sm:h-5 text-blue-400 mt-0.5 mr-2 sm:mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                          </svg>
+                          <div class="text-xs sm:text-sm">
+                            <p class="text-blue-300 font-medium">Multiple Ways to Stake</p>
+                            <p class="text-blue-400 mt-1">
+                              You can stake VOI using either an external wallet (Kibisis, Lute, etc.) or your 
+                              <a href="/app" class="text-voi-400 hover:text-voi-300 underline">gaming wallet</a> 
+                              from the slot machine.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
                       <!-- Action Buttons -->
                       <div class="space-y-3 mt-4 sm:mt-6">
                         <div class="btn-primary-large w-full opacity-50 cursor-not-allowed flex items-center justify-center">
@@ -330,7 +417,7 @@
 
                     </div>
                   </div>
-                {/if}
+                </div>
               </div>
               
               <!-- Public Leaderboard -->
@@ -340,7 +427,7 @@
                     <Crown class="w-5 h-5 text-yellow-400" />
                     <h2 class="text-lg font-bold text-theme">Top Players</h2>
                   </div>
-                  <Leaderboard maxHeight="700px" showPlayerHighlight={isWalletConnected} />
+                  <Leaderboard maxHeight="700px" showPlayerHighlight={anyWalletConnected} />
                 </div>
               </div>
               
@@ -362,7 +449,9 @@
                     </p>
                   </div>
                   
-                  <OddsAnalysis compact={false} showHouseMetrics={true} isModal={false} />
+                  {#if activeTab === 'analytics'}
+                    <!--<OddsAnalysis compact={false} showHouseMetrics={true} isModal={false} />-->
+                  {/if}
                 </div>
               </div>
             </div>
@@ -374,23 +463,25 @@
               <div class="flex items-center gap-2 mb-3 sm:mb-4">
                 <BarChart3 class="w-4 h-4 sm:w-5 sm:h-5 text-voi-400" />
                 <h2 class="text-base sm:text-lg font-bold text-theme">Platform Analytics</h2>
-                {#if $connectionStatus.fallbackActive}
-                  <span class="px-1.5 py-0.5 sm:px-2 sm:py-1 text-xs bg-amber-900/50 text-amber-300 rounded-full border border-amber-600/30">
-                    <span class="hidden sm:inline">Limited Data</span>
-                    <span class="sm:hidden">Limited</span>
-                  </span>
-                {/if}
+                <!-- Fallback indicator - always rendered, shown when fallback active -->
+                <span class:hidden={!$connectionStatus.fallbackActive} class="px-1.5 py-0.5 sm:px-2 sm:py-1 text-xs bg-amber-900/50 text-amber-300 rounded-full border border-amber-600/30">
+                  <span class="hidden sm:inline">Limited Data</span>
+                  <span class="sm:hidden">Limited</span>
+                </span>
               </div>
             
-            {#if $platformStats.loading}
-              <div class="flex items-center justify-center py-8">
-                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-voi-400"></div>
-              </div>
-            {:else if $platformStats.error}
-              <div class="text-red-400 text-center py-8">
-                Failed to load platform statistics: {$platformStats.error}
-              </div>
-            {:else if $platformStats.data}
+            <!-- Loading state - always rendered, shown based on loading -->
+            <div class:hidden={!$platformStats.loading} class="flex items-center justify-center py-8">
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-voi-400"></div>
+            </div>
+            
+            <!-- Error state - always rendered, shown based on error -->
+            <div class:hidden={!$platformStats.error || $platformStats.loading} class="text-red-400 text-center py-8">
+              Failed to load platform statistics: {$platformStats.error || ''}
+            </div>
+            
+            <!-- Data content - always rendered, shown when data exists -->
+            <div class:hidden={$platformStats.loading || $platformStats.error || !$platformStats.data}>
               <div class="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4">
                 <!-- Total Bets -->
                 <div class="bg-slate-700 rounded-lg p-2 sm:p-3">
@@ -476,15 +567,14 @@
                 </div>
               </div>
 
-              {#if $platformStats.source === 'local'}
-                <div class="mt-2 sm:mt-3 p-2 bg-amber-900/20 border border-amber-600/30 rounded-lg">
-                  <div class="flex items-center gap-1 sm:gap-2 text-xs text-amber-300">
-                    <Clock class="w-3 h-3" />
-                    <span>Limited local data</span>
-                  </div>
+              <!-- Local data indicator - always rendered, shown based on source -->
+              <div class:hidden={$platformStats.source !== 'local'} class="mt-2 sm:mt-3 p-2 bg-amber-900/20 border border-amber-600/30 rounded-lg">
+                <div class="flex items-center gap-1 sm:gap-2 text-xs text-amber-300">
+                  <Clock class="w-3 h-3" />
+                  <span>Limited local data</span>
                 </div>
-              {/if}
-            {/if}
+              </div>
+            </div>
             </div>
           </div>
 

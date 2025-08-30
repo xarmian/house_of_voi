@@ -326,24 +326,6 @@
           </h4>
 
           <div class="advanced-stats-grid">
-            <!-- Net Result -->
-            <div class="advanced-stat-card">
-              <div class="flex items-center gap-2 mb-2">
-                {#if isProfit}
-                  <TrendingUp class="w-5 h-5 text-green-400" />
-                {:else}
-                  <TrendingDown class="w-5 h-5 text-red-400" />
-                {/if}
-                <span class="text-sm font-medium text-gray-300">Net Result</span>
-              </div>
-              <div class="text-xl font-bold {isProfit ? 'text-green-400' : 'text-red-400'}">
-                {formatVOI(Number(stats.net_result))} VOI
-              </div>
-              <div class="text-sm text-gray-400">
-                ROI: {roi >= 0 ? '+' : ''}{roi.toFixed(2)}%
-              </div>
-            </div>
-
             <!-- Win Streaks -->
             <div class="advanced-stat-card">
               <div class="flex items-center gap-2 mb-2">

@@ -1088,8 +1088,8 @@ CREATE OR REPLACE FUNCTION get_payline_analysis(
 RETURNS TABLE(
     paylines_count INTEGER,
     total_bets BIGINT,
-    total_amount_bet BIGINT,
-    total_amount_won BIGINT,
+    total_amount_bet NUMERIC,
+    total_amount_won NUMERIC,
     avg_bet_per_line NUMERIC(20,2),
     win_rate NUMERIC(5,2),
     house_edge NUMERIC(5,2),

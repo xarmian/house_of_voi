@@ -4,6 +4,7 @@
   import { X, Volume2, VolumeX, Headphones, Music, MousePointer, Disc } from 'lucide-svelte';
   import { soundStore, soundPreferences, type SoundCategory } from '$lib/stores/sound';
   import { playButtonClick, playWinSound, playSpinStart, playReelStop, playLoss } from '$lib/services/soundService';
+  import { portal } from '$lib/utils/portal';
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -107,9 +108,10 @@
 </script>
 
 {#if isVisible}
-  <!-- Modal backdrop -->
+  <!-- Modal backdrop - rendered in document body via portal -->
   <div 
     class="modal-backdrop"
+    use:portal
     on:click={handleClose}
     transition:fade={{ duration: 200 }}
     role="dialog"
@@ -252,7 +254,8 @@
 
 <style>
   .modal-backdrop {
-    @apply fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4;
+    @apply fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4;
+    z-index: 9999; /* Higher than header z-40 and any other components */
   }
 
   .modal-content {

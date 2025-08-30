@@ -264,6 +264,24 @@ export class WalletService {
   }
 
   /**
+   * Get stored wallet address without decryption (for display purposes)
+   */
+  getStoredWalletAddress(): string | null {
+    if (!browser) return null;
+    
+    try {
+      const encryptedData = localStorage.getItem(WalletService.STORAGE_KEY);
+      if (!encryptedData) return null;
+      
+      const encryptedWallet: EncryptedWallet = JSON.parse(encryptedData);
+      return encryptedWallet.publicData?.address || null;
+    } catch (error) {
+      console.error('Error reading stored wallet address:', error);
+      return null;
+    }
+  }
+
+  /**
    * Generate secure session ID
    */
   private generateSessionId(): string {

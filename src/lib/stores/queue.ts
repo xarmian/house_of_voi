@@ -8,7 +8,7 @@ import { browser } from '$app/environment';
 import { estimateSpinTransactionCost, filterActivePendingSpins } from '$lib/utils/balanceUtils';
 
 const STORAGE_KEY = 'hov_queue';
-const MAX_QUEUE_SIZE = 500;
+const MAX_QUEUE_SIZE = 100;
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY = 5000; // 5 seconds
 
@@ -42,21 +42,20 @@ function createQueueStore() {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Clean up old spins (older than 24 hours)
-        const cutoff = Date.now() - (24 * 60 * 60 * 1000);
-        const filteredSpins = parsed.spins.filter((spin: QueuedSpin) => 
-          spin.timestamp > cutoff
-        );
+        // Keep only the most recent 100 spins
+        const limitedSpins = parsed.spins
+          .sort((a: QueuedSpin, b: QueuedSpin) => b.timestamp - a.timestamp)
+          .slice(0, MAX_QUEUE_SIZE);
         
         // Calculate reserved balance from active pending spins
-        const activePendingSpins = filterActivePendingSpins(filteredSpins);
+        const activePendingSpins = filterActivePendingSpins(limitedSpins);
         const totalReservedBalance = activePendingSpins.reduce((total, spin) => {
           return total + (spin.estimatedTotalCost || estimateSpinTransactionCost(spin.betPerLine, spin.selectedPaylines));
         }, 0);
         
         return {
           ...parsed,
-          spins: filteredSpins,
+          spins: limitedSpins,
           totalReservedBalance: totalReservedBalance || 0, // Ensure this field exists
           lastUpdated: Date.now()
         };
@@ -79,10 +78,25 @@ function createQueueStore() {
       const spinId = generateSpinId();
       
       update(state => {
-        // Remove oldest spins if queue is full
-        const spins = state.spins.length >= MAX_QUEUE_SIZE 
-          ? state.spins.slice(-(MAX_QUEUE_SIZE - 1))
-          : [...state.spins];
+        let spins = [...state.spins];
+        let totalPendingValue = state.totalPendingValue;
+        let totalReservedBalance = state.totalReservedBalance;
+
+        // Remove oldest spins if queue is at capacity
+        while (spins.length >= MAX_QUEUE_SIZE) {
+          const removedSpin = spins.shift(); // Remove oldest spin
+          if (removedSpin) {
+            // Update pending value if the removed spin was pending
+            if (removedSpin.status === SpinStatus.PENDING) {
+              totalPendingValue -= removedSpin.totalBet;
+            }
+            // Update reserved balance if the removed spin had reserved funds
+            const isActivePendingStatus = [SpinStatus.PENDING, SpinStatus.SUBMITTING].includes(removedSpin.status);
+            if (isActivePendingStatus) {
+              totalReservedBalance -= (removedSpin.estimatedTotalCost || removedSpin.totalBet);
+            }
+          }
+        }
 
         // Calculate estimated total cost if not provided
         const totalCostEstimate = estimatedTotalCost || estimateSpinTransactionCost(betPerLine, selectedPaylines);
@@ -103,8 +117,8 @@ function createQueueStore() {
         return {
           ...state,
           spins,
-          totalPendingValue: state.totalPendingValue + totalBet,
-          totalReservedBalance: state.totalReservedBalance + totalCostEstimate,
+          totalPendingValue: totalPendingValue + totalBet,
+          totalReservedBalance: totalReservedBalance + totalCostEstimate,
           lastUpdated: Date.now()
         };
       });

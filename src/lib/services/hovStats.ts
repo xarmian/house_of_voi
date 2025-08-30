@@ -126,9 +126,7 @@ class HovStatsService {
    */
   async initialize(): Promise<void> {
     await supabaseService.initialize();
-    if (PUBLIC_DEBUG_MODE === 'true') {
-      console.log('✅ HOV Stats Service initialized');
-    }
+    // Note: Initialization logging is handled by the store
   }
 
   /**
@@ -569,6 +567,27 @@ class HovStatsService {
    */
   clearCache(): void {
     Object.values(this.caches).forEach(cache => cache.clear());
+  }
+
+  /**
+   * Clear only leaderboard cache
+   */
+  clearLeaderboardCache(): void {
+    this.caches.leaderboard.clear();
+  }
+
+  /**
+   * Clear only platform stats cache
+   */
+  clearPlatformStatsCache(): void {
+    this.caches.platformStats.clear();
+  }
+
+  /**
+   * Clear specific cache sections
+   */
+  clearSpecificCache(section: 'platformStats' | 'leaderboard' | 'playerStats' | 'timeStats'): void {
+    this.caches[section].clear();
   }
 
   /**

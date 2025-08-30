@@ -1,7 +1,9 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { walletStore } from '$lib/stores/walletAdapter';
+  import { walletStore as externalWalletStore } from '$lib/stores/walletAdapter';
+  import { walletStore as gamingWalletStore } from '$lib/stores/wallet';
   import { ybtService } from '$lib/services/ybt';
+  import { BETTING_CONSTANTS } from '$lib/constants/betting';
   import type { YBTDepositParams } from '$lib/types/ybt';
 
   export let open = false;
@@ -13,13 +15,28 @@
   let error = '';
   let depositCost = BigInt(0);
   let isLoadingCost = false;
+  let walletContext: any = null;
+
+  // Determine which wallet the YBT service will use
+  async function loadWalletContext() {
+    try {
+      walletContext = await ybtService.getWalletContext();
+    } catch (error) {
+      console.error('Error loading wallet context:', error);
+    }
+  }
+
+  // Reactive values based on which wallet YBT service will use
+  $: activeWalletStore = walletContext?.type === 'gaming' ? $gamingWalletStore : $externalWalletStore;
+  $: walletBalance = walletContext?.type === 'gaming' ? $gamingWalletStore.balance : $externalWalletStore.balance;
+  $: walletAccount = walletContext?.type === 'gaming' ? $gamingWalletStore.account : $externalWalletStore.account;
 
   $: voiAmount = parseFloat(depositAmount) || 0;
   $: microVoiAmount = BigInt(Math.floor(voiAmount * 1_000_000));
   $: totalPaymentAmount = microVoiAmount + depositCost;
   $: transactionFee = BigInt(4000); // 4000 microAlgos for app call + inner payment
   $: totalRequired = totalPaymentAmount + transactionFee;
-  $: canDeposit = voiAmount > 0 && $walletStore.balance >= Number(totalRequired) && !isProcessing && $walletStore.account;
+  $: canDeposit = voiAmount > 0 && walletBalance >= Number(totalRequired) && !isProcessing && walletAccount;
 
   async function loadDepositCost() {
     if (!open) return;
@@ -36,9 +53,17 @@
   }
 
   async function handleDeposit() {
-    console.log('handleDeposit called', { canDeposit, account: $walletStore.account });
+    console.log('handleDeposit called', { canDeposit, account: walletAccount });
     
-    if (!canDeposit || !$walletStore.account) return;
+    if (!canDeposit || !walletAccount) return;
+
+    // Validate deposit amount with 1 VOI reserve requirement
+    const validation = ybtService.validateStakingAmount(totalPaymentAmount, BigInt(walletBalance));
+    
+    if (!validation.valid) {
+      error = validation.error || 'Invalid deposit amount';
+      return;
+    }
 
     isProcessing = true;
     error = '';
@@ -86,16 +111,18 @@
   }
 
   function setMaxAmount() {
-    const maxVoi = $walletStore.balance / 1_000_000;
+    const maxVoi = walletBalance / 1_000_000;
     const depositCostVoi = Number(depositCost) / 1_000_000;
     const transactionFeeVoi = Number(transactionFee) / 1_000_000;
-    const availableForDeposit = Math.max(0, maxVoi - depositCostVoi - transactionFeeVoi - 0.001); // Leave 0.001 VOI buffer
+    const reserveAmountVoi = BETTING_CONSTANTS.STAKING_RESERVE_AMOUNT / 1_000_000;
+    const availableForDeposit = Math.max(0, maxVoi - depositCostVoi - transactionFeeVoi - reserveAmountVoi);
     depositAmount = availableForDeposit.toFixed(6);
   }
 
-  // Load deposit cost when modal opens
+  // Load deposit cost and wallet context when modal opens
   $: if (open) {
     loadDepositCost();
+    loadWalletContext();
   }
 </script>
 
@@ -123,7 +150,7 @@
         <div class="mb-4 p-3 bg-slate-700 rounded-lg">
           <div class="text-sm text-slate-400">Available Balance</div>
           <div class="text-lg font-bold text-theme">
-            {($walletStore.balance / 1_000_000).toFixed(6)} VOI
+            {(walletBalance / 1_000_000).toFixed(6)} VOI
           </div>
         </div>
 
@@ -154,7 +181,7 @@
               type="number"
               step="0.000001"
               min="0"
-              max={$walletStore.balance / 1_000_000}
+              max={walletBalance / 1_000_000}
               bind:value={depositAmount}
               placeholder="0.000000"
               class="input-field w-full pr-16"
@@ -235,12 +262,27 @@
           </button>
         </div>
 
-        <!-- Info -->
-        <div class="mt-4 p-3 bg-slate-900 rounded-lg">
-          <div class="text-xs text-slate-400">
-            <p class="mb-1">• YBT shares represent your portion of the house funds</p>
-            <p class="mb-1">• You earn yield based on your share percentage</p>
-            <p>• Shares can be withdrawn at any time</p>
+        <!-- Info and Risk Disclaimer -->
+        <div class="mt-4 space-y-3">
+          <!-- Benefits -->
+          <div class="p-3 bg-slate-900 rounded-lg">
+            <div class="text-xs text-slate-400">
+              <p class="mb-1">• YBT shares represent your portion of the house funds</p>
+              <p class="mb-1">• You earn yield based on your share percentage</p>
+              <p>• Shares can be withdrawn at any time</p>
+            </div>
+          </div>
+          
+          <!-- Risk Disclaimer -->
+          <div class="p-3 bg-amber-900/20 border border-amber-700/50 rounded-lg">
+            <div class="text-xs">
+              <p class="text-amber-400 font-semibold mb-1">⚠️ House Staking Risk:</p>
+              <p class="text-amber-300">
+                As a house contributor, you share in both profits and losses. 
+                You earn when the house wins, but can lose tokens when players win. 
+                Your deposit is at risk. Only stake what you can afford to lose.
+              </p>
+            </div>
           </div>
         </div>
       </div>

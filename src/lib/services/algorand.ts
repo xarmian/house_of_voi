@@ -572,7 +572,10 @@ export class AlgorandService {
     } catch (error) {
       console.warn('⚠️ Contract grid retrieval failed, falling back to local generation:', error);
       // Fallback to local generation if contract call fails
-      return await this.getBetGridLocally(betKey, address);
+      // return await this.getBetGridLocally(betKey, address);
+      
+      // return a blank grid
+      return '';
     }
   }
 

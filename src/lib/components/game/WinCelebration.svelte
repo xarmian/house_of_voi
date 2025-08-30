@@ -130,6 +130,9 @@
   let symbolId = 0;
   let winningPaylines: WinningPaylineData[] = [];
   let showWinLines = false;
+  
+  // Track all timeouts to properly clean them up
+  let activeTimeouts: NodeJS.Timeout[] = [];
 
   // Calculate normalized amounts and multiplier
   $: normalizedWinAmount = winAmount / 1e6;
@@ -261,13 +264,13 @@
     });
 
     // Show win text with delay
-    setTimeout(() => {
+    activeTimeouts.push(setTimeout(() => {
       showWinText = true;
-    }, 200);
+    }, 200));
 
-    setTimeout(() => {
+    activeTimeouts.push(setTimeout(() => {
       showWinAmount = true;
-    }, 600);
+    }, 600));
 
     // Start particle effects
     if (preferences.particlesEnabled && !reduceMotion) {
@@ -318,9 +321,9 @@
     particles = newParticles;
 
     // Remove particles after animation
-    setTimeout(() => {
+    activeTimeouts.push(setTimeout(() => {
       particles = [];
-    }, 2000);
+    }, 2000));
   }
 
   function createCoinRain() {
@@ -339,9 +342,9 @@
     coins = newCoins;
 
     // Remove coins after animation
-    setTimeout(() => {
+    activeTimeouts.push(setTimeout(() => {
       coins = [];
-    }, 3000);
+    }, 3000));
   }
 
   function createShootingSymbols() {
@@ -395,19 +398,19 @@
 
     // Remove symbols after animation (longer for jackpot)
     const cleanupTime = winLevel === 'jackpot' ? 5000 : 3000;
-    setTimeout(() => {
+    activeTimeouts.push(setTimeout(() => {
       shootingSymbols = [];
-    }, cleanupTime);
+    }, cleanupTime));
   }
 
   function createScreenShake() {
     if (celebrationContainer) {
       celebrationContainer.style.animation = `screen-shake 0.5s ease-in-out`;
-      setTimeout(() => {
+      activeTimeouts.push(setTimeout(() => {
         if (celebrationContainer) {
           celebrationContainer.style.animation = '';
         }
-      }, 500);
+      }, 500));
     }
   }
 
@@ -424,10 +427,15 @@
     `;
 
     document.body.appendChild(flash);
-    setTimeout(() => flash.remove(), 600);
+    activeTimeouts.push(setTimeout(() => flash.remove(), 600));
   }
 
   function cleanup() {
+    // Clear all active timeouts
+    activeTimeouts.forEach(timeout => clearTimeout(timeout));
+    activeTimeouts = [];
+    
+    // Reset all state
     showWinText = false;
     showWinAmount = false;
     showWinLines = false;
