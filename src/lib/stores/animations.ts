@@ -226,7 +226,8 @@ function createPerformanceStore() {
     lastFrameTime: performance.now()
   });
 
-  let rafId: number;
+  let rafId: number | null = null;
+  let running = false;
 
   const updatePerformance = () => {
     const fps = frameMonitor.update();
@@ -240,7 +241,10 @@ function createPerformanceStore() {
       lastFrameTime: performance.now()
     }));
 
-    rafId = requestAnimationFrame(updatePerformance);
+    // Schedule next frame only if still running
+    if (running) {
+      rafId = requestAnimationFrame(updatePerformance);
+    }
   };
 
   return {
@@ -248,13 +252,17 @@ function createPerformanceStore() {
     
     // Start monitoring
     startMonitoring: () => {
+      if (running) return; // idempotent
+      running = true;
       rafId = requestAnimationFrame(updatePerformance);
     },
 
     // Stop monitoring
     stopMonitoring: () => {
-      if (rafId) {
+      running = false;
+      if (rafId !== null) {
         cancelAnimationFrame(rafId);
+        rafId = null;
       }
     },
 

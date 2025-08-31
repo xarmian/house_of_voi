@@ -238,19 +238,20 @@ class SupabaseService {
   }
 
   /**
-   * Subscribe to real-time changes on a table
+   * Subscribe to real-time changes on a table.
+   * Returns an unsubscribe function that cleans up the channel.
    */
   public subscribe<T = any>(
     table: keyof Database['public']['Tables'],
     callback: (payload: { eventType: string; new: T; old: T }) => void,
     filter?: string
-  ) {
+  ): () => void {
     if (!this.client) {
       throw new Error('Client not initialized');
     }
 
-    let subscription = this.client
-      .channel(`${table}_changes`)
+    const channel = this.client
+      .channel(`${String(table)}_changes`)
       .on(
         'postgres_changes',
         {
@@ -262,7 +263,23 @@ class SupabaseService {
         callback
       );
 
-    return subscription.subscribe();
+    // Start the subscription. We don’t need to await here.
+    channel.subscribe();
+
+    let unsubscribed = false;
+    return () => {
+      if (unsubscribed) return;
+      unsubscribed = true;
+      try {
+        // Prefer channel-level unsubscribe in case client outlives this call site
+        // @ts-ignore – runtime API provides unsubscribe()
+        channel.unsubscribe?.();
+      } catch {}
+      try {
+        // Remove channel from client as an extra guard
+        this.client?.removeChannel?.(channel as any);
+      } catch {}
+    };
   }
 
   /**

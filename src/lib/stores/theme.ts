@@ -1,6 +1,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
 import { preferencesStore, themePreferences as unifiedThemePreferences } from './preferences';
+import { themeImagePreloader } from '$lib/services/themeImagePreloader';
 
 export interface ThemeColors {
   primary: string;
@@ -268,6 +269,12 @@ function createThemeStore() {
       if (!availableThemes[themeName]) {
         console.warn(`Theme "${themeName}" not found`);
         return;
+      }
+
+      // Clear preloaded assets for previous theme to prevent growth
+      const prevThemeName = get(unifiedThemePreferences).currentTheme;
+      if (prevThemeName && prevThemeName !== themeName) {
+        themeImagePreloader.clearPreloadedImages([prevThemeName]);
       }
 
       const newThemeColors = availableThemes[themeName];
