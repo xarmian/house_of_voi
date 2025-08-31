@@ -1,9 +1,10 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import type { WalletState, WalletAccount } from '$lib/types/wallet';
 import { walletService } from '$lib/services/wallet';
 import { algorandService } from '$lib/services/algorand';
 import { balanceManager, type BalanceChangeEventDetail } from '$lib/services/balanceManager';
 import { browser } from '$app/environment';
+import { page } from '$app/stores';
 
 // Balance change events are now handled by balanceManager
 export type { BalanceChangeEvent, BalanceChangeEventDetail } from '$lib/services/balanceManager';
@@ -23,15 +24,29 @@ function createWalletStore() {
   // Balance change tracking is now handled by balanceManager
   let balanceChangeUnsubscribe: (() => void) | null = null;
   let currentMonitoredAddress: string | null = null;
+  let pageUnsubscribe: (() => void) | null = null;
+  let currentContext: 'gaming' | 'house' = 'gaming';
+
+  // Get appropriate context for gaming wallet based on current route
+  const getContextForRoute = (): 'gaming' | 'house' => {
+    const routeId = get(page).route?.id;
+    if (routeId?.startsWith('/app')) {
+      return 'gaming'; // Fast refresh for active gaming
+    } else if (routeId?.startsWith('/house')) {
+      return 'house'; // Slower refresh for portfolio view
+    }
+    return 'gaming'; // Default to gaming
+  };
 
   const startBalanceMonitoring = (address: string) => {
     // Stop any existing monitoring first
     stopBalanceMonitoring();
     
     currentMonitoredAddress = address;
+    currentContext = getContextForRoute();
     
-    // Start monitoring with the balance manager (gaming context for fast refresh)
-    balanceManager.startMonitoring(address, { context: 'gaming' });
+    // Start monitoring with the appropriate context
+    balanceManager.startMonitoring(address, { context: currentContext });
     
     // Subscribe to balance change events
     balanceChangeUnsubscribe = balanceManager.onBalanceChange((event) => {
@@ -45,12 +60,28 @@ function createWalletStore() {
         }));
       }
     });
+
+    // Subscribe to route changes to update context for gaming wallet
+    if (browser && !pageUnsubscribe) {
+      pageUnsubscribe = page.subscribe(($page) => {
+        if (currentMonitoredAddress) {
+          const newContext = getContextForRoute();
+          if (newContext !== currentContext) {
+            // Stop monitoring with old context
+            balanceManager.stopMonitoring(currentMonitoredAddress, currentContext);
+            // Start monitoring with new context
+            currentContext = newContext;
+            balanceManager.startMonitoring(currentMonitoredAddress, { context: currentContext });
+          }
+        }
+      });
+    }
   };
 
   const stopBalanceMonitoring = () => {
-    // Stop balance monitoring in the manager
+    // Stop balance monitoring in the manager with current context
     if (currentMonitoredAddress) {
-      balanceManager.stopMonitoring(currentMonitoredAddress, 'gaming');
+      balanceManager.stopMonitoring(currentMonitoredAddress, currentContext);
       currentMonitoredAddress = null;
     }
     
@@ -59,6 +90,12 @@ function createWalletStore() {
       balanceChangeUnsubscribe();
       balanceChangeUnsubscribe = null;
     }
+
+    // Unsubscribe from route changes
+    if (pageUnsubscribe) {
+      pageUnsubscribe();
+      pageUnsubscribe = null;
+    }
   };
 
   return {
@@ -66,6 +103,13 @@ function createWalletStore() {
     
     async initialize() {
       if (!browser) return;
+      
+      // Don't re-initialize if wallet is already connected - this prevents
+      // the wallet from appearing "locked" during navigation
+      const currentState = get({ subscribe });
+      if (currentState.isConnected && currentState.account) {
+        return;
+      }
       
       try {
         if (walletService.hasStoredWallet()) {

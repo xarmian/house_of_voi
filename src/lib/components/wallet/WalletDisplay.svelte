@@ -4,7 +4,7 @@
   import { walletService } from '$lib/services/wallet';
   import { algorandService } from '$lib/services/algorand';
   import { balanceManager } from '$lib/services/balanceManager';
-  import { Wallet, MoreHorizontal, RefreshCw, Unlock, Lock, TrendingUp } from 'lucide-svelte';
+  import { Wallet, MoreHorizontal, RefreshCw, Unlock, Lock, TrendingUp, Copy, Check, User } from 'lucide-svelte';
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import WalletDetailsModal from './WalletDetailsModal.svelte';
   import GamingWalletStakingModal from './GamingWalletStakingModal.svelte';
@@ -19,6 +19,7 @@
   let showDetailsModal = false;
   let showStakingModal = false;
   let isRefreshing = false;
+  let copied = false;
   
   // Balance animation state
   let balanceAnimationComponent: BalanceUpdateAnimation;
@@ -135,6 +136,19 @@
     // Refresh wallet balance after successful staking/unstaking
     refreshBalance();
     dispatch('stakingSuccess', event.detail);
+  }
+  
+  async function copyAddress() {
+    const address = $isWalletConnected ? $walletAddress : publicWalletData?.address;
+    if (address) {
+      try {
+        await navigator.clipboard.writeText(address);
+        copied = true;
+        setTimeout(() => copied = false, 2000);
+      } catch (err) {
+        console.error('Failed to copy address:', err);
+      }
+    }
   }
 </script>
 
@@ -291,7 +305,34 @@
           <p class="text-xs text-theme-text opacity-70">Address</p>
           <Lock class="w-3 h-3 text-theme-text opacity-70" />
         </div>
-        <p class="font-mono text-sm text-theme">{shortAddress}</p>
+        <div class="flex items-center gap-2">
+          <a 
+            href="https://voirewards.com/wallet/{publicWalletData?.address || ''}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="font-mono text-sm text-voi-400 hover:text-voi-300 transition-colors underline"
+          >
+            {shortAddress}
+          </a>
+          <a
+            href="/profile/{publicWalletData?.address || ''}"
+            class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
+            title="View profile"
+          >
+            <User class="w-3 h-3" />
+          </a>
+          <button
+            on:click={copyAddress}
+            class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
+            title="Copy address"
+          >
+            {#if copied}
+              <Check class="w-3 h-3 text-green-400" />
+            {:else}
+              <Copy class="w-3 h-3" />
+            {/if}
+          </button>
+        </div>
         {#if publicWalletData?.isPasswordless}
           <p class="text-xs text-amber-400 mt-1">Passwordless wallet</p>
         {/if}
@@ -322,7 +363,34 @@
           <Lock class="w-3 h-3" />
         </button>
       </div>
-      <p class="font-mono text-sm text-theme">{shortAddress}</p>
+      <div class="flex items-center gap-2">
+        <a 
+          href="https://voirewards.com/wallet/{$walletAddress || ''}"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="font-mono text-sm text-voi-400 hover:text-voi-300 transition-colors underline"
+        >
+          {shortAddress}
+        </a>
+        <a
+          href="/profile/{$walletAddress || ''}"
+          class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
+          title="View profile"
+        >
+          <User class="w-3 h-3" />
+        </a>
+        <button
+          on:click={copyAddress}
+          class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
+          title="Copy address"
+        >
+          {#if copied}
+            <Check class="w-3 h-3 text-green-400" />
+          {:else}
+            <Copy class="w-3 h-3" />
+          {/if}
+        </button>
+      </div>
       <p class="text-xs text-theme-text opacity-70 mt-2">
         Click the menu to access functions • Click lock to secure
       </p>

@@ -200,15 +200,17 @@
   {/if}
 
   <!-- Portfolio Summary -->
-  <div class="bg-gradient-to-r from-voi-600/20 to-voi-500/20 rounded-lg p-4 border border-voi-500/30">
-    <div class="text-voi-400 text-xs font-medium mb-1">Portfolio Value</div>
-    <div class="text-xl font-bold text-theme">
-      {(Number(portfolioValue) / 1_000_000).toFixed(6)} VOI
+  {#if !isLoading || isRefreshing}
+    <div class="bg-gradient-to-r from-voi-600/20 to-voi-500/20 rounded-lg p-4 border border-voi-500/30">
+      <div class="text-voi-400 text-xs font-medium mb-1">Portfolio Value</div>
+      <div class="text-xl font-bold text-theme">
+        {(Number(portfolioValue) / 1_000_000).toFixed(6)} VOI
+      </div>
+      <div class="text-xs text-theme-text opacity-70">
+        {sharePercentage.toFixed(4)}% of total pool
+      </div>
     </div>
-    <div class="text-xs text-theme-text opacity-70">
-      {sharePercentage.toFixed(4)}% of total pool
-    </div>
-  </div>
+  {/if}
 
   {#if hasShares}
     <!-- Quick Unstake Options -->

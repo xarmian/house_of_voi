@@ -32,6 +32,7 @@
   export let compact = false;
   export let showComparison = true;
   export let autoRefresh = true;
+  export let initialStats: PlayerStats | null = null;
 
   const dispatch = createEventDispatcher();
 
@@ -39,33 +40,27 @@
   // Try connected wallet first, then public wallet data for locked wallets
   $: targetAddress = playerAddress || $walletStore.account?.address || walletService.getPublicWalletData()?.address;
   
-  // Reset hasLoaded when target address changes
-  $: if (targetAddress) {
+  // Reset hasLoaded when target address changes (unless initialStats provided)
+  $: if (targetAddress && !initialStats) {
     hasLoaded = false;
   }
 
   // State
-  let stats: PlayerStats | null = null;
+  let stats: PlayerStats | null = initialStats;
   let loading = false;
   let error: string | null = null;
   let lastUpdated: Date | null = null;
   let refreshing = false;
   let autoRefreshInterval: NodeJS.Timeout | null = null;
-  let hasLoaded = false;
+  let hasLoaded = !!initialStats;
   let showHistoryModal = false;
 
-  // Local stats for comparison/fallback
-  $: localStats = $queueStats;
-  $: usingFallback = $connectionStatus.fallbackActive || !stats;
 
   // Computed values
   $: roi = stats && Number(stats.total_amount_bet) > 0 
     ? (Number(stats.net_result) / Number(stats.total_amount_bet)) * 100 
     : 0;
 
-  $: avgProfitPerSpin = stats && Number(stats.total_spins) > 0 
-    ? Number(stats.net_result) / Number(stats.total_spins)
-    : 0;
 
   $: isProfit = stats ? Number(stats.net_result) >= 0 : false;
 
@@ -76,57 +71,40 @@
       label: 'Total Spins',
       icon: Target,
       color: 'text-blue-400',
-      format: (value: bigint) => value.toString(),
-      fallback: () => localStats.totalSpins.toString()
+      format: (value: bigint) => value.toString()
     },
     {
       key: 'total_amount_bet',
       label: 'Total Wagered',
       icon: Coins,
       color: 'text-yellow-400',
-      format: (value: bigint) => formatVOI(Number(value)) + ' VOI',
-      fallback: () => formatVOI(localStats.totalWagered) + ' VOI'
-    },
-    {
-      key: 'total_amount_won',
-      label: 'Total Won',
-      icon: Trophy,
-      color: 'text-green-400',
-      format: (value: bigint) => formatVOI(Number(value)) + ' VOI',
-      fallback: () => formatVOI(localStats.totalWinnings) + ' VOI'
+      format: (value: bigint) => formatVOI(Number(value)) + ' VOI'
     },
     {
       key: 'win_rate',
       label: 'Win Rate',
       icon: Percent,
       color: 'text-purple-400',
-      format: (value: number) => `${value.toFixed(1)}%`,
-      fallback: () => localStats.totalSpins > 0 
-        ? `${((localStats.completedSpins / localStats.totalSpins) * 100).toFixed(1)}%`
-        : '0%'
+      format: (value: number) => `${value.toFixed(1)}%`
     },
     {
       key: 'largest_single_win',
       label: 'Biggest Win',
       icon: Crown,
       color: 'text-orange-400',
-      format: (value: bigint) => formatVOI(Number(value)) + ' VOI',
-      fallback: () => 'Not Available'
+      format: (value: bigint) => formatVOI(Number(value)) + ' VOI'
     },
     {
       key: 'average_bet_size',
       label: 'Avg Bet Size',
       icon: BarChart3,
       color: 'text-indigo-400',
-      format: (value: number) => formatVOI(value) + ' VOI',
-      fallback: () => localStats.totalSpins > 0 
-        ? formatVOI(localStats.totalWagered / localStats.totalSpins) + ' VOI'
-        : '0 VOI'
+      format: (value: number) => formatVOI(value) + ' VOI'
     }
   ];
 
   onMount(() => {
-    if (targetAddress && $connectionStatus.initialized) {
+    if (targetAddress && !initialStats) {
       loadPlayerStats();
     }
     if (autoRefresh) {
@@ -138,8 +116,8 @@
     };
   });
 
-  // Reactive statements for initialization and address changes
-  $: if (targetAddress && $connectionStatus.initialized && !loading && !hasLoaded) {
+  // Reactive statements for address changes
+  $: if (targetAddress && !loading && !hasLoaded && !initialStats) {
     loadPlayerStats();
   }
 
@@ -210,7 +188,7 @@
     if (streak >= 10) return 'text-yellow-400';
     if (streak >= 5) return 'text-green-400';
     if (streak >= 3) return 'text-blue-400';
-    return 'text-gray-400';
+    return 'text-theme-text opacity-60';
   }
 
   function formatAddress(address: string): string {
@@ -234,22 +212,17 @@
             </p>
           {/if}
         </div>
-        {#if usingFallback}
-          <span class="px-2 py-1 text-xs bg-amber-900/50 text-amber-300 rounded-full border border-amber-600/30">
-            {$connectionStatus.fallbackActive ? 'Limited Data' : 'Local Only'}
-          </span>
-        {/if}
       </div>
       
       <div class="flex items-center gap-2">
-        {#if lastUpdated && !usingFallback}
+        {#if lastUpdated}
           <span class="text-xs text-gray-500">
             Updated {lastUpdated.toLocaleTimeString()}
           </span>
         {/if}
         <button
           on:click={() => showHistoryModal = true}
-          disabled={!targetAddress || usingFallback}
+          disabled={!targetAddress}
           class="btn-secondary text-sm"
           title="View full playing history"
         >
@@ -279,7 +252,40 @@
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-voi-400 mx-auto mb-4"></div>
       <p class="text-gray-400 text-center">Loading player statistics...</p>
     </div>
-  {:else if error && !stats && !usingFallback}
+  {:else if loading && stats}
+    <!-- Loading with skeleton placeholders -->
+    <div class="stats-content">
+      <div class="stats-grid">
+        {#each statConfigs as config}
+          <div class="stat-card skeleton" transition:fade={{ duration: 150 }}>
+            <div class="flex items-center justify-between mb-2">
+              <svelte:component this={config.icon} class="w-5 h-5 {config.color} opacity-40" />
+              <div class="skeleton-text h-4 w-16"></div>
+            </div>
+            <div class="skeleton-text h-6 w-24 mb-1"></div>
+            <div class="skeleton-text h-3 w-20"></div>
+          </div>
+        {/each}
+      </div>
+      
+      <!-- Performance section skeleton -->
+      <div class="performance-section mt-6">
+        <div class="skeleton-text h-5 w-32 mb-4"></div>
+        <div class="performance-grid">
+          <div class="performance-card skeleton">
+            <div class="skeleton-text h-4 w-16 mb-2"></div>
+            <div class="skeleton-text h-8 w-20 mb-1"></div>
+            <div class="skeleton-text h-3 w-24"></div>
+          </div>
+          <div class="performance-card skeleton">
+            <div class="skeleton-text h-4 w-20 mb-2"></div>
+            <div class="skeleton-text h-8 w-16 mb-1"></div>
+            <div class="skeleton-text h-3 w-20"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {:else if error && !stats}
     <!-- Error -->
     <div class="error-state">
       <div class="text-red-400 text-center mb-2">Failed to load statistics</div>
@@ -297,9 +303,6 @@
           <div class="stat-card" transition:fly={{ y: 20, duration: 300 }}>
             <div class="flex items-center justify-between mb-2">
               <svelte:component this={config.icon} class="w-5 h-5 {config.color}" />
-              {#if usingFallback}
-                <span class="text-xs text-amber-400">Local</span>
-              {/if}
             </div>
             <div class="stat-value">
               {#if stats}
@@ -309,7 +312,7 @@
                   {config.format(stats[config.key] as number)}
                 {/if}
               {:else}
-                {config.fallback()}
+                -
               {/if}
             </div>
             <div class="stat-label">{config.label}</div>
@@ -317,7 +320,7 @@
         {/each}
       </div>
 
-      {#if stats && !usingFallback}
+      {#if stats}
         <!-- Advanced stats (only when connected) -->
         <div class="advanced-stats" transition:fly={{ y: 20, duration: 300, delay: 200 }}>
           <h4 class="text-lg font-semibold text-theme mb-4 flex items-center gap-2">
@@ -382,81 +385,11 @@
               </div>
             </div>
 
-            <!-- Profit per Spin -->
-            <div class="advanced-stat-card">
-              <div class="flex items-center gap-2 mb-2">
-                <Coins class="w-5 h-5 text-green-400" />
-                <span class="text-sm font-medium text-gray-300">Avg Profit</span>
-              </div>
-              <div class="text-xl font-bold {avgProfitPerSpin >= 0 ? 'text-green-400' : 'text-red-400'}">
-                {formatVOI(avgProfitPerSpin)} VOI
-              </div>
-              <div class="text-sm text-gray-400">
-                Per spin
-              </div>
-            </div>
           </div>
         </div>
 
-        <!-- Performance summary -->
-        <div class="performance-summary" transition:fly={{ y: 20, duration: 300, delay: 300 }}>
-          <h4 class="text-lg font-semibold text-theme mb-3 flex items-center gap-2">
-            <Trophy class="w-5 h-5" />
-            Performance Summary
-          </h4>
-          
-          <div class="summary-content">
-            <p class="text-gray-300 mb-2">
-              {#if Number(stats.total_spins) === 0}
-                No gaming activity recorded for this player.
-              {:else if isProfit}
-                🎉 This player is ahead by <span class="text-green-400 font-semibold">{formatVOI(Number(stats.net_result))} VOI</span> 
-                over {stats.total_spins} spins with a {stats.win_rate.toFixed(1)}% win rate.
-              {:else}
-                This player has wagered <span class="text-yellow-400 font-semibold">{formatVOI(Number(stats.total_amount_bet))} VOI</span> 
-                across {stats.total_spins} spins with a {stats.win_rate.toFixed(1)}% win rate.
-              {/if}
-            </p>
-            
-            {#if Number(stats.total_spins) > 0}
-              <p class="text-sm text-gray-400 mb-3">
-                {#if stats.longest_winning_streak > 5}
-                  🔥 Impressive {stats.longest_winning_streak}-win streak!
-                {:else if Number(stats.largest_single_win) > Number(stats.average_bet_size) * 10}
-                  💎 Biggest win was {formatVOI(Number(stats.largest_single_win))} VOI
-                {:else}
-                  🎲 Active for {formatTimespan(stats.days_active)} with {stats.total_paylines_played} total paylines played
-                {/if}
-              </p>
-
-              <!-- View History button -->
-              <button
-                on:click={() => showHistoryModal = true}
-                class="btn-primary text-sm flex items-center gap-2"
-                title="View complete playing history"
-              >
-                <History class="w-4 h-4" />
-                View Full History
-              </button>
-            {/if}
-          </div>
-        </div>
       {/if}
 
-      <!-- Fallback info -->
-      {#if usingFallback && $connectionStatus.fallbackActive}
-        <div class="fallback-notice" transition:fade={{ duration: 300 }}>
-          <div class="flex items-start gap-3 p-4 bg-amber-900/20 border border-amber-600/30 rounded-lg">
-            <Clock class="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <p class="text-amber-300 font-medium mb-1">Limited Statistics</p>
-              <p class="text-sm text-amber-200/80">
-                Showing local data only. Connect to Supabase for complete historical statistics.
-              </p>
-            </div>
-          </div>
-        </div>
-      {/if}
     </div>
   {/if}
 </div>
@@ -470,7 +403,7 @@
 
 <style>
   .player-stats-container {
-    @apply bg-slate-800 rounded-b-xl border border-slate-700 overflow-hidden;
+    @apply bg-surface-primary rounded-b-xl border border-surface-border overflow-hidden;
   }
 
   .compact {
@@ -478,7 +411,7 @@
   }
 
   .stats-header {
-    @apply p-4 border-b border-slate-700 bg-slate-800/50;
+    @apply p-4 border-b border-surface-border bg-surface-primary bg-opacity-50;
   }
 
   .empty-state, .loading-state, .error-state {
@@ -494,7 +427,7 @@
   }
 
   .stat-card {
-    @apply bg-slate-700/50 rounded-lg p-4 border border-slate-600/50;
+    @apply bg-surface-secondary bg-opacity-50 rounded-lg p-4 border border-surface-border border-opacity-50;
   }
 
   .stat-value {
@@ -502,7 +435,7 @@
   }
 
   .stat-label {
-    @apply text-xs text-gray-400 font-medium;
+    @apply text-xs text-theme-text opacity-60 font-medium;
   }
 
   .advanced-stats {
@@ -514,11 +447,11 @@
   }
 
   .advanced-stat-card {
-    @apply bg-slate-700/30 rounded-lg p-4 border border-slate-600/30;
+    @apply bg-surface-secondary bg-opacity-30 rounded-lg p-4 border border-surface-border border-opacity-30;
   }
 
   .performance-summary {
-    @apply bg-slate-700/20 rounded-lg p-4 border border-slate-600/20;
+    @apply bg-surface-secondary bg-opacity-20 rounded-lg p-4 border border-surface-border border-opacity-20;
   }
 
   .summary-content {
@@ -527,5 +460,13 @@
 
   .fallback-notice {
     @apply mt-4;
+  }
+
+  .skeleton {
+    @apply opacity-60;
+  }
+
+  .skeleton-text {
+    @apply bg-slate-600 rounded animate-pulse;
   }
 </style>

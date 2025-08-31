@@ -62,6 +62,9 @@
       refreshDebounceTimer = null;
     }
     
+    // Stop HOV stats periodic refresh to prevent background API calls
+    hovStatsStore.stopPeriodicRefresh();
+    
     // Clear YBT store intervals and reset state
     ybtStore.reset();
     

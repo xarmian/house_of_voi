@@ -11,6 +11,7 @@ import type {
   PlayerStats,
   PlayerSpin,
   PlayerRank,
+  BiggestWin,
   TimeStats,
   HotColdPlayer,
   WhalePlayer,
@@ -217,15 +218,19 @@ class HovStatsService {
   /**
    * Get leaderboard
    */
-  async getLeaderboard(params?: GetLeaderboardParams): Promise<LeaderboardEntry[]> {
+  async getLeaderboard(params?: GetLeaderboardParams & { forceRefresh?: boolean }): Promise<LeaderboardEntry[]> {
     const appId = params?.p_app_id || this.config.defaultAppId;
     const metric = params?.p_metric || 'net_result';
     const limit = params?.p_limit || 100;
     const offset = params?.p_offset || 0;
+    const forceRefresh = params?.forceRefresh || false;
     const cacheKey = `leaderboard_${appId}_${metric}_${limit}_${offset}`;
 
-    const cached = this.caches.leaderboard.get(cacheKey);
-    if (cached) return cached;
+    // Skip cache if forceRefresh is true
+    if (!forceRefresh) {
+      const cached = this.caches.leaderboard.get(cacheKey);
+      if (cached) return cached;
+    }
 
     return this.withErrorHandling('getLeaderboard', async () => {
       // Ensure service is initialized
@@ -369,6 +374,38 @@ class HovStatsService {
         total_players: BigInt(data[0].total_players),
         percentile: Number(data[0].percentile)
       };
+    });
+  }
+
+  /**
+   * Get player's biggest wins
+   */
+  async getPlayerBiggestWins(playerAddress: string, appId?: bigint): Promise<BiggestWin[]> {
+    return this.withErrorHandling('getPlayerBiggestWins', async () => {
+      // Ensure service is initialized
+      if (!supabaseService.isReady()) {
+        await supabaseService.initialize();
+      }
+      const client = supabaseService.getClient();
+      
+      const { data, error } = await client
+        .from('hov_events')
+        .select('payout, total_bet_amount, max_payline_index, txid, created_at')
+        .eq('who', playerAddress)
+        .eq('app_id', (appId || this.config.defaultAppId).toString())
+        .gt('payout', 0)
+        .order('payout', { ascending: false })
+        .limit(3);
+
+      if (error) throw error;
+
+      return (data || []).map(row => ({
+        payout: BigInt(row.payout || 0),
+        total_bet_amount: BigInt(row.total_bet_amount || 0),
+        max_payline_index: BigInt(row.max_payline_index || 0),
+        txid: row.txid,
+        created_at: new Date(row.created_at)
+      }));
     });
   }
 

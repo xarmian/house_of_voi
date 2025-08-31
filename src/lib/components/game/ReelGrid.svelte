@@ -18,7 +18,7 @@
     calculateSymbolPositions
   } from '$lib/utils/reelPhysics';
   import { initializeAnimations } from '$lib/utils/animations';
-  import { getDeterministicReelSymbol, getSymbol } from '$lib/constants/symbols';
+  import { getDeterministicReelSymbol, getSymbol, getThemeSymbol } from '$lib/constants/symbols';
   import { contractDataCache } from '$lib/services/contractDataCache';
   import SymbolComponent from './Symbol.svelte';
   
@@ -59,8 +59,7 @@
       
       // Use deterministic symbols to ensure immediate display
       for (let i = 0; i < 100; i++) {
-        const symbolChar = getDeterministicReelSymbol(reelIndex, i);
-        const symbol = getSymbol(symbolChar);
+        const symbol = getDeterministicReelSymbol(reelIndex, i, $currentTheme);
         extended.push(symbol);
       }
       
@@ -77,7 +76,7 @@
       // Use ALL 100 contract symbols directly - no truncation!
       for (let i = 0; i < contractReel.length; i++) {
         const symbolChar = contractReel[i];
-        const symbol = getSymbol(symbolChar); // Convert character to SlotSymbol
+        const symbol = getThemeSymbol(symbolChar, $currentTheme); // Convert character to theme-specific SlotSymbol
         extended.push(symbol);
       }
       
@@ -512,9 +511,15 @@
     position: relative;
     overflow: hidden;
     /* Ensure minimum height even when empty to prevent collapse */
-    min-height: 336px; /* 320px container + 8px padding top/bottom */
+    min-height: 336px; /* 306px container + 8px padding top/bottom + 8px for grid structure */
   }
-  
+
+  /* Make reel grid border and background transparent for background themes */
+  :global(.background-theme) .reel-grid {
+    border: 2px solid transparent;
+    background: transparent;
+  }
+
   /* Fallback height when grid is empty */
   .reel-grid:not(:has(.reel-container)) {
     height: 336px;
@@ -585,13 +590,19 @@
   
   .reel-container {
     position: relative;
-    height: 320px; /* Fixed height for 3 visible symbols + padding */
+    height: 306px; /* Fixed height for exactly 3 visible symbols: 3 * 100px + 2 * 2px gap + 2px buffer */
     overflow: hidden;
     border-radius: 6px;
     background: var(--theme-surface-primary);
     border: 1px solid var(--theme-surface-border);
   }
-  
+
+  /* Make reel container borders and background transparent for background themes */
+  :global(.background-theme) .reel-container {
+    border: 1px solid transparent;
+    background: transparent;
+  }
+
   .reel-viewport {
     position: relative;
     width: 100%;
@@ -674,6 +685,12 @@
     position: relative;
     overflow: hidden;
     transition: all 0.3s ease;
+  }
+
+  /* Make symbol position borders and background transparent for background themes */
+  :global(.background-theme) .symbol-position {
+    border: 1px solid transparent;
+    background: transparent;
   }
   
   .symbol-position:hover {

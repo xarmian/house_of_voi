@@ -4,7 +4,7 @@
   import { walletStore as externalWalletStore } from '$lib/stores/walletAdapter';
   import { walletService } from '$lib/services/wallet';
   import { selectedWallet, Web3Wallet } from 'avm-wallet-svelte';
-  import { Wallet, Gamepad2, ExternalLink, Unlock } from 'lucide-svelte';
+  import { Wallet, Gamepad2, ExternalLink, Unlock, RefreshCw } from 'lucide-svelte';
   import { browser } from '$app/environment';
   import WalletSetupGateway from '../wallet/WalletSetupGateway.svelte';
   import { balanceManager } from '$lib/services/balanceManager';
@@ -27,6 +27,8 @@
   let lockedWalletBalance = 0;
   let externalWalletBalance = 0;
   let userHasManuallySelected = false; // Track if user has made a manual selection
+  let refreshingGamingWallet = false;
+  let refreshingExternalWallet = false;
   
   // Check wallet states
   $: gamingWalletAvailable = $isWalletConnected && !$walletStore.isGuest && $walletStore.account;
@@ -46,6 +48,37 @@
       userHasManuallySelected = true; // Prevent auto-switching after unlock
       const isLocked = gamingWalletLocked;
       dispatch('change', { source: 'gaming', isLocked });
+    }
+  }
+
+  // Manual refresh functions
+  async function refreshGamingWallet() {
+    refreshingGamingWallet = true;
+    try {
+      if (gamingWalletAvailable && $walletStore.account) {
+        await balanceManager.getBalance($walletStore.account.address, true); // Force refresh
+      } else if (gamingWalletLocked && storedWalletAddress) {
+        const balance = await balanceManager.getBalance(storedWalletAddress, true);
+        lockedWalletBalance = balance;
+      }
+    } catch (error) {
+      console.error('Error refreshing gaming wallet balance:', error);
+    } finally {
+      refreshingGamingWallet = false;
+    }
+  }
+
+  async function refreshExternalWallet() {
+    refreshingExternalWallet = true;
+    try {
+      if ($selectedWallet?.address) {
+        const balance = await balanceManager.getBalance($selectedWallet.address, true);
+        externalWalletBalance = balance;
+      }
+    } catch (error) {
+      console.error('Error refreshing external wallet balance:', error);
+    } finally {
+      refreshingExternalWallet = false;
     }
   }
   
@@ -158,8 +191,18 @@
             <div class="text-xs font-mono text-theme-text">
               {$selectedWallet.address.slice(0, 8)}...{$selectedWallet.address.slice(-8)}
             </div>
-            <div class="text-xs text-theme-text opacity-70">
-              {(externalWalletBalance / 1_000_000).toFixed(3)} VOI
+            <div class="flex items-center gap-2">
+              <div class="text-xs text-theme-text opacity-70">
+                {(externalWalletBalance / 1_000_000).toFixed(3)} VOI
+              </div>
+              <button
+                on:click|stopPropagation={refreshExternalWallet}
+                disabled={refreshingExternalWallet}
+                class="text-xs text-theme-text opacity-50 hover:opacity-100 transition-opacity {refreshingExternalWallet ? 'animate-spin' : ''}"
+                title="Refresh balance"
+              >
+                <RefreshCw class="w-3 h-3" />
+              </button>
             </div>
           </div>
         {/if}
@@ -220,8 +263,18 @@
             <div class="text-xs font-mono text-theme-text">
               {$walletStore.account.address.slice(0, 8)}...{$walletStore.account.address.slice(-8)}
             </div>
-            <div class="text-xs text-theme-text opacity-70">
-              {($walletStore.balance / 1_000_000).toFixed(3)} VOI
+            <div class="flex items-center gap-2">
+              <div class="text-xs text-theme-text opacity-70">
+                {($walletStore.balance / 1_000_000).toFixed(3)} VOI
+              </div>
+              <button
+                on:click|stopPropagation={refreshGamingWallet}
+                disabled={refreshingGamingWallet}
+                class="text-xs text-theme-text opacity-50 hover:opacity-100 transition-opacity {refreshingGamingWallet ? 'animate-spin' : ''}"
+                title="Refresh balance"
+              >
+                <RefreshCw class="w-3 h-3" />
+              </button>
             </div>
           </div>
           <div class="text-xs bg-green-900/30 text-green-400 px-2 py-1 rounded-full inline-block">
@@ -232,8 +285,18 @@
             <div class="text-xs font-mono text-amber-400">
               {storedWalletAddress.slice(0, 8)}...{storedWalletAddress.slice(-8)}
             </div>
-            <div class="text-xs text-theme-text opacity-70">
-              {(lockedWalletBalance / 1_000_000).toFixed(3)} VOI
+            <div class="flex items-center gap-2">
+              <div class="text-xs text-theme-text opacity-70">
+                {(lockedWalletBalance / 1_000_000).toFixed(3)} VOI
+              </div>
+              <button
+                on:click|stopPropagation={refreshGamingWallet}
+                disabled={refreshingGamingWallet}
+                class="text-xs text-theme-text opacity-50 hover:opacity-100 transition-opacity {refreshingGamingWallet ? 'animate-spin' : ''}"
+                title="Refresh balance"
+              >
+                <RefreshCw class="w-3 h-3" />
+              </button>
             </div>
           </div>
           <div class="flex items-center gap-2">

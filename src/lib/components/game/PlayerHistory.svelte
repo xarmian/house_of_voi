@@ -72,14 +72,14 @@
   });
 
   onMount(() => {
-    if (targetAddress && $connectionStatus.initialized) {
+    if (targetAddress) {
       loadInitialData();
     }
   });
 
   // Only reload when target address changes
   let lastTargetAddress: string | null = null;
-  $: if (targetAddress !== lastTargetAddress && targetAddress && $connectionStatus.initialized) {
+  $: if (targetAddress !== lastTargetAddress && targetAddress) {
     lastTargetAddress = targetAddress;
     loadInitialData();
   }

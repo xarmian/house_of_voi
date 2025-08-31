@@ -8,47 +8,38 @@ import type {
   CelebrationEffect 
 } from '$lib/types/animations';
 import { detectDeviceCapabilities, FrameRateMonitor } from '$lib/utils/animations';
+import { preferencesStore, animationPreferences as unifiedAnimationPreferences } from './preferences';
 
-// Global animation preferences
+// Global animation preferences - now using unified preferences
 function createAnimationPreferences() {
-  const capabilities = detectDeviceCapabilities();
-  
-  const initialPrefs: AnimationPreferences = {
-    reducedMotion: capabilities.supportsReducedMotion,
-    batteryOptimized: capabilities.isMobile,
-    highPerformance: !capabilities.isMobile && capabilities.supportsWebGL,
-    hapticEnabled: capabilities.supportsHaptics,
-    particlesEnabled: !capabilities.supportsReducedMotion
-  };
-
-  const { subscribe, set, update } = writable(initialPrefs);
+  const { subscribe } = unifiedAnimationPreferences;
 
   return {
     subscribe,
     update: (prefs: Partial<AnimationPreferences>) => {
-      update(current => ({ ...current, ...prefs }));
+      preferencesStore.updateAnimationPreferences(prefs);
     },
     toggleReducedMotion: () => {
-      update(prefs => ({ ...prefs, reducedMotion: !prefs.reducedMotion }));
+      const current = get(unifiedAnimationPreferences);
+      preferencesStore.updateAnimationPreferences({ reducedMotion: !current.reducedMotion });
     },
     toggleHaptic: () => {
-      update(prefs => ({ ...prefs, hapticEnabled: !prefs.hapticEnabled }));
+      const current = get(unifiedAnimationPreferences);
+      preferencesStore.updateAnimationPreferences({ hapticEnabled: !current.hapticEnabled });
     },
     optimizeForBattery: () => {
-      update(prefs => ({
-        ...prefs,
+      preferencesStore.updateAnimationPreferences({
         batteryOptimized: true,
         highPerformance: false,
         particlesEnabled: false
-      }));
+      });
     },
     optimizeForPerformance: () => {
-      update(prefs => ({
-        ...prefs,
+      preferencesStore.updateAnimationPreferences({
         batteryOptimized: false,
         highPerformance: true,
         particlesEnabled: true
-      }));
+      });
     }
   };
 }
@@ -318,9 +309,11 @@ export function startPerformanceOptimization() {
   
   // Subscribe to performance changes
   performanceMonitor.subscribe(performance => {
+    const currentPrefs = get(unifiedAnimationPreferences);
+    
     if (performance.frameDrops > 10) {
       // Performance is degrading, reduce animation complexity
-      animationPreferences.update({
+      preferencesStore.updateAnimationPreferences({
         batteryOptimized: true,
         particlesEnabled: false,
         highPerformance: false
@@ -328,8 +321,8 @@ export function startPerformanceOptimization() {
     } else if (performance.isGoodPerformance && performance.frameDrops === 0) {
       // Performance is good, we can increase animation quality
       const capabilities = detectDeviceCapabilities();
-      if (!capabilities.supportsReducedMotion) {
-        animationPreferences.update({
+      if (!currentPrefs.reducedMotion && !capabilities.supportsReducedMotion) {
+        preferencesStore.updateAnimationPreferences({
           batteryOptimized: false,
           particlesEnabled: true,
           highPerformance: capabilities.supportsWebGL

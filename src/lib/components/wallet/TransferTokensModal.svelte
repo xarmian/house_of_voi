@@ -98,7 +98,7 @@
 >
   <div class="card max-w-md w-full max-h-[90vh] overflow-y-auto">
     <!-- Header -->
-    <div class="flex items-center justify-between p-6 border-b border-slate-700">
+    <div class="flex items-center justify-between p-6 border-b border-surface-border">
       <h2 id="transfer-modal-title" class="text-xl font-semibold text-theme flex items-center gap-2">
         <Send class="w-5 h-5" />
         Transfer Tokens
@@ -123,7 +123,7 @@
           <div>
             <h3 class="text-lg font-semibold text-green-400 mb-2">Transfer Successful!</h3>
             <p class="text-gray-300 mb-4">Your tokens have been sent successfully.</p>
-            <div class="p-3 bg-slate-700/50 rounded-lg">
+            <div class="p-3 bg-surface-secondary bg-opacity-50 rounded-lg">
               <p class="text-sm text-gray-400 mb-1">Transaction ID:</p>
               <a class="font-mono text-xs text-voi-400 break-all hover:underline" href={`https://block.voi.network/explorer/transaction/${txId}`} target="_blank">{txId}</a>
             </div>
@@ -138,7 +138,7 @@
         
       {:else}
         <!-- Balance Display -->
-        <div class="p-4 bg-slate-700/50 rounded-lg">
+        <div class="p-4 bg-surface-secondary bg-opacity-50 rounded-lg">
           <div class="text-center">
             <p class="text-sm text-gray-400 mb-1">Available Balance</p>
             <p class="text-2xl font-bold text-theme">{formattedBalance} VOI</p>
@@ -247,10 +247,10 @@
   }
   
   .input-field {
-    @apply px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-theme placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:border-transparent;
+    @apply px-3 py-2 bg-surface-secondary border border-surface-border rounded-lg text-theme placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent;
   }
   
   .card {
-    @apply bg-gradient-to-b from-slate-800 to-slate-900 rounded-2xl shadow-2xl border border-slate-700;
+    @apply bg-surface-primary rounded-2xl shadow-2xl border border-surface-border;
   }
 </style>

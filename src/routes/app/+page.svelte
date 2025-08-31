@@ -157,19 +157,30 @@
 
 <style>
   .tabbed-panels {
-    @apply bg-slate-800 rounded-xl border border-slate-700 overflow-hidden;
+    @apply rounded-xl border overflow-hidden;
+    background: var(--theme-surface-primary);
+    border-color: var(--theme-surface-border);
   }
 
   .tab-buttons {
-    @apply flex border-b border-slate-700;
+    @apply flex border-b;
+    border-color: var(--theme-surface-border);
   }
 
   .tab-button {
-    @apply flex-1 px-4 py-3 text-sm font-medium text-gray-400 hover:text-theme hover:bg-slate-700/50 transition-all duration-200 border-b-2 border-transparent;
+    @apply flex-1 px-4 py-3 text-sm font-medium transition-all duration-200 border-b-2 border-transparent;
+    color: var(--theme-text, #9ca3af);
+  }
+
+  .tab-button:hover {
+    color: var(--theme-primary);
+    background: var(--theme-surface-hover);
   }
 
   .tab-button.active {
-    @apply text-voi-400 border-voi-400 bg-slate-700/30;
+    color: var(--theme-primary);
+    border-color: var(--theme-primary);
+    background: var(--theme-surface-secondary);
   }
 
   .tab-content {

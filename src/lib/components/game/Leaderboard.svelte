@@ -16,14 +16,18 @@
     Search,
     BarChart3,
     Maximize2,
-    Percent
+    Percent,
+    User
   } from 'lucide-svelte';
   import LeaderboardModal from './LeaderboardModal.svelte';
   import PlayerStatsModal from './PlayerStatsModal.svelte';
-  import { hovStatsStore, leaderboard, connectionStatus } from '$lib/stores/hovStats';
+  import { hovStatsService } from '$lib/services/hovStats';
+  import { connectionStatus } from '$lib/stores/hovStats';
   import { walletStore } from '$lib/stores/wallet';
+  import { goto } from '$app/navigation';
   import type { LeaderboardEntry } from '$lib/types/hovStats';
   import { formatVOI } from '$lib/constants/betting';
+  import { PUBLIC_SLOT_MACHINE_APP_ID } from '$env/static/public';
 
   // Props
   export let compact = false;
@@ -40,14 +44,20 @@
   let highlightedPlayer: string | null = null;
   let debounceTimer: NodeJS.Timeout | null = null;
   
+  // Local leaderboard state (bypass store)
+  let leaderboardData: LeaderboardEntry[] = [];
+  let leaderboardLoading = false;
+  let leaderboardError: string | null = null;
+  let initialized = false;
+  
   // Modal state
   let showLeaderboardModal = false;
   let showPlayerStatsModal = false;
   let selectedPlayerAddress: string | null = null;
   $: playerAddress = $walletStore.account?.address;
   
-  // Use server data directly - no client-side filtering to preserve server order
-  $: filteredData = $leaderboard.data || [];
+  // Use local data directly - no client-side filtering to preserve server order
+  $: filteredData = leaderboardData || [];
   $: totalPages = Math.ceil(filteredData.length / itemsPerPage);
   $: paginatedData = filteredData.slice(
     currentPage * itemsPerPage,
@@ -89,7 +99,7 @@
       icon: Percent,
       color: 'text-green-400',
       format: (value: number) => `${value.toFixed(1)}%`,
-      unit: '%',
+      unit: '',
       property: 'rtp'
     },
     total_spins: {
@@ -103,18 +113,17 @@
   };
 
   onMount(async () => {
-    // Set initial metric in store
-    hovStatsStore.setLeaderboardMetric(selectedMetric);
-    
-    // Only load data if not already loaded or loading
-    if ($connectionStatus.initialized && !$leaderboard.data && !$leaderboard.loading) {
-      refresh();
+    // Load initial data
+    if ($connectionStatus.initialized && !leaderboardData.length && !leaderboardLoading) {
+      await loadLeaderboardData();
+      initialized = true;
     }
   });
 
-  // Reactive statement to load data once connection is initialized - only if data is missing
-  $: if ($connectionStatus.initialized && !$leaderboard.data && !$leaderboard.loading && !refreshing) {
-    refresh();
+  // Load data when connection becomes available
+  $: if ($connectionStatus.initialized && !leaderboardData.length && !leaderboardLoading && !initialized) {
+    loadLeaderboardData();
+    initialized = true;
   }
 
   onDestroy(() => {
@@ -126,36 +135,52 @@
   });
 
 
-  async function refresh() {
-    // Don't refresh if not initialized, already refreshing, or already loading
-    if (!$connectionStatus.initialized || refreshing || $leaderboard.loading) return;
+  async function loadLeaderboardData() {
+    if (!$connectionStatus.initialized || leaderboardLoading) return;
     
-    refreshing = true;
+    leaderboardLoading = true;
+    leaderboardError = null;
+    
     try {
-      await hovStatsStore.refreshLeaderboard(selectedMetric, 100);
+      const data = await hovStatsService.getLeaderboard({
+        p_app_id: BigInt(PUBLIC_SLOT_MACHINE_APP_ID || '0'),
+        p_metric: selectedMetric as any,
+        p_limit: 100,
+        forceRefresh: true
+      });
+      
+      leaderboardData = data;
+    } catch (error) {
+      leaderboardError = error instanceof Error ? error.message : 'Failed to load leaderboard';
+      leaderboardData = [];
     } finally {
-      refreshing = false;
+      leaderboardLoading = false;
     }
   }
 
+  async function refresh() {
+    // Don't refresh if not initialized or already loading
+    if (!$connectionStatus.initialized || leaderboardLoading) return;
+    
+    await loadLeaderboardData();
+  }
+
   async function changeMetric(metric: typeof selectedMetric) {
-    if (metric === selectedMetric || refreshing || $leaderboard.loading) return;
+    if (leaderboardLoading) return;
     
     selectedMetric = metric;
     currentPage = 0;
     
-    // Set the metric in the store so periodic refresh uses the correct one
-    hovStatsStore.setLeaderboardMetric(metric);
-    
-    // Debounce metric changes to prevent rapid fire requests
+    // Clear any existing debounce timer
     if (debounceTimer) {
       clearTimeout(debounceTimer);
     }
     
-    debounceTimer = setTimeout(async () => {
-      await refresh();
-      debounceTimer = null;
-    }, 300); // 300ms debounce
+    // Clear existing data immediately to show loading state
+    leaderboardData = [];
+    
+    // Load data immediately for the new metric
+    await loadLeaderboardData();
   }
 
   function goToPage(page: number) {
@@ -190,6 +215,10 @@
   function viewPlayerStats(address: string) {
     selectedPlayerAddress = address;
     showPlayerStatsModal = true;
+  }
+
+  function viewPlayerProfile(address: string) {
+    goto(`/profile/${address}`);
   }
 
   function handleLeaderboardModalPlayerStats(event: CustomEvent) {
@@ -258,12 +287,12 @@
         <!-- Refresh -->
         <button
           on:click={refresh}
-          disabled={$leaderboard.loading || refreshing}
+          disabled={leaderboardLoading}
           class="btn-secondary text-xs sm:text-sm p-2 sm:p-3"
           title="Refresh leaderboard"
           style="min-height: 44px; min-width: 44px;"
         >
-          <RefreshCw class="w-3 h-3 sm:w-4 sm:h-4 {($leaderboard.loading || refreshing) ? 'animate-spin' : ''}" />
+          <RefreshCw class="w-3 h-3 sm:w-4 sm:h-4 {leaderboardLoading ? 'animate-spin' : ''}" />
         </button>
       </div>
     </div>
@@ -277,7 +306,7 @@
             bind:value={selectedMetric}
             on:change={(e) => changeMetric(e.target.value as typeof selectedMetric)}
             class="metric-select w-full"
-            disabled={$leaderboard.loading}
+            disabled={leaderboardLoading}
           >
             {#each Object.entries(metrics) as [key, config]}
               <option value={key}>{config.label}</option>
@@ -291,7 +320,7 @@
             <button
               on:click={() => changeMetric(key as typeof selectedMetric)}
               class="metric-button {selectedMetric === key ? 'active' : ''}"
-              disabled={$leaderboard.loading}
+              disabled={leaderboardLoading}
             >
               <svelte:component this={config.icon} class="w-3 h-3 sm:w-4 sm:h-4" />
               <span class="text-xs sm:text-sm">{config.label}</span>
@@ -326,16 +355,57 @@
   </div>
 
   <!-- Loading state -->
-  {#if $leaderboard.loading && !$leaderboard.data}
+  {#if leaderboardLoading && !initialized}
     <div class="loading-container">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-voi-400 mx-auto mb-4"></div>
       <p class="text-gray-400 text-center">Loading leaderboard...</p>
     </div>
-  {:else if $leaderboard.error && !$leaderboard.data}
+  {:else if leaderboardLoading}
+    <!-- Loading with skeleton placeholders -->
+    <div class="leaderboard-list">
+      {#each Array(itemsPerPage) as _, i}
+        <div class="leaderboard-entry skeleton" transition:fade={{ duration: 150 }}>
+          <div class="hidden sm:flex sm:items-center sm:justify-between sm:w-full sm:gap-4">
+            <div class="flex-shrink-0 w-16">
+              <div class="skeleton-text h-6 w-8"></div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="skeleton-text h-4 w-24 mb-2"></div>
+              <div class="skeleton-text h-3 w-16"></div>
+            </div>
+            <div class="flex-shrink-0 text-right w-32">
+              <div class="skeleton-text h-5 w-20 mb-1"></div>
+              <div class="skeleton-text h-3 w-12"></div>
+            </div>
+            <div class="flex-shrink-0 w-12">
+              <div class="skeleton-text h-8 w-8 rounded"></div>
+            </div>
+          </div>
+          
+          <div class="block sm:hidden">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <div class="skeleton-text h-4 w-6"></div>
+                <div class="skeleton-text h-4 w-20"></div>
+              </div>
+              <div class="skeleton-text h-6 w-6 rounded"></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="skeleton-text h-3 w-16"></div>
+              <div class="text-right">
+                <div class="skeleton-text h-4 w-16 mb-1"></div>
+                <div class="skeleton-text h-3 w-8"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      {/each}
+    </div>
+  {:else if leaderboardError && !leaderboardData.length}
     <!-- Error state -->
     <div class="error-container">
       <div class="text-red-400 text-center mb-2">Failed to load leaderboard</div>
-      <p class="text-sm text-gray-400 text-center mb-4">{$leaderboard.error}</p>
+      <p class="text-sm text-gray-400 text-center mb-4">{leaderboardError}</p>
       <button on:click={refresh} class="btn-primary text-sm mx-auto block">
         Retry
       </button>
@@ -381,14 +451,23 @@
                 </div>
               </div>
               
-              <!-- Action Button -->
-              <button
-                on:click={() => viewPlayerStats(entry.who)}
-                class="action-btn"
-                title="View player stats"
-              >
-                <BarChart3 class="w-4 h-4" />
-              </button>
+              <!-- Action Buttons -->
+              <div class="action-buttons">
+                <button
+                  on:click={() => viewPlayerProfile(entry.who)}
+                  class="action-btn"
+                  title="View player profile"
+                >
+                  <User class="w-4 h-4" />
+                </button>
+                <button
+                  on:click={() => viewPlayerStats(entry.who)}
+                  class="action-btn"
+                  title="View player stats"
+                >
+                  <BarChart3 class="w-4 h-4" />
+                </button>
+              </div>
             </div>
             
             <div class="flex items-center justify-between">
@@ -448,14 +527,23 @@
             </div>
 
             <!-- Actions -->
-            <div class="flex-shrink-0 w-12">
-              <button
-                on:click={() => viewPlayerStats(entry.who)}
-                class="action-btn"
-                title="View player stats"
-              >
-                <BarChart3 class="w-4 h-4" />
-              </button>
+            <div class="flex-shrink-0 w-20">
+              <div class="action-buttons">
+                <button
+                  on:click={() => viewPlayerProfile(entry.who)}
+                  class="action-btn"
+                  title="View player profile"
+                >
+                  <User class="w-4 h-4" />
+                </button>
+                <button
+                  on:click={() => viewPlayerStats(entry.who)}
+                  class="action-btn"
+                  title="View player stats"
+                >
+                  <BarChart3 class="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -555,12 +643,13 @@
   }
 
   .metric-select {
-    @apply px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm focus:border-voi-400 focus:outline-none transition-all duration-200;
+    @apply px-3 py-2 bg-surface-secondary border border-surface-border rounded-lg text-sm focus:border-theme-primary focus:outline-none transition-all duration-200;
     min-height: 44px;
+    color: var(--theme-text);
   }
 
   .metric-select:hover {
-    @apply bg-slate-600 border-slate-500;
+    @apply bg-surface-hover border-surface-hover;
   }
 
   .metric-select:disabled {
@@ -636,10 +725,14 @@
     @apply flex items-center gap-1;
   }
 
+  .action-buttons {
+    @apply flex gap-1;
+  }
+
   .action-btn {
     @apply p-2 text-gray-400 hover:text-theme hover:bg-slate-600 rounded-lg transition-all duration-200;
-    min-height: 44px;
-    min-width: 44px;
+    min-height: 40px;
+    min-width: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -660,5 +753,13 @@
 
   .page-info {
     @apply text-sm text-gray-400 font-medium;
+  }
+
+  .skeleton {
+    @apply opacity-60;
+  }
+
+  .skeleton-text {
+    @apply bg-slate-600 rounded animate-pulse;
   }
 </style>

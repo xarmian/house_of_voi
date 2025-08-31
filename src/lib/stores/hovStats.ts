@@ -5,6 +5,7 @@
 
 import { writable, derived, readable, type Readable } from 'svelte/store';
 import { browser } from '$app/environment';
+import { page } from '$app/stores';
 import { hovStatsService } from '$lib/services/hovStats';
 import { queueStats } from './queue'; // Fallback to local stats
 import type {
@@ -103,8 +104,14 @@ function createHovStatsStore() {
   /**
    * Initialize the store
    */
-  async function initialize(): Promise<void> {
-    if (!browser || initialized) return;
+  async function initialize(options?: { includePlatformStats?: boolean }): Promise<void> {
+    if (!browser) return;
+
+    // Always re-initialize with new options
+    if (initialized) {
+      stopPeriodicRefresh();
+      initialized = false;
+    }
 
     update(state => ({
       ...state,
@@ -121,20 +128,27 @@ function createHovStatsStore() {
         fallbackActive: false
       }));
 
-      // Start periodic refreshes
-      startPeriodicRefresh();
+      // Start periodic refreshes with options
+      startPeriodicRefresh(options);
       
-      // Load initial data
-      await Promise.all([
-        refreshPlatformStats(),
-        refreshLeaderboard(),
-        refreshTimeStats()
-      ]);
+      // Load initial data based on options
+      const initialPromises: Promise<void>[] = [
+        refreshLeaderboard() // Always load leaderboard
+      ];
+      
+      if (options?.includePlatformStats !== false) {
+        initialPromises.push(
+          refreshPlatformStats(),
+          refreshTimeStats()
+        );
+      }
+      
+      await Promise.all(initialPromises);
 
       initialized = true;
 
       if (PUBLIC_DEBUG_MODE === 'true') {
-        console.log('✅ HOV Stats Store initialized');
+        console.log(`✅ HOV Stats Store initialized${options?.includePlatformStats === false ? ' (app mode - no platform stats)' : ' (full mode)'}`);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -185,7 +199,13 @@ function createHovStatsStore() {
   function setLeaderboardMetric(metric: string): void {
     update(state => ({
       ...state,
-      currentLeaderboardMetric: metric
+      currentLeaderboardMetric: metric,
+      // Clear existing leaderboard data when switching metrics to avoid showing stale data
+      leaderboard: {
+        ...state.leaderboard,
+        data: null,
+        error: null
+      }
     }));
   }
 
@@ -209,7 +229,8 @@ function createHovStatsStore() {
           return await hovStatsService.getLeaderboard({
             p_app_id: DEFAULT_APP_ID,
             p_metric: metric as any,
-            p_limit: limit
+            p_limit: limit,
+            forceRefresh: true
           });
         });
       } finally {
@@ -554,28 +575,32 @@ function createHovStatsStore() {
   /**
    * Start periodic refresh intervals
    */
-  function startPeriodicRefresh(): void {
+  function startPeriodicRefresh(options?: { includePlatformStats?: boolean }): void {
     if (!browser) return;
 
     // Clear existing intervals
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
 
-    // Platform stats
-    intervals.platformStats = setInterval(() => {
-      refreshPlatformStats();
-    }, REFRESH_INTERVALS.platformStats);
+    // Platform stats - only on house page
+    if (options?.includePlatformStats !== false) {
+      intervals.platformStats = setInterval(() => {
+        refreshPlatformStats();
+      }, REFRESH_INTERVALS.platformStats);
+    }
 
-    // Leaderboard - use current metric
+    // Leaderboard - use current metric (needed on both app and house pages)
     intervals.leaderboard = setInterval(() => {
       const currentState = get({ subscribe });
       refreshLeaderboard(currentState.currentLeaderboardMetric);
     }, REFRESH_INTERVALS.leaderboard);
 
-    // Time stats
-    intervals.timeStats = setInterval(() => {
-      refreshTimeStats();
-    }, REFRESH_INTERVALS.timeStats);
+    // Time stats - only on house page
+    if (options?.includePlatformStats !== false) {
+      intervals.timeStats = setInterval(() => {
+        refreshTimeStats();
+      }, REFRESH_INTERVALS.timeStats);
+    }
 
     // Hot/cold players - DISABLED (not used in UI)
     // intervals.hotColdPlayers = setInterval(() => {
@@ -587,10 +612,12 @@ function createHovStatsStore() {
     //   refreshWhales();
     // }, REFRESH_INTERVALS.whales);
 
-    // Payline analysis
-    intervals.paylineAnalysis = setInterval(() => {
-      refreshPaylineAnalysis();
-    }, REFRESH_INTERVALS.paylineAnalysis);
+    // Payline analysis - only on house page
+    if (options?.includePlatformStats !== false) {
+      intervals.paylineAnalysis = setInterval(() => {
+        refreshPaylineAnalysis();
+      }, REFRESH_INTERVALS.paylineAnalysis);
+    }
   }
 
   /**
@@ -653,7 +680,8 @@ function createHovStatsStore() {
     refreshPlayerSpins,
     refreshAll,
     reset,
-    healthCheck
+    healthCheck,
+    stopPeriodicRefresh
   };
 }
 
@@ -730,14 +758,17 @@ export const leaderboard = derived(
       loading: $hovStats.leaderboard.loading,
       error: $hovStats.leaderboard.error,
       lastUpdated: $hovStats.leaderboard.lastUpdated,
-      available: !$hovStats.fallbackActive
+      available: !$hovStats.fallbackActive,
+      currentMetric: $hovStats.currentLeaderboardMetric
     };
     
     // Use deep comparison to check if leaderboard section actually changed
+    // IMPORTANT: Include currentMetric in comparison to prevent wrong sorting cache
     if (lastLeaderboardState && 
         lastLeaderboardState.loading === currentState.loading &&
         lastLeaderboardState.error === currentState.error &&
         lastLeaderboardState.available === currentState.available &&
+        lastLeaderboardState.currentMetric === currentState.currentMetric &&
         deepEqualStore(lastLeaderboardState.data, currentState.data)) {
       return lastLeaderboardResult;
     }
@@ -781,7 +812,27 @@ export const connectionStatus = derived(
   })
 );
 
-// Auto-initialize in browser
+// Route-aware initialization - different features for different pages
 if (browser) {
-  hovStatsStore.initialize();
+  let currentRoute: string | null = null;
+  
+  // Subscribe to route changes to initialize/deinitialize based on current route
+  page.subscribe(($page) => {
+    const routeId = $page.route?.id;
+    
+    // Prevent unnecessary re-initialization
+    if (currentRoute === routeId) return;
+    currentRoute = routeId;
+    
+    if (routeId?.startsWith('/house')) {
+      // House page: Initialize everything including platform stats
+      hovStatsStore.initialize({ includePlatformStats: true });
+    } else if (routeId?.startsWith('/app')) {
+      // App page: Initialize but exclude platform stats - only leaderboard
+      hovStatsStore.initialize({ includePlatformStats: false });
+    } else {
+      // Other pages: Stop all periodic refreshes
+      hovStatsStore.stopPeriodicRefresh();
+    }
+  });
 }

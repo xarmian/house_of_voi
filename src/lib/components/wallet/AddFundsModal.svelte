@@ -90,7 +90,7 @@
 >
   <div class="card max-w-lg w-full max-h-[90vh] overflow-y-auto">
     <!-- Header -->
-    <div class="flex items-center justify-between p-6 border-b border-slate-700">
+    <div class="flex items-center justify-between p-6 border-b border-surface-border">
       <h2 id="modal-title" class="text-xl font-semibold text-theme">Add Credits to Account</h2>
       <button
         on:click={closeModal}
@@ -101,10 +101,10 @@
     </div>
     
     <!-- Tab Navigation -->
-    <div class="flex border-b border-slate-700">
+    <div class="flex border-b border-surface-border">
       <button
         class="flex-1 py-3 px-6 text-center transition-colors"
-        class:bg-slate-700={activeTab === 'buy'}
+        class:bg-surface-secondary={activeTab === 'buy'}
         class:text-theme={activeTab === 'buy'}
         class:text-gray-400={activeTab !== 'buy'}
         on:click={() => activeTab = 'buy'}
@@ -113,7 +113,7 @@
       </button>
       <button
         class="flex-1 py-3 px-6 text-center transition-colors"
-        class:bg-slate-700={activeTab === 'transfer'}
+        class:bg-surface-secondary={activeTab === 'transfer'}
         class:text-theme={activeTab === 'transfer'}
         class:text-gray-400={activeTab !== 'transfer'}
         on:click={() => activeTab = 'transfer'}
@@ -232,7 +232,7 @@
     </div>
     
     <!-- Footer -->
-    <div class="p-6 border-t border-slate-700 text-center">
+    <div class="p-6 border-t border-surface-border text-center">
       <button
         on:click={closeModal}
         class="btn-secondary"

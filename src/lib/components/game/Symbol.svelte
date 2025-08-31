@@ -9,6 +9,7 @@
   } from '$lib/stores/animations';
   import { triggerTouchFeedback } from '$lib/utils/animations';
   import { currentTheme } from '$lib/stores/theme';
+  import { getThemeSymbolImagePath } from '$lib/constants/symbols';
   
   export let symbol: SlotSymbol;
   export let size: 'small' | 'medium' | 'large' = 'medium';
@@ -31,6 +32,9 @@
   $: preferences = $animationPreferences;
   $: reduceMotion = $shouldReduceAnimations;
   $: theme = $currentTheme;
+
+  // Get theme-specific image path
+  $: themeImagePath = symbol ? getThemeSymbolImagePath(symbol.id, theme) : symbol?.image;
   
   $: sizeClass = {
     small: 'w-8 h-8',
@@ -138,10 +142,10 @@
 >
   <!-- Symbol image -->
   <div class="symbol-image-wrapper">
-    {#if symbol?.image}
+    {#if themeImagePath || symbol?.image}
       {#if isRevealing && !reduceMotion && !isSpinning}
         <img
-          src={symbol.image}
+          src={themeImagePath || symbol.image}
           alt={symbol.displayName || 'Symbol'}
           class="symbol-image {rarityGlow}"
           in:fly={{ y: 20, duration: 400, delay: animationDelay, easing: backOut }}
@@ -149,7 +153,7 @@
         />
       {:else}
         <img
-          src={symbol.image}
+          src={themeImagePath || symbol.image}
           alt={symbol.displayName || 'Symbol'}
           class="symbol-image {rarityGlow}"
         />

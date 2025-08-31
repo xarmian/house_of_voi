@@ -99,6 +99,14 @@ export interface PlayerRank {
   percentile: number;
 }
 
+export interface BiggestWin {
+  payout: bigint;
+  total_bet_amount: bigint;
+  max_payline_index: bigint;
+  txid: string;
+  created_at: Date;
+}
+
 export interface TimeStats {
   time_period: Date;
   total_bets: bigint;

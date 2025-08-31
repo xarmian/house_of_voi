@@ -1,4 +1,5 @@
 import type { SlotSymbol } from '$lib/types/symbols';
+import type { ThemeColors } from '$lib/stores/theme';
 
 // Winning symbols (these can form winning combinations)
 export const WINNING_SYMBOLS: Record<string, SlotSymbol> = {
@@ -156,6 +157,46 @@ export function getSymbol(id: string): SlotSymbol {
   return SLOT_SYMBOLS[id] || getRandomDecorativeSymbol();
 }
 
+// Get theme-specific symbol by ID
+export function getThemeSymbol(id: string, theme?: ThemeColors): SlotSymbol {
+  const baseSymbol = getSymbol(id);
+  
+  // If no theme or theme doesn't have custom symbols, return base symbol
+  if (!theme?.symbolPath) {
+    return baseSymbol;
+  }
+  
+  // Create theme-specific symbol with updated image path
+  const themeSymbol: SlotSymbol = {
+    ...baseSymbol,
+    image: getThemeSymbolImagePath(id, theme)
+  };
+  
+  return themeSymbol;
+}
+
+// Get theme-specific image path for a symbol
+export function getThemeSymbolImagePath(symbolId: string, theme: ThemeColors): string {
+  // If no custom symbol path, use default
+  if (!theme.symbolPath) {
+    return SLOT_SYMBOLS[symbolId]?.image || '/symbols/x.svg';
+  }
+  
+  // Map symbol IDs to theme-specific filenames
+  const themeSymbolMap: Record<string, string> = {
+    'A': 'A.png',        // Diamond -> A.png
+    'B': 'B.png',        // Gold -> B.png  
+    'C': 'C.png',        // Silver -> C.png
+    'D': 'D.png',        // Bronze -> D.png
+    'x': 'X.png',        // Non-winning -> X.png
+    'y': 'X.png',        // Non-winning -> X.png
+    'z': 'X.png'         // Non-winning -> X.png
+  };
+  
+  const filename = themeSymbolMap[symbolId] || 'X.png';
+  return `${theme.symbolPath}/${filename}`;
+}
+
 // Generate random symbol (for development/testing)
 export function getRandomSymbol(): SlotSymbol {
   const symbolIds = Object.keys(SLOT_SYMBOLS);
@@ -178,18 +219,18 @@ export function getRandomWinningSymbol(): SlotSymbol {
 }
 
 // Get deterministic symbol based on position (modulo approach) - uses ALL symbols
-export function getDeterministicSymbol(position: number): SlotSymbol {
+export function getDeterministicSymbol(position: number, theme?: ThemeColors): SlotSymbol {
   const allSymbolIds = Object.keys(SLOT_SYMBOLS);
   const symbolId = allSymbolIds[position % allSymbolIds.length];
-  return SLOT_SYMBOLS[symbolId];
+  return getThemeSymbol(symbolId, theme);
 }
 
 // Get deterministic symbol for reel initialization (combines reel and position) - uses ALL symbols
-export function getDeterministicReelSymbol(reelIndex: number, symbolIndex: number): SlotSymbol {
+export function getDeterministicReelSymbol(reelIndex: number, symbolIndex: number, theme?: ThemeColors): SlotSymbol {
   // Create a unique position by combining reel and symbol indices
   // This ensures different reels have different patterns but includes winning symbols
   const position = (reelIndex * 17 + symbolIndex) % Object.keys(SLOT_SYMBOLS).length;
-  return getDeterministicSymbol(position);
+  return getDeterministicSymbol(position, theme);
 }
 
 // Check if a symbol is a winning symbol

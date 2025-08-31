@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
-  import { Plus, Minus, Zap, DollarSign, BarChart3, Lock } from 'lucide-svelte';
+  import { Plus, Minus, Zap, DollarSign, BarChart3, Lock, Edit3 } from 'lucide-svelte';
   import { bettingStore, betPerLineVOI, totalBetVOI, canAffordBet } from '$lib/stores/betting';
   import { walletStore, walletBalance, isWalletConnected, isWalletGuest, walletAddress, isNewUser, hasExistingWallet } from '$lib/stores/wallet';
   import { walletActions } from '$lib/stores/walletActions';
@@ -8,11 +8,13 @@
   import AddFundsModal from '$lib/components/wallet/AddFundsModal.svelte';
   import BalanceBreakdown from '$lib/components/wallet/BalanceBreakdown.svelte';
   import PaylinePayoutModal from '$lib/components/game/PaylinePayoutModal.svelte';
+  import UserPreferencesModal from '$lib/components/ui/UserPreferencesModal.svelte';
   import { BETTING_CONSTANTS, formatVOI } from '$lib/constants/betting';
   import { 
     animationPreferences, 
     shouldReduceAnimations 
   } from '$lib/stores/animations';
+  import { bettingPreferences, type QuickBet } from '$lib/stores/preferences';
   import { triggerTouchFeedback } from '$lib/utils/animations';
   import { isSlotMachineOperational } from '$lib/stores/houseBalance';
   import { playButtonClick } from '$lib/services/soundService';
@@ -29,6 +31,7 @@
   let spinButtonElement: HTMLElement;
   let showAddFundsModal = false;
   let showPaylinePayouts = false;
+  let showPreferencesModal = false;
 
   // Password overlay state for locked wallets
   let password = '';
@@ -40,12 +43,19 @@
   $: preferences = $animationPreferences;
   $: reduceMotion = $shouldReduceAnimations;
   
+  // Subscribe to betting preferences
+  $: bettingPrefs = $bettingPreferences;
+  $: customQuickBets = bettingPrefs.quickBets;
+  $: defaultPaylineCount = bettingPrefs.defaultPaylines;
+  
   // Detect when wallet exists but is locked
   $: walletExistsButLocked = $hasExistingWallet && !$isWalletConnected;
   $: isLegacyWallet = walletExistsButLocked && walletService.isLegacyWallet();
   
   // Update input when store changes
   $: betInputValue = $betPerLineVOI;
+  
+  // Initialize with user's preferred defaults (removed onMount to avoid interfering with wallet unlock validation)
   
   // DISABLED: Automatic validation was causing infinite loops
   // Enhanced validation will be triggered manually when needed
@@ -67,6 +77,10 @@
 
   function togglePaylinePayouts() {
     showPaylinePayouts = !showPaylinePayouts;
+  }
+  
+  function openBettingSettings() {
+    showPreferencesModal = true;
   }
   
   function handleSpin() {
@@ -119,13 +133,13 @@
     bettingStore.recordBet();
   }
   
-  function setQuickBet(amount: number, buttonElement?: HTMLElement) {
+  function setQuickBet(quickBet: QuickBet, buttonElement?: HTMLElement) {
     // Play button click sound
     playButtonClick().catch(() => {
       // Ignore sound errors
     });
     
-    bettingStore.setQuickBet(amount);
+    bettingStore.setQuickBet(quickBet);
     
     // Provide visual and haptic feedback
     if (buttonElement && preferences.hapticEnabled && !reduceMotion) {
@@ -335,16 +349,24 @@
           <div class="control-section">
             <div class="control-label">
               <span class="label-text">Quick Bets</span>
+              <button
+                on:click={openBettingSettings}
+                class="edit-button"
+                title="Edit betting settings"
+                disabled={$isNewUser || walletExistsButLocked}
+              >
+                <Edit3 class="w-4 h-4" />
+              </button>
             </div>
             <div class="grid grid-cols-4 gap-2">
-              {#each BETTING_CONSTANTS.QUICK_BET_AMOUNTS as amount}
+              {#each customQuickBets as quickBet}
                 <button
-                  on:click={(e) => setQuickBet(amount, e.currentTarget)}
+                  on:click={(e) => setQuickBet(quickBet, e.currentTarget)}
                   disabled={disabled}
                   class="quick-bet-button text-theme"
-                  class:active={$bettingStore.betPerLine === amount * 1_000_000}
+                  class:active={$bettingStore.betPerLine === quickBet.amount * 1_000_000 && $bettingStore.selectedPaylines === quickBet.lines}
                 >
-                  {amount} VOI
+                  {quickBet.amount} × {quickBet.lines}L
                 </button>
               {/each}
             </div>
@@ -479,14 +501,14 @@
           
           <!-- Quick Bet Buttons -->
           <div class="grid grid-cols-3 gap-1">
-            {#each BETTING_CONSTANTS.QUICK_BET_AMOUNTS.slice(0, 3) as amount}
+            {#each customQuickBets.slice(0, 3) as quickBet}
               <button
-                on:click={(e) => setQuickBet(amount, e.currentTarget)}
+                on:click={(e) => setQuickBet(quickBet, e.currentTarget)}
                 disabled={disabled}
                 class="quick-bet-button text-xs py-1.5 text-theme"
-                class:active={$bettingStore.betPerLine === amount * 1_000_000}
+                class:active={$bettingStore.betPerLine === quickBet.amount * 1_000_000 && $bettingStore.selectedPaylines === quickBet.lines}
               >
-                {amount}
+                {quickBet.amount}×{quickBet.lines}
               </button>
             {/each}
           </div>
@@ -666,6 +688,13 @@
 <!-- Payline Payout Modal -->
 <PaylinePayoutModal bind:showModal={showPaylinePayouts} />
 
+<!-- Preferences Modal -->
+<UserPreferencesModal 
+  bind:isVisible={showPreferencesModal}
+  initialTab="betting"
+  on:close={() => showPreferencesModal = false}
+/>
+
 <style lang="postcss">
   .betting-controls {
     @apply max-w-full;
@@ -710,6 +739,18 @@
   
   .label-value {
     @apply text-sm font-semibold text-voi-400;
+  }
+  
+  .edit-button {
+    @apply p-1.5 rounded-md bg-surface-secondary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed text-theme-text hover:text-theme transition-all duration-200 flex items-center justify-center;
+    position: relative;
+    overflow: hidden;
+    transform-origin: center;
+    backface-visibility: hidden;
+  }
+  
+  .edit-button:active:not(:disabled) {
+    transform: scale(0.95);
   }
   
   .control-button {

@@ -307,3 +307,5 @@ body {
     padding-right: max(0.5rem, env(safe-area-inset-right));
   }
 }
+
+/* Background theme support removed - now handled by casino border */

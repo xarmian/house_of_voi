@@ -179,7 +179,7 @@
   }
 
   .sound-toggle-btn {
-    @apply flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-gray-300 hover:text-theme transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:ring-offset-2 focus:ring-offset-slate-800;
+    @apply flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-secondary hover:bg-surface-hover text-gray-300 hover:text-theme transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:ring-offset-2 focus:ring-offset-surface-primary;
     min-height: 40px;
     touch-action: manipulation;
   }
@@ -190,7 +190,7 @@
   }
 
   .sound-toggle-btn:disabled {
-    @apply opacity-50 cursor-not-allowed hover:bg-slate-700 hover:text-gray-300;
+    @apply opacity-50 cursor-not-allowed hover:bg-surface-secondary hover:text-gray-300;
   }
 
   .sound-toggle-btn.enabled {
@@ -199,7 +199,7 @@
   }
 
   .sound-toggle-btn.disabled {
-    @apply bg-slate-700 hover:bg-slate-600 text-gray-400;
+    @apply bg-surface-secondary hover:bg-surface-hover text-gray-400;
   }
 
   .button-text {
@@ -207,7 +207,7 @@
   }
 
   .volume-slider-container {
-    @apply absolute top-full left-0 mt-2 bg-slate-800 border border-slate-600 rounded-lg shadow-lg p-3 z-50;
+    @apply absolute top-full left-0 mt-2 bg-surface-primary border border-surface-border rounded-lg shadow-lg p-3 z-50;
     animation: slideDown 0.2s ease-out;
     min-width: 200px;
   }
@@ -222,7 +222,7 @@
   }
 
   .volume-slider {
-    @apply flex-1 h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer;
+    @apply flex-1 h-2 bg-surface-secondary rounded-lg appearance-none cursor-pointer;
     background-image: linear-gradient(
       to right, 
       #10b981 0%, 
@@ -252,7 +252,7 @@
   }
 
   .sound-settings-btn {
-    @apply p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-gray-400 hover:text-theme transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:ring-offset-2 focus:ring-offset-slate-800;
+    @apply p-2 rounded-lg bg-surface-secondary hover:bg-surface-hover text-gray-400 hover:text-theme transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:ring-offset-2 focus:ring-offset-surface-primary;
   }
 
   .sound-status-indicator {
@@ -370,7 +370,7 @@
     .sound-toggle-btn:hover,
     .sound-settings-btn:hover {
       /* Remove hover effects on touch devices */
-      @apply bg-slate-700;
+      @apply bg-surface-secondary;
     }
     
     .sound-toggle-btn.enabled:hover {

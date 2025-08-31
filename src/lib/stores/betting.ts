@@ -13,12 +13,17 @@ import {
 import { balanceCalculator } from '$lib/services/balanceCalculator';
 import { validateBetSizing } from '$lib/utils/balanceUtils';
 import { get } from 'svelte/store';
+import { bettingPreferences, type QuickBet } from './preferences';
 
 function createBettingStore() {
+  // Get user's betting preferences for initial state
+  const prefs = get(bettingPreferences);
+  const defaultPaylines = prefs.defaultPaylines;
+  
   const { subscribe, set, update } = writable<BettingState>({
     betPerLine: BETTING_CONSTANTS.DEFAULT_BET_PER_LINE,
-    selectedPaylines: BETTING_CONSTANTS.DEFAULT_PAYLINES,
-    totalBet: BETTING_CONSTANTS.DEFAULT_BET_PER_LINE * BETTING_CONSTANTS.DEFAULT_PAYLINES,
+    selectedPaylines: defaultPaylines,
+    totalBet: BETTING_CONSTANTS.DEFAULT_BET_PER_LINE * defaultPaylines,
     isValidBet: true,
     errors: [],
     lastBet: null
@@ -358,13 +363,18 @@ function createBettingStore() {
       });
     },
 
-    // Set quick bet amount
-    setQuickBet(voiAmount: number) {
-      const microVOI = voiAmount * 1_000_000;
+    // Set quick bet with amount and lines
+    setQuickBet(quickBet: QuickBet) {
+      const microVOI = quickBet.amount * 1_000_000;
       
       const validAmount = Math.max(
         BETTING_CONSTANTS.MIN_BET_PER_LINE,
         Math.min(microVOI, BETTING_CONSTANTS.MAX_BET_PER_LINE)
+      );
+      
+      const validLines = Math.max(
+        BETTING_CONSTANTS.MIN_PAYLINES,
+        Math.min(quickBet.lines, BETTING_CONSTANTS.MAX_PAYLINES)
       );
       
       // Get current balance and update
@@ -375,13 +385,13 @@ function createBettingStore() {
       unsubscribe();
 
       update(state => {
-        const validation = validateBet(validAmount, state.selectedPaylines, currentBalance);
-        const totalBet = validAmount * state.selectedPaylines;
+        const validation = validateBet(validAmount, validLines, currentBalance);
+        const totalBet = validAmount * validLines;
         
         return {
           ...state,
           betPerLine: validAmount,
-          selectedPaylines: state.selectedPaylines,
+          selectedPaylines: validLines,
           totalBet,
           isValidBet: validation.isValid,
           errors: validation.errors

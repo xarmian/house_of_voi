@@ -112,9 +112,9 @@
   <!-- Modal backdrop -->
   <div class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <!-- Modal content -->
-    <div class="bg-slate-800 rounded-xl border border-slate-700 shadow-2xl max-w-md w-full">
+    <div class="bg-surface-primary rounded-xl border border-surface-border shadow-2xl max-w-md w-full">
       <!-- Header -->
-      <div class="px-6 py-4 border-b border-slate-700">
+      <div class="px-6 py-4 border-b border-surface-border">
         <h2 class="text-xl font-bold text-theme">{title}</h2>
         <p class="text-slate-300 text-sm mt-1">{message}</p>
       </div>
@@ -129,7 +129,7 @@
 
         <!-- Wallet Information -->
         {#if walletInfo}
-          <div class="p-4 bg-slate-700/50 border border-slate-600 rounded-lg space-y-3">
+          <div class="p-4 bg-surface-secondary bg-opacity-50 border border-surface-border rounded-lg space-y-3">
             <h3 class="text-sm font-medium text-slate-300 mb-2">Wallet Information</h3>
             
             <div class="space-y-2 text-sm">
@@ -175,7 +175,7 @@
               bind:value={password}
               disabled={isLoading}
               placeholder={walletInfo?.isPasswordless ? "Leave empty for passwordless wallet" : "Enter your wallet password"}
-              class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-theme placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+              class="w-full px-3 py-2 bg-surface-secondary border border-surface-border rounded-lg text-theme placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent disabled:opacity-50"
               on:keydown={handleKeydown}
               autocomplete="off"
             />
@@ -201,7 +201,7 @@
 
         <!-- Abandon Wallet Option -->
         {#if !showAbandonConfirm}
-          <div class="pt-2 border-t border-slate-600">
+          <div class="pt-2 border-t border-surface-border">
             <button
               type="button"
               on:click={handleAbandonWallet}
@@ -231,7 +231,7 @@
                 type="button"
                 on:click={cancelAbandon}
                 disabled={isLoading}
-                class="px-3 py-1 bg-slate-600 hover:bg-slate-700 text-theme text-sm rounded transition-colors disabled:opacity-50"
+                class="px-3 py-1 bg-surface-secondary hover:bg-surface-hover text-theme text-sm rounded transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -241,7 +241,7 @@
       </div>
 
       <!-- Footer -->
-      <div class="px-6 py-4 border-t border-slate-700 flex justify-end space-x-3">
+      <div class="px-6 py-4 border-t border-surface-border flex justify-end space-x-3">
         <button
           type="button"
           on:click={handleCancel}

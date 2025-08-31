@@ -323,7 +323,7 @@
             <button
               on:click={handleUnstake}
               disabled={isLoading || !hasShares || !unstakeShares || parseFloat(unstakeShares) <= 0}
-              class="w-full bg-slate-600 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-colors"
+              class="w-full bg-surface-secondary hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed text-theme font-semibold py-3 px-4 rounded-lg transition-colors"
             >
               {#if isLoading}
                 <div class="flex items-center justify-center">

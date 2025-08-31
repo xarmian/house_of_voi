@@ -1,7 +1,8 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import { Home, Gamepad2, Building } from 'lucide-svelte';
-  import SoundToggleButton from '$lib/components/ui/SoundToggleButton.svelte';
+  import { Home, Gamepad2, Building, User } from 'lucide-svelte';
+  import UserPreferencesButton from '$lib/components/ui/UserPreferencesButton.svelte';
+  import { currentTheme } from '$lib/stores/theme';
   
   // Determine current route
   $: currentRoute = $page.route?.id || '/';
@@ -9,11 +10,13 @@
   const navItems = [
     { href: '/', label: 'Home', icon: Home, exact: true },
     { href: '/app', label: 'Play', icon: Gamepad2, exact: false },
-    { href: '/house', label: 'House', icon: Building, exact: false }
+    { href: '/house', label: 'House', icon: Building, exact: false },
+    { href: '/profile', label: 'Profiles', icon: User, exact: false }
   ];
 </script>
 
-<header class="bg-slate-800/95 backdrop-blur-md border-b border-slate-700 sticky top-0 z-40">
+<header class="backdrop-blur-md border-b sticky top-0 z-40" 
+        style="background: var(--theme-surface-primary, rgb(30 41 59 / 0.95)); border-color: var(--theme-surface-border, #475569);">
   <div class="max-w-7xl mx-auto px-4 py-3">
     <div class="flex items-center justify-between">
       <!-- Left side: Logo and Navigation -->
@@ -32,11 +35,7 @@
             {@const isActive = item.exact ? currentRoute === item.href : currentRoute.startsWith(item.href)}
             <a 
               href={item.href}
-              class="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 {
-                isActive 
-                  ? 'bg-voi-600 text-white' 
-                  : 'text-theme-text hover:bg-slate-700 hover:text-theme'
-              }"
+              class="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 nav-link {isActive ? 'active' : ''}"
             >
               <svelte:component this={item.icon} class="w-4 h-4" />
               <span class="hidden sm:inline">{item.label}</span>
@@ -45,11 +44,11 @@
         </nav>
       </div>
       
-      <!-- Right side: Sound Controls -->
+      <!-- Right side: Sound Controls with Settings -->
       <div class="flex items-center">
         <!-- Desktop: Full sound button with settings -->
         <div class="hidden lg:block">
-          <SoundToggleButton 
+          <UserPreferencesButton 
             showSettings={true}
             compact={false}
           />
@@ -57,7 +56,7 @@
         
         <!-- Mobile: Compact sound button without settings -->
         <div class="lg:hidden">
-          <SoundToggleButton 
+          <UserPreferencesButton 
             showSettings={false}
             compact={true}
           />
@@ -68,6 +67,20 @@
 </header>
 
 <style>
+  .nav-link {
+    color: var(--theme-text, #94a3b8);
+  }
+
+  .nav-link:hover {
+    color: var(--theme-primary);
+    background: var(--theme-surface-hover);
+  }
+
+  .nav-link.active {
+    background: var(--theme-primary);
+    color: var(--theme-text, #ffffff);
+  }
+
   .bg-voi-600 {
     background-color: #059669;
   }

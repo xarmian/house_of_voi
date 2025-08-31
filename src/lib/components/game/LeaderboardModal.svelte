@@ -19,9 +19,12 @@
     Eye,
     Percent
   } from 'lucide-svelte';
-  import { hovStatsStore, connectionStatus } from '$lib/stores/hovStats';
+  import { hovStatsService } from '$lib/services/hovStats';
+  import { connectionStatus } from '$lib/stores/hovStats';
   import type { LeaderboardEntry } from '$lib/types/hovStats';
   import { formatVOI } from '$lib/constants/betting';
+  import { PUBLIC_SLOT_MACHINE_APP_ID } from '$env/static/public';
+  import { goto } from '$app/navigation';
 
   const dispatch = createEventDispatcher();
 
@@ -38,7 +41,10 @@
   let pageSize = 50;
   let refreshing = false;
   let lastUpdated: Date | null = null;
-  let totalEntries = 0;
+  
+  // Local leaderboard state (bypass store)
+  let leaderboardData: LeaderboardEntry[] = [];
+  let initialized = false;
 
   // Modal element for focus management
   let modalElement: HTMLElement;
@@ -79,32 +85,37 @@
 
   // Computed values
   $: metricConfig = metrics[selectedMetric as keyof typeof metrics];
-  $: totalPages = Math.max(1, Math.ceil(totalEntries / pageSize));
+  $: totalPages = Math.max(1, Math.ceil(leaderboardData.length / pageSize));
   $: startRank = (currentPage - 1) * pageSize + 1;
-  $: endRank = Math.min(currentPage * pageSize, totalEntries);
+  $: endRank = Math.min(currentPage * pageSize, leaderboardData.length);
+  $: paginatedEntries = leaderboardData.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+  
+  // Update entries for template compatibility
+  $: entries = paginatedEntries;
 
   // Load leaderboard data
   async function loadLeaderboard() {
-    if (!$connectionStatus.initialized) return;
+    if (!$connectionStatus.initialized || loading) return;
     
     loading = true;
     error = null;
-
+    
     try {
-      const offset = (currentPage - 1) * pageSize;
-      entries = await hovStatsStore.getLeaderboard({
-        metric: selectedMetric as any,
-        limit: pageSize,
-        offset
+      const data = await hovStatsService.getLeaderboard({
+        p_app_id: BigInt(PUBLIC_SLOT_MACHINE_APP_ID || '0'),
+        p_metric: selectedMetric as any,
+        p_limit: 100,
+        forceRefresh: true
       });
-      // Set total entries based on the actual data received
-      // If we get a full page, there might be more data, otherwise use current count
-      totalEntries = entries.length < pageSize ? offset + entries.length : Math.max(totalEntries, offset + entries.length);
+      
+      leaderboardData = data;
       lastUpdated = new Date();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load leaderboard';
-      entries = [];
-      totalEntries = 0;
+      leaderboardData = [];
     } finally {
       loading = false;
     }
@@ -121,23 +132,34 @@
   }
 
   // Change metric
-  function changeMetric(metric: string) {
+  async function changeMetric(metric: string) {
+    if (loading) return;
+    
     selectedMetric = metric;
     currentPage = 1; // Reset to first page
-    loadLeaderboard();
+    
+    // Clear existing data immediately to show loading state
+    leaderboardData = [];
+    
+    // Load data immediately for the new metric
+    await loadLeaderboard();
   }
 
   // Pagination
   function goToPage(page: number) {
     if (page >= 1 && page <= totalPages && page !== currentPage) {
       currentPage = page;
-      loadLeaderboard();
     }
   }
 
   // View player stats - don't close modal
   function viewPlayerStats(address: string) {
     dispatch('viewPlayerStats', { address });
+  }
+
+  // View player profile
+  function viewPlayerProfile(address: string) {
+    goto(`/profile/${address}`);
   }
 
   // Format address for display
@@ -214,8 +236,14 @@
   }
 
   // Load data when modal becomes visible
-  $: if (isVisible && $connectionStatus.initialized) {
+  $: if (isVisible && $connectionStatus.initialized && !leaderboardData.length && !loading && !initialized) {
     loadLeaderboard();
+    initialized = true;
+  }
+
+  // Reset initialization when modal closes
+  $: if (!isVisible) {
+    initialized = false;
   }
 
   // Set up event listeners and body scroll management
@@ -253,11 +281,11 @@
     <!-- Modal content -->
     <div 
       bind:this={modalElement}
-      class="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl"
+      class="bg-surface-primary rounded-xl border border-surface-border w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl"
       transition:fly={{ y: 20, duration: 300 }}
     >
       <!-- Header -->
-      <div class="flex items-center justify-between p-6 border-b border-slate-700 bg-slate-800/50">
+      <div class="flex items-center justify-between p-6 border-b border-surface-border bg-surface-primary/50">
         <div class="flex items-center gap-3">
           <Trophy class="w-6 h-6 text-voi-400" />
           <div>
@@ -293,7 +321,7 @@
       </div>
 
       <!-- Metric selector -->
-      <div class="p-4 border-b border-slate-700 bg-slate-800/30">
+      <div class="p-4 border-b border-surface-border bg-surface-primary/30">
         <div class="flex flex-wrap gap-2">
           {#each Object.entries(metrics) as [key, config]}
             <button
@@ -311,12 +339,12 @@
 
       <!-- Content -->
       <div class="flex-1 overflow-y-auto">
-        {#if loading && entries.length === 0}
+        {#if loading && leaderboardData.length === 0}
           <!-- Loading -->
           <div class="flex items-center justify-center py-12">
             <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-voi-400 mb-4"></div>
           </div>
-        {:else if error && entries.length === 0}
+        {:else if error && leaderboardData.length === 0}
           <!-- Error -->
           <div class="flex flex-col items-center justify-center py-12">
             <div class="text-red-400 mb-2">Failed to load leaderboard</div>
@@ -325,7 +353,7 @@
               Retry
             </button>
           </div>
-        {:else if entries.length === 0}
+        {:else if leaderboardData.length === 0}
           <!-- Empty -->
           <div class="flex flex-col items-center justify-center py-12">
             <Trophy class="w-16 h-16 text-gray-600 mb-4" />
@@ -368,7 +396,7 @@
             <div class="bg-slate-900/50 rounded-lg overflow-hidden">
               <table class="w-full">
                 <thead>
-                  <tr class="bg-slate-800/50 border-b border-slate-700">
+                  <tr class="bg-surface-primary/50 border-b border-surface-border">
                     <th class="text-left py-3 px-4 text-sm font-medium text-gray-300">Rank</th>
                     <th class="text-left py-3 px-4 text-sm font-medium text-gray-300">Player</th>
                     <th class="text-right py-3 px-4 text-sm font-medium text-gray-300">{metricConfig.label}</th>
@@ -378,10 +406,10 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {#each entries as entry, index}
+                  {#each paginatedEntries as entry, index}
                     {@const rank = startRank + index}
                     {@const RankIcon = getRankIcon(rank)}
-                    <tr class="border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
+                    <tr class="border-b border-surface-border/50 hover:bg-surface-primary/30 transition-colors">
                       <td class="py-3 px-4">
                         <div class="flex items-center gap-2">
                           <RankIcon class="w-4 h-4 {getRankColor(rank)}" />
@@ -403,14 +431,24 @@
                         {entry.win_rate.toFixed(1)}%
                       </td>
                       <td class="py-3 px-4 text-right">
-                        <button
-                          on:click={() => viewPlayerStats(entry.who)}
-                          class="flex items-center gap-1 px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-gray-300 hover:text-white rounded transition-colors"
-                          title="View player statistics"
-                        >
-                          <Eye class="w-3 h-3" />
-                          Stats
-                        </button>
+                        <div class="flex gap-1 justify-end">
+                          <button
+                            on:click={() => viewPlayerProfile(entry.who)}
+                            class="flex items-center gap-1 px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-gray-300 hover:text-white rounded transition-colors"
+                            title="View player profile"
+                          >
+                            <User class="w-3 h-3" />
+                            Profile
+                          </button>
+                          <button
+                            on:click={() => viewPlayerStats(entry.who)}
+                            class="flex items-center gap-1 px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-gray-300 hover:text-white rounded transition-colors"
+                            title="View player statistics"
+                          >
+                            <Eye class="w-3 h-3" />
+                            Stats
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   {/each}

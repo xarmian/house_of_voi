@@ -1,5 +1,6 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
+import { preferencesStore, themePreferences as unifiedThemePreferences } from './preferences';
 
 export interface ThemeColors {
   primary: string;
@@ -21,6 +22,10 @@ export interface ThemeColors {
     border: string;
     hover: string;
   };
+  symbolPath?: string; // Path to theme-specific symbols
+  backgroundImage?: string; // Path to theme background image
+  useBackgroundImage?: boolean; // Whether to use background image in display areas
+  useBorderGradient?: boolean; // Whether to use gradient on casino border instead of background image
 }
 
 export interface ThemePreferences {
@@ -40,7 +45,7 @@ const availableThemes: Record<string, ThemeColors> = {
     secondary: '#a855f7',
     lights: 'rgba(168, 85, 247, 0.3)',
     name: 'purple',
-    displayName: 'Purple Casino',
+    displayName: 'VOI Purple',
     background: {
       from: '#0f172a',
       via: '#1e293b',
@@ -103,7 +108,7 @@ const availableThemes: Record<string, ThemeColors> = {
     secondary: '#4ade80',
     lights: 'rgba(74, 222, 128, 0.3)',
     name: 'voi',
-    displayName: 'VOI Green',
+    displayName: 'Green',
     background: {
       from: '#78350f',
       via: '#92400e',
@@ -139,6 +144,31 @@ const availableThemes: Record<string, ThemeColors> = {
       border: '#3b82f6',
       hover: '#2563eb'
     }
+  },
+  dorks: {
+    primary: '#8b5cf6',
+    secondary: '#a78bfa',
+    lights: 'rgba(167, 139, 250, 0.3)',
+    name: 'dorks',
+    displayName: 'Dorks',
+    background: {
+      from: '#312e81',
+      via: '#3730a3',
+      to: '#1e1b4b',
+      direction: 'to bottom right'
+    },
+    textColor: '#ffffff',
+    surface: {
+      primary: '#3730a3',
+      secondary: '#4338ca',
+      tertiary: '#5b21b6',
+      border: '#7c3aed',
+      hover: '#5b21b6'
+    },
+    symbolPath: '/themes/dorks',
+    backgroundImage: '/themes/dorks/background.webp',
+    useBackgroundImage: true,
+    useBorderGradient: true
   }
 };
 
@@ -201,11 +231,20 @@ function applyThemeToDOM(theme: ThemeColors): void {
     root.style.setProperty('--theme-surface-border', theme.surface.border);
     root.style.setProperty('--theme-surface-hover', theme.surface.hover);
   }
+
+  // Set background image CSS custom property for casino border use
+  if (theme.useBackgroundImage && theme.backgroundImage) {
+    console.log(`🎨 Setting background image for theme: ${theme.displayName}`, theme.backgroundImage);
+    root.style.setProperty('--theme-bg-image', `url('${theme.backgroundImage}')`);
+  } else {
+    console.log(`🎨 Removing background image for theme: ${theme.displayName}`);
+    root.style.removeProperty('--theme-bg-image');
+  }
 }
 
 // Create the theme store
 function createThemeStore() {
-  const initialPreferences = loadPreferences();
+  const initialPreferences = get(unifiedThemePreferences);
   const initialState: ThemeState = {
     preferences: initialPreferences,
     availableThemes,
@@ -214,8 +253,12 @@ function createThemeStore() {
 
   const { subscribe, set, update } = writable(initialState);
 
-  // Apply initial theme to DOM
-  applyThemeToDOM(initialState.currentThemeColors);
+  // Apply initial theme to DOM - use setTimeout to ensure DOM is ready
+  if (browser) {
+    setTimeout(() => {
+      applyThemeToDOM(initialState.currentThemeColors);
+    }, 0);
+  }
 
   return {
     subscribe,
@@ -227,40 +270,26 @@ function createThemeStore() {
         return;
       }
 
-      update(state => {
-        const updatedPreferences = { ...state.preferences, currentTheme: themeName };
-        const newThemeColors = availableThemes[themeName];
-        savePreferences(updatedPreferences);
-        applyThemeToDOM(newThemeColors);
-        
-        return {
-          ...state,
-          preferences: updatedPreferences,
-          currentThemeColors: newThemeColors
-        };
-      });
+      const newThemeColors = availableThemes[themeName];
+      preferencesStore.updateThemePreferences({ currentTheme: themeName });
+      applyThemeToDOM(newThemeColors);
+      
+      update(state => ({
+        ...state,
+        preferences: get(unifiedThemePreferences),
+        currentThemeColors: newThemeColors
+      }));
     },
 
     // Cycle to the next theme
     nextTheme(): void {
       const themeNames = Object.keys(availableThemes);
+      const currentPrefs = get(unifiedThemePreferences);
+      const currentIndex = themeNames.indexOf(currentPrefs.currentTheme);
+      const nextIndex = (currentIndex + 1) % themeNames.length;
+      const nextThemeName = themeNames[nextIndex];
       
-      update(state => {
-        const currentIndex = themeNames.indexOf(state.preferences.currentTheme);
-        const nextIndex = (currentIndex + 1) % themeNames.length;
-        const nextThemeName = themeNames[nextIndex];
-        const newThemeColors = availableThemes[nextThemeName];
-        
-        const updatedPreferences = { ...state.preferences, currentTheme: nextThemeName };
-        savePreferences(updatedPreferences);
-        applyThemeToDOM(newThemeColors);
-        
-        return {
-          ...state,
-          preferences: updatedPreferences,
-          currentThemeColors: newThemeColors
-        };
-      });
+      this.setTheme(nextThemeName);
     },
 
     // Get current theme info
@@ -282,7 +311,7 @@ function createThemeStore() {
 
 export const themeStore = createThemeStore();
 
-// Derived stores for easy access
+// Derived stores for easy access - now using unified preferences
 export const currentTheme = derived(themeStore, $theme => $theme.currentThemeColors);
-export const currentThemeName = derived(themeStore, $theme => $theme.preferences.currentTheme);
+export const currentThemeName = derived(unifiedThemePreferences, $prefs => $prefs.currentTheme);
 export const availableThemesList = derived(themeStore, $theme => Object.values($theme.availableThemes));

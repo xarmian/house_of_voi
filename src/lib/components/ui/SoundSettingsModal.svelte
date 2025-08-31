@@ -259,7 +259,7 @@
   }
 
   .modal-content {
-    @apply bg-slate-800 border border-slate-600 rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-hidden;
+    @apply bg-surface-primary border border-surface-border rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-hidden;
   }
 
   .modal-header {
@@ -348,7 +348,7 @@
   }
 
   .test-button {
-    @apply px-3 py-1 text-xs font-medium bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-gray-300 hover:text-theme rounded-md transition-colors;
+    @apply px-3 py-1 text-xs font-medium bg-surface-secondary hover:bg-surface-hover disabled:bg-surface-primary disabled:opacity-50 disabled:cursor-not-allowed text-gray-300 hover:text-theme rounded-md transition-colors;
   }
 
   .reset-button {

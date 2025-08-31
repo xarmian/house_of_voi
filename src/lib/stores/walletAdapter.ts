@@ -4,6 +4,7 @@ import { algorandService } from '$lib/services/algorand';
 import { balanceManager } from '$lib/services/balanceManager';
 import type { WalletAccount, WalletState } from '$lib/types/wallet';
 import { browser } from '$app/environment';
+import { page } from '$app/stores';
 
 /**
  * Wallet adapter that bridges avm-wallet-svelte stores with our existing wallet interface.
@@ -23,42 +24,89 @@ function createWalletAdapter() {
 
   let balanceChangeUnsubscribe: (() => void) | null = null;
   let currentMonitoredAddress: string | null = null;
+  let pageUnsubscribe: (() => void) | null = null;
 
-  // Start balance monitoring for connected wallet
+  // Check if we should monitor external wallet on current page
+  const shouldMonitorOnCurrentPage = (): boolean => {
+    const routeId = get(page).route?.id;
+    return routeId?.startsWith('/house') || false; // Only monitor on house page
+  };
+
+  // Start balance monitoring for connected external wallet
   const startBalanceMonitoring = (address: string) => {
     // Stop any existing monitoring
     stopBalanceMonitoring();
     
     currentMonitoredAddress = address;
     
-    // Start monitoring with the balance manager (house context for slower refresh)
-    balanceManager.startMonitoring(address, { context: 'house' });
-    
-    // Subscribe to balance change events
-    balanceChangeUnsubscribe = balanceManager.onBalanceChange((event) => {
-      // Only update if this event is for the monitored address
-      if (event.address === currentMonitoredAddress) {
-        // Update the store when balance changes
-        update(state => ({
-          ...state,
-          balance: event.newBalance,
-          lastUpdated: event.timestamp
-        }));
-      }
-    });
+    // Only start monitoring if we're on the house page
+    if (shouldMonitorOnCurrentPage()) {
+      // External wallets always use 'house' context (60s refresh)
+      balanceManager.startMonitoring(address, { context: 'house' });
+      
+      // Subscribe to balance change events
+      balanceChangeUnsubscribe = balanceManager.onBalanceChange((event) => {
+        // Only update if this event is for the monitored address
+        if (event.address === currentMonitoredAddress) {
+          // Update the store when balance changes
+          update(state => ({
+            ...state,
+            balance: event.newBalance,
+            lastUpdated: event.timestamp
+          }));
+        }
+      });
+    }
+
+    // Subscribe to route changes to start/stop monitoring based on page
+    if (browser && !pageUnsubscribe) {
+      pageUnsubscribe = page.subscribe(($page) => {
+        if (currentMonitoredAddress) {
+          const shouldMonitor = $page.route?.id?.startsWith('/house') || false;
+          const currentlyMonitoring = balanceChangeUnsubscribe !== null;
+          
+          if (shouldMonitor && !currentlyMonitoring) {
+            // Start monitoring when entering house page
+            balanceManager.startMonitoring(currentMonitoredAddress, { context: 'house' });
+            balanceChangeUnsubscribe = balanceManager.onBalanceChange((event) => {
+              if (event.address === currentMonitoredAddress) {
+                update(state => ({
+                  ...state,
+                  balance: event.newBalance,
+                  lastUpdated: event.timestamp
+                }));
+              }
+            });
+          } else if (!shouldMonitor && currentlyMonitoring) {
+            // Stop monitoring when leaving house page
+            balanceManager.stopMonitoring(currentMonitoredAddress, 'house');
+            if (balanceChangeUnsubscribe) {
+              balanceChangeUnsubscribe();
+              balanceChangeUnsubscribe = null;
+            }
+          }
+        }
+      });
+    }
   };
 
   const stopBalanceMonitoring = () => {
-    // Stop balance monitoring in the manager
+    // Stop balance monitoring in the manager - external wallets always use 'house' context
     if (currentMonitoredAddress) {
       balanceManager.stopMonitoring(currentMonitoredAddress, 'house');
-      currentMonitoredAddress = null;
     }
+    currentMonitoredAddress = null;
     
     // Unsubscribe from events
     if (balanceChangeUnsubscribe) {
       balanceChangeUnsubscribe();
       balanceChangeUnsubscribe = null;
+    }
+
+    // Unsubscribe from route changes
+    if (pageUnsubscribe) {
+      pageUnsubscribe();
+      pageUnsubscribe = null;
     }
   };
 

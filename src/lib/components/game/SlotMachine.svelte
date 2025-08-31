@@ -24,6 +24,7 @@
   import LoadingOverlay from '../ui/LoadingOverlay.svelte';
   import { soundService, playSpinStart, playReelStop, playWinSound, playLoss } from '$lib/services/soundService';
   import { themeStore, currentTheme } from '$lib/stores/theme';
+  import { themeImagePreloader } from '$lib/services/themeImagePreloader';
   
   // References to ReelGrid components for direct function calls
   let desktopReelGrid: ReelGrid;
@@ -40,17 +41,34 @@
 
   // Theme switching function
   let isThemeChanging = false;
-  function handleThemeClick(event: MouseEvent) {
+  async function handleThemeClick(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
     
     // Add visual feedback
     isThemeChanging = true;
+    
+    // Get current and next theme
+    const currentThemes = themeStore.getAvailableThemes();
+    const themeNames = Object.keys(currentThemes);
+    const currentIndex = themeNames.indexOf($currentTheme.name);
+    const nextIndex = (currentIndex + 1) % themeNames.length;
+    const nextTheme = currentThemes[themeNames[nextIndex]];
+    
+    // Preload next theme assets in background
+    if (nextTheme) {
+      themeImagePreloader.preloadThemeAssets(nextTheme).catch(error => {
+        console.warn('Failed to preload theme assets:', error);
+        // Continue with theme switch even if preloading fails
+      });
+    }
+    
+    // Switch theme
+    themeStore.nextTheme();
+    
     setTimeout(() => {
       isThemeChanging = false;
     }, 500);
-    
-    themeStore.nextTheme();
   }
 
   import { PUBLIC_DEBUG_MODE } from '$env/static/public';
@@ -154,6 +172,11 @@
       // Reset game state to ensure clean start
       gameStore.reset();
       gameStore.initializeGrid();
+      
+      // Preload current theme assets
+      themeImagePreloader.preloadThemeAssets($currentTheme).catch(error => {
+        console.warn('Failed to preload initial theme assets:', error);
+      });
     }, 0);
     
     // Initialize house balance monitoring
@@ -1019,6 +1042,7 @@
 <div class="slot-machine-container h-full" 
      style="--theme-primary: {$currentTheme.primary}; --theme-secondary: {$currentTheme.secondary}; --theme-lights: {$currentTheme.lights};">
 
+
   <!-- Desktop: Vertical Layout -->
   <div class="hidden lg:block">
     <!-- Slot Machine Frame -->
@@ -1026,13 +1050,17 @@
       <!-- Outer decorative border with casino lights -->
       <div class="casino-border" 
            class:theme-changing={isThemeChanging}
+           class:background-theme={$currentTheme.useBackgroundImage && !$currentTheme.useBorderGradient}
+           style={$currentTheme.useBackgroundImage ? `--theme-bg-image: url('${$currentTheme.backgroundImage}')` : ''}
            role="button" 
            tabindex="0"
            aria-label="Change slot machine theme"
            title="Click to change theme: {$currentTheme.displayName}"
            on:click={handleThemeClick}
            on:keydown={(e) => e.key === 'Enter' && handleThemeClick(e)}>
-        <div class="casino-lights"></div>
+        {#if !$currentTheme.useBackgroundImage}
+          <div class="casino-lights"></div>
+        {/if}
       </div>
       
       <!-- Machine body with metallic finish -->
@@ -1047,9 +1075,9 @@
         <!-- Chrome accent frame -->
         <div class="chrome-frame">
           <!-- Inner shadow frame -->
-          <div class="inner-frame">
+          <div class="inner-frame" class:background-theme={$currentTheme.useBackgroundImage}>
             <!-- Main game grid -->
-            <div class="game-grid">
+            <div class="game-grid" class:background-theme={$currentTheme.useBackgroundImage}>
               <!-- Reel Grid -->
               <ReelGrid bind:this={desktopReelGrid} grid={$currentGrid} isSpinning={$isSpinning} />
               
@@ -1102,13 +1130,17 @@
         <!-- Outer decorative border with casino lights -->
         <div class="casino-border" 
              class:theme-changing={isThemeChanging}
+             class:background-theme={$currentTheme.useBackgroundImage && !$currentTheme.useBorderGradient}
+             style={$currentTheme.useBackgroundImage ? `--theme-bg-image: url('${$currentTheme.backgroundImage}')` : ''}
              role="button" 
              tabindex="0"
              aria-label="Change slot machine theme"
              title="Click to change theme: {$currentTheme.displayName}"
              on:click={handleThemeClick}
              on:keydown={(e) => e.key === 'Enter' && handleThemeClick(e)}>
-          <div class="casino-lights"></div>
+          {#if !$currentTheme.useBackgroundImage}
+            <div class="casino-lights"></div>
+          {/if}
         </div>
         
         <!-- Machine body with metallic finish -->
@@ -1116,9 +1148,9 @@
           <!-- Chrome accent frame -->
           <div class="chrome-frame">
             <!-- Inner shadow frame -->
-            <div class="inner-frame">
+            <div class="inner-frame" class:background-theme={$currentTheme.useBackgroundImage}>
               <!-- Main game grid -->
-              <div class="game-grid">
+              <div class="game-grid" class:background-theme={$currentTheme.useBackgroundImage}>
                 <!-- Reel Grid -->
                 <ReelGrid bind:this={mobileReelGrid1} grid={$currentGrid} isSpinning={$isSpinning} />
                 
@@ -1425,6 +1457,7 @@
   }
 
 
+
   /* Enhanced Slot Machine Frame Styling */
   .slot-machine-frame {
     @apply relative;
@@ -1440,6 +1473,16 @@
     padding: 3px;
     border-radius: 20px;
     transition: all 0.3s ease;
+  }
+
+  /* Background for Dorks theme - normal border size */
+  .casino-border.background-theme {
+    background: var(--theme-bg-image);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    animation: none; /* Disable shimmer for background themes */
+    border: 2px solid var(--theme-primary);
   }
 
   .casino-border:hover {
@@ -1511,6 +1554,7 @@
       inset 0 -1px 2px rgba(0, 0, 0, 0.2);
   }
 
+
   .inner-frame {
     @apply rounded-md p-2;
     background: radial-gradient(ellipse at center, var(--theme-bg-from) 0%, var(--theme-surface-primary) 100%);
@@ -1520,6 +1564,16 @@
       0 0 5px var(--theme-lights);
   }
 
+  /* Make inner-frame show background image for Dorks theme */
+  :global(.background-theme) .inner-frame {
+    background: var(--theme-bg-image) !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
   .game-grid {
     @apply relative rounded border-2;
     background: linear-gradient(180deg, var(--theme-bg-from) 0%, var(--theme-surface-primary) 100%);
@@ -1527,6 +1581,16 @@
     box-shadow: 
       inset 0 2px 4px rgba(0, 0, 0, 0.6),
       0 0 10px var(--theme-lights);
+  }
+
+  /* Make game-grid show background image for Dorks theme */
+  :global(.background-theme) .game-grid {
+    background: var(--theme-bg-image) !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    border: none !important;
+    box-shadow: none !important;
   }
 
 

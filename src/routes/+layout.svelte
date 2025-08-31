@@ -15,7 +15,8 @@
   
   $: isGameRoute = $page.route.id?.startsWith('/app');
   $: isHouseRoute = $page.route.id?.startsWith('/house');
-  $: showUnifiedHeader = isGameRoute || isHouseRoute;
+  $: isProfileRoute = $page.route.id?.startsWith('/profile');
+  $: showUnifiedHeader = isGameRoute || isHouseRoute || isProfileRoute;
   $: metaTags = deepMerge(data.baseMetaTags, $page.data.pageMetaTags || {});
   
   let mounted = false;

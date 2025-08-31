@@ -72,11 +72,11 @@
     <!-- Modal content -->
     <div 
       bind:this={modalElement}
-      class="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl"
+      class="bg-surface-primary rounded-xl border border-surface-border w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl"
       transition:fly={{ y: 20, duration: 300 }}
     >
       <!-- Header -->
-      <div class="flex items-center justify-between p-6 border-b border-slate-700 bg-slate-800/50">
+      <div class="flex items-center justify-between p-6 border-b border-surface-border bg-surface-primary/50">
         <div class="flex items-center gap-3">
           <div>
             <h2 class="text-xl font-bold text-theme">Playing History</h2>

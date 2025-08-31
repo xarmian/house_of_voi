@@ -1,5 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
+import { preferencesStore, soundPreferences as unifiedSoundPreferences } from './preferences';
 
 export interface SoundPreferences {
   masterEnabled: boolean;
@@ -83,7 +84,7 @@ let externalCleanupCallback: (() => void) | null = null;
 // Create the sound store
 function createSoundStore() {
   const initialState: SoundState = {
-    preferences: loadPreferences(),
+    preferences: get(unifiedSoundPreferences),
     isLoading: false,
     loadedSounds: new Set(),
     audioContext: null,
@@ -130,30 +131,27 @@ function createSoundStore() {
       }
     },
 
-    // Update preferences
+    // Update preferences - now delegates to unified preferences
     updatePreferences(newPreferences: Partial<SoundPreferences>): void {
-      update(state => {
-        const updatedPreferences = { ...state.preferences, ...newPreferences };
-        savePreferences(updatedPreferences);
-        
-        return {
-          ...state,
-          preferences: updatedPreferences
-        };
-      });
+      preferencesStore.updateSoundPreferences(newPreferences);
+      
+      // Update local state for non-preference properties
+      update(state => ({
+        ...state,
+        preferences: get(unifiedSoundPreferences)
+      }));
     },
 
     // Toggle master sound
     toggleMasterSound(): void {
+      const currentPrefs = get(unifiedSoundPreferences);
+      const newEnabled = !currentPrefs.masterEnabled;
+      
+      preferencesStore.updateSoundPreferences({ masterEnabled: newEnabled });
+      
       update(state => {
-        const updatedPreferences = { 
-          ...state.preferences, 
-          masterEnabled: !state.preferences.masterEnabled 
-        };
-        savePreferences(updatedPreferences);
-        
         // Stop all currently playing sounds if disabling
-        if (!updatedPreferences.masterEnabled) {
+        if (!newEnabled) {
           // Call external cleanup first (for complex looping sounds)
           if (externalCleanupCallback) {
             try {
@@ -178,8 +176,8 @@ function createSoundStore() {
         
         return {
           ...state,
-          preferences: updatedPreferences,
-          currentlyPlaying: updatedPreferences.masterEnabled ? state.currentlyPlaying : new Map()
+          preferences: get(unifiedSoundPreferences),
+          currentlyPlaying: newEnabled ? state.currentlyPlaying : new Map()
         };
       });
     },
@@ -192,23 +190,15 @@ function createSoundStore() {
     // Set master volume
     setMasterVolume(volume: number): void {
       const clampedVolume = Math.max(0, Math.min(1, volume));
-      this.updatePreferences({ masterVolume: clampedVolume });
+      preferencesStore.updateSoundPreferences({ masterVolume: clampedVolume });
     },
 
     // Toggle category sound
     toggleCategorySound(category: SoundCategory): void {
       const enabledKey = `${category}SoundsEnabled` as keyof SoundPreferences;
-      update(state => {
-        const updatedPreferences = {
-          ...state.preferences,
-          [enabledKey]: !state.preferences[enabledKey]
-        };
-        savePreferences(updatedPreferences);
-        
-        return {
-          ...state,
-          preferences: updatedPreferences
-        };
+      const currentPrefs = get(unifiedSoundPreferences);
+      preferencesStore.updateSoundPreferences({
+        [enabledKey]: !currentPrefs[enabledKey]
       });
     },
 
@@ -216,7 +206,7 @@ function createSoundStore() {
     setCategoryVolume(category: SoundCategory, volume: number): void {
       const clampedVolume = Math.max(0, Math.min(1, volume));
       const volumeKey = `${category}Volume` as keyof SoundPreferences;
-      this.updatePreferences({ [volumeKey]: clampedVolume });
+      preferencesStore.updateSoundPreferences({ [volumeKey]: clampedVolume });
     },
 
     // Mark sound as loaded
@@ -311,16 +301,15 @@ function createSoundStore() {
 
 export const soundStore = createSoundStore();
 
-// Derived stores for easy access
-export const soundPreferences = derived(soundStore, $sound => $sound.preferences);
+// Derived stores for easy access - now using unified preferences
+export const soundPreferences = unifiedSoundPreferences;
 export const isSoundSupported = derived(soundStore, $sound => $sound.isSupported);
 export const isSoundLoading = derived(soundStore, $sound => $sound.isLoading);
-export const isMasterSoundEnabled = derived(soundStore, $sound => $sound.preferences.masterEnabled);
+export const isMasterSoundEnabled = derived(unifiedSoundPreferences, $prefs => $prefs.masterEnabled);
 
 // Helper function to get effective volume for a sound category
 export function getEffectiveVolume(category: SoundCategory): number {
-  const state = soundStore.getSnapshot();
-  const prefs = state.preferences;
+  const prefs = get(unifiedSoundPreferences);
   
   if (!prefs.masterEnabled) return 0;
   
