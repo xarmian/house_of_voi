@@ -98,7 +98,8 @@ function createQueueStore() {
           }
         }
 
-        // Calculate estimated total cost if not provided
+        // Calculate estimated total cost if not provided (kept for validation),
+        // but reserve ONLY the bet amount for display/available credits
         const totalCostEstimate = estimatedTotalCost || estimateSpinTransactionCost(betPerLine, selectedPaylines);
 
         const newSpin: QueuedSpin = {
@@ -118,7 +119,8 @@ function createQueueStore() {
           ...state,
           spins,
           totalPendingValue: totalPendingValue + totalBet,
-          totalReservedBalance: totalReservedBalance + totalCostEstimate,
+          // Reserve only the bet amount during PENDING/SUBMITTING
+          totalReservedBalance: totalReservedBalance + totalBet,
           lastUpdated: Date.now()
         };
       });
@@ -143,20 +145,24 @@ function createQueueStore() {
         }
 
         // Update reserved balance - release funds when spin leaves pending/active states
-        // Only PENDING and SUBMITTING states should have funds reserved (not submitted to blockchain yet)
+        // Keep funds reserved until the spin is actually processed (PROCESSING or later)
         let totalReservedBalance = state.totalReservedBalance;
-        const isActivePendingStatus = (status: SpinStatus) => 
+        const needsReservedFunds = (status: SpinStatus) => 
           [SpinStatus.PENDING, SpinStatus.SUBMITTING].includes(status);
         
-        const wasActivePending = isActivePendingStatus(oldStatus);
-        const isActivePending = isActivePendingStatus(spinUpdate.status);
+        const wasReserved = needsReservedFunds(oldStatus);
+        const shouldBeReserved = needsReservedFunds(spinUpdate.status);
         
-        if (wasActivePending && !isActivePending) {
-          // Spin is no longer active pending - release reserved funds
-          totalReservedBalance -= (spin.estimatedTotalCost || spin.totalBet);
-        } else if (!wasActivePending && isActivePending) {
-          // Spin became active pending (e.g., retry) - reserve funds again
-          totalReservedBalance += (newSpin.estimatedTotalCost || newSpin.totalBet);
+        // **NO AUTOMATIC RELEASE**: The balance manager will handle releasing funds when balance updates
+        // Only handle reserving funds for new spins
+        if (!wasReserved && shouldBeReserved) {
+          // Spin now needs reserved funds - reserve them
+          const reservedAmount = newSpin.totalBet;
+          totalReservedBalance += reservedAmount;
+          console.log(`💰 RESERVING funds: ${(reservedAmount / 1000000).toFixed(6)} VOI for spin ${spin.id.slice(-8)}. Total reserved now: ${(totalReservedBalance / 1000000).toFixed(6)} VOI`);
+        } else if (wasReserved && !shouldBeReserved) {
+          // Spin no longer needs reserved funds - but let balance manager handle the release
+          console.log(`⏳ Spin ${spin.id.slice(-8)} no longer needs reserved funds (${oldStatus} → ${spinUpdate.status}) - letting balance manager handle release`);
         }
 
         const newSpins = [...state.spins];
@@ -192,7 +198,7 @@ function createQueueStore() {
         let totalReservedBalance = state.totalReservedBalance;
         const isActivePendingStatus = [SpinStatus.PENDING, SpinStatus.SUBMITTING].includes(spin.status);
         if (isActivePendingStatus) {
-          totalReservedBalance -= (spin.estimatedTotalCost || spin.totalBet);
+          totalReservedBalance -= spin.totalBet;
         }
 
         return {
@@ -266,6 +272,27 @@ function createQueueStore() {
       });
     },
 
+    // Force release reserved funds for a specific spin (called by balance manager)
+    forceReleaseReservedFunds(spinId: string) {
+      update(state => {
+        const spinIndex = state.spins.findIndex(s => s.id === spinId);
+        if (spinIndex === -1) return state;
+        
+        const spin = state.spins[spinIndex];
+        const releasedAmount = spin.totalBet;
+        const newReservedBalance = Math.max(0, state.totalReservedBalance - releasedAmount);
+        
+        console.log(`🔀 FORCE RELEASING bet reservation: ${(releasedAmount / 1000000).toFixed(6)} VOI for spin ${spin.id.slice(-8)} BEFORE UI update. Total reserved now: ${(newReservedBalance / 1000000).toFixed(6)} VOI`);
+        
+        return {
+          ...state,
+          totalReservedBalance: newReservedBalance,
+          lastUpdated: Date.now()
+        };
+      });
+    },
+
+
     // Get specific spin
     getSpin(spinId: string): QueuedSpin | null {
       let foundSpin: QueuedSpin | null = null;
@@ -281,6 +308,7 @@ function createQueueStore() {
 }
 
 export const queueStore = createQueueStore();
+
 
 // Derived stores for convenience
 export const queueStats = derived(

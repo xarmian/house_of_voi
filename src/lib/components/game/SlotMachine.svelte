@@ -799,6 +799,10 @@
     // Record that we've celebrated this spin
     if (spinId) {
       lastCelebratedSpinId = spinId;
+      // Also mark as auto-celebrated to prevent stale background replays later
+      // This ensures a spin celebrated in the foreground won't be re-queued by the
+      // background auto-celebration loop when queue updates arrive out of order.
+      autoCelebratedSpinIds.add(spinId);
     }
     
     // Auto-hide duration

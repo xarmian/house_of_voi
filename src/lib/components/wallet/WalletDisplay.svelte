@@ -27,6 +27,10 @@
   let previousBalance = $walletBalance;
   let balanceChangeUnsubscribe: (() => void) | null = null;
   
+  // Pending transaction state
+  let hasPendingTransactions = false;
+  let pendingDeductions = 0;
+  
   // Public wallet data for locked wallets
   let publicWalletData: { address: string; createdAt: number; lastUsed: number; isPasswordless?: boolean } | null = null;
   let publicBalance: number | null = null;
@@ -84,11 +88,34 @@
     }
   };
 
+  // Check for pending transactions
+  function checkPendingTransactions() {
+    if ($walletAddress) {
+      hasPendingTransactions = balanceManager.hasPendingTransactions($walletAddress);
+      if (hasPendingTransactions) {
+        const pending = balanceManager.getPendingAmount($walletAddress);
+        pendingDeductions = pending.deductions;
+      } else {
+        pendingDeductions = 0;
+      }
+    }
+  }
+
   onMount(() => {
     loadPublicWalletData();
     
     // Subscribe to balance changes
     balanceChangeUnsubscribe = walletStore.onBalanceChange(handleBalanceChange);
+    
+    // Check for pending transactions initially
+    checkPendingTransactions();
+    
+    // Periodically check for pending transaction changes
+    const pendingCheckInterval = setInterval(checkPendingTransactions, 1000);
+    
+    return () => {
+      clearInterval(pendingCheckInterval);
+    };
   });
   
   onDestroy(() => {
@@ -158,7 +185,12 @@
   <div class="card-secondary px-3 py-2 flex items-center justify-between">
     <div class="flex items-center gap-2">
       <Wallet class="w-4 h-4 text-voi-400" />
-      <span class="text-sm font-medium text-theme">Credits: {formattedAvailableCredits} VOI</span>
+      <span class="text-sm font-medium text-theme">
+        Credits: {formattedAvailableCredits} VOI
+        {#if hasPendingTransactions}
+          <span class="text-xs text-amber-400 ml-1" title="Transaction pending confirmation">●</span>
+        {/if}
+      </span>
     </div>
     
     {#if $walletStore.isGuest && !$hasExistingWallet}
@@ -220,7 +252,12 @@
         <div>
           {#if $isWalletConnected || publicBalance !== null}
             <div class="flex items-center gap-2">
-              <h3 class="text-base font-semibold text-voi-400">Available Credits: {formattedAvailableCredits} VOI</h3>
+              <h3 class="text-base font-semibold text-voi-400">
+                Available Credits: {formattedAvailableCredits} VOI
+                {#if hasPendingTransactions}
+                  <span class="text-xs text-amber-400 ml-2 animate-pulse" title="Transaction pending confirmation">●</span>
+                {/if}
+              </h3>
             </div>
             <div class="text-sm text-theme-text opacity-70 mt-0.5 hidden">
               Wallet Balance: {#if loadingPublicBalance}

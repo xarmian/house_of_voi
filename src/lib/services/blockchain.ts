@@ -78,6 +78,10 @@ export class BlockchainService {
       // Use calculated costs from enhanced validation
       const extraPayment = balanceValidation.requirement.contractCosts + balanceValidation.requirement.networkFees;
 
+      // **NO OPTIMISTIC BALANCE UPDATE NEEDED**: The reservedBalance system already prevents overspending
+      // by reducing availableForBetting when spins are queued. The actual balance will update when
+      // the blockchain transaction confirms.
+
       // Prepare spin transaction
       const spinTx: SpinTransaction = {
         betAmount: spin.betPerLine * spin.selectedPaylines, // Total bet amount for all paylines
@@ -89,7 +93,16 @@ export class BlockchainService {
       // Submit to blockchain
       const result = await algorandService.submitSpin(account, spinTx);
 
-      // Update with transaction details
+      // Track a pending deduction so the UI can indicate pending state and
+      // the balance manager can release reserved funds when on-chain debit posts
+      try {
+        const expectedDebit = spin.estimatedTotalCost || (spin.betPerLine * spin.selectedPaylines + extraPayment);
+        balanceManager.trackPendingTransaction(result.txId, expectedDebit, account.address, 'deduction');
+      } catch (e) {
+        console.warn('Failed to track pending deduction:', e);
+      }
+
+      // Update with transaction details - this will release the reserved balance later
       queueStore.updateSpin({
         id: spin.id,
         status: SpinStatus.WAITING,
@@ -99,9 +112,13 @@ export class BlockchainService {
           commitmentRound: result.round
         }
       });
+      
+      console.log(`💰 Spin ${spin.id.slice(-8)} moved to WAITING - reserved balance should now be released`);
 
     } catch (error) {
       console.error('Error submitting spin:', error);
+      
+      // **NO OPTIMISTIC UPDATE TO REVERT**: The reservedBalance will be released when the spin status updates to FAILED
       
       queueStore.updateSpin({
         id: spin.id,
@@ -227,6 +244,14 @@ export class BlockchainService {
           console.log('💔 Better luck next time - but you can still claim to recover box storage fees!');
         }
 
+        // **TRANSACTION CONFIRMED**: The spin transaction has been confirmed on blockchain
+        // Force balance refresh to show the real blockchain balance (with actual deduction)
+        console.log(`✅ Spin ${spin.id.slice(-8)} confirmed on blockchain - refreshing balance`);
+        const account = await this.getWalletAccount();
+        if (account) {
+          balanceManager.getBalance(account.address, true);
+        }
+
         // Always show the outcome and winnings immediately, then proceed to claim
         // This allows users to see win/loss result even if claim fails
         queueStore.updateSpin({
@@ -243,6 +268,13 @@ export class BlockchainService {
       console.error('Error checking bet outcome:', error);
       
       console.log('📦 Bet no longer exists - treating as already completed');
+      
+      // **TRANSACTION COMPLETED**: Bet no longer exists (already claimed elsewhere)
+      console.log(`✅ Spin ${spin.id.slice(-8)} already completed elsewhere - refreshing balance`);
+      const account = await this.getWalletAccount();
+      if (account) {
+        balanceManager.getBalance(account.address, true);
+      }
         
       queueStore.updateSpin({
         id: spin.id,
@@ -333,15 +365,17 @@ export class BlockchainService {
         }
       });
 
-      // Optimistic balance update to prevent race condition
-      const currentBalance = get(walletStore).balance;
-      const transactionCost = (spin.betPerLine * spin.selectedPaylines);
-      const totalPayout = result.payout;
-      const expectedNewBalance = currentBalance - transactionCost + totalPayout;
-      
-      // Immediate optimistic update - threshold system will handle sound/animation
-      walletStore.updateBalance(expectedNewBalance);
-      
+      // Track a pending addition only if payout > 0
+      try {
+        if (result.payout && result.payout > 0) {
+          balanceManager.trackPendingTransaction(result.txId, result.payout, account.address, 'addition');
+        }
+      } catch (e) {
+        console.warn('Failed to track pending addition:', e);
+      }
+
+      // **SPIN COMPLETE**: Force refresh balance from blockchain to show winnings
+      console.log(`✅ Spin ${spin.id.slice(-8)} completed - refreshing balance`);
       if (account) {
         balanceManager.getBalance(account.address, true);
       }
@@ -370,16 +404,8 @@ export class BlockchainService {
           }
         });
         
-        // Optimistic balance update - assume the transaction was processed
-        const currentBalance = get(walletStore).balance;
-        const transactionCost = (spin.betPerLine * spin.selectedPaylines);
-        const gameWinnings = spin.winnings || 0;
-        const expectedNewBalance = currentBalance - transactionCost + gameWinnings;
-        
-        // Immediate optimistic update - threshold system will handle sound/animation
-        walletStore.updateBalance(expectedNewBalance);
-        
-        // Force refresh balance after claim to bypass cache
+        // **SPIN ALREADY COMPLETED**: Force refresh balance from blockchain to get accurate state
+        console.log(`✅ Spin ${spin.id.slice(-8)} already claimed - refreshing balance`);
         const account = get(walletStore).account;
         if (account) {
           balanceManager.getBalance(account.address, true);
