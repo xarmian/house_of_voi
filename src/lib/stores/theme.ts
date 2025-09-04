@@ -175,7 +175,7 @@ const availableThemes: Record<string, ThemeColors> = {
 
 // Default theme preferences
 const defaultPreferences: ThemePreferences = {
-  currentTheme: 'purple'
+  currentTheme: 'dorks'
 };
 
 // Load preferences from localStorage

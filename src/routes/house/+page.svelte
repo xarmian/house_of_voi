@@ -13,6 +13,7 @@
   // import OddsAnalysis from '$lib/components/analytics/OddsAnalysis.svelte';
   import LoadingOverlay from '$lib/components/ui/LoadingOverlay.svelte';
   import Leaderboard from '$lib/components/game/Leaderboard.svelte';
+  import PlatformCharts from '$lib/components/analytics/PlatformCharts.svelte';
   import algosdk from 'algosdk';
   import { hovStatsStore, platformStats, connectionStatus, timeStats } from '$lib/stores/hovStats';
   import { formatVOI } from '$lib/constants/betting';
@@ -239,14 +240,14 @@
                   <span class="hidden sm:inline">Leaderboard</span>
                   <span class="sm:hidden text-xs">Leaders</span>
                 </button>
-                <!--<button 
+                <button 
                   class="tab-button {activeTab === 'analytics' ? 'active' : ''}" 
                   on:click={() => activeTab = 'analytics'}
                 >
-                  <PieChart class="w-4 h-4 sm:w-5 sm:h-5" />
+                  <BarChart3 class="w-4 h-4 sm:w-5 sm:h-5" />
                   <span class="hidden sm:inline">Analytics</span>
-                  <span class="sm:hidden text-xs">Stats</span>
-                </button>-->
+                  <span class="sm:hidden text-xs">Charts</span>
+                </button>
               </div>
             </div>
 
@@ -434,28 +435,9 @@
                 </div>
               </div>
               
-              <!-- Public Analytics -->
+              <!-- Analytics Tab -->
               <div class:hidden={activeTab !== 'analytics'}>
-                <div class="card p-4">
-                  <div class="flex items-center gap-2 mb-4">
-                    <PieChart class="w-5 h-5 text-voi-400" />
-                    <h2 class="text-lg font-bold text-theme">Game Analytics & Transparency</h2>
-                  </div>
-                  
-                  <div class="text-slate-300 mb-6">
-                    <p class="mb-2">
-                      Our slot machine operates with full transparency. All game mechanics, odds, and payouts 
-                      are calculated from verifiable blockchain data.
-                    </p>
-                    <p class="text-sm text-slate-400">
-                      All calculations are performed using real-time blockchain data from the slot machine contract.
-                    </p>
-                  </div>
-                  
-                  {#if activeTab === 'analytics'}
-                    <!--<OddsAnalysis compact={false} showHouseMetrics={true} isModal={false} />-->
-                  {/if}
-                </div>
+                <PlatformCharts />
               </div>
             </div>
           </div>
