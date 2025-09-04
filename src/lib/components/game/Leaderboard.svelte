@@ -304,7 +304,7 @@
         <div class="mb-4">
           <select
             bind:value={selectedMetric}
-            on:change={(e) => changeMetric(e.target.value as typeof selectedMetric)}
+            on:change={(e) => changeMetric((e.target as HTMLSelectElement).value as typeof selectedMetric)}
             class="metric-select w-full"
             disabled={leaderboardLoading}
           >
@@ -366,14 +366,14 @@
       {#each Array(itemsPerPage) as _, i}
         <div class="leaderboard-entry skeleton" transition:fade={{ duration: 150 }}>
           <div class="hidden sm:flex sm:items-center sm:justify-between sm:w-full sm:gap-4">
-            <div class="flex-shrink-0 w-16">
+              <div class="flex-shrink-0 w-8">
               <div class="skeleton-text h-6 w-8"></div>
             </div>
             <div class="flex-1 min-w-0">
               <div class="skeleton-text h-4 w-24 mb-2"></div>
               <div class="skeleton-text h-3 w-16"></div>
             </div>
-            <div class="flex-shrink-0 text-right w-32">
+            <div class="flex-shrink-0 text-right w-28">
               <div class="skeleton-text h-5 w-20 mb-1"></div>
               <div class="skeleton-text h-3 w-12"></div>
             </div>
@@ -444,10 +444,7 @@
                 
                 <!-- Player Address -->
                 <div class="player-address" title={entry.who}>
-                  <span class="text-sm font-mono">{formatAddress(entry.who)}</span>
-                  {#if playerAddress === entry.who}
-                    <span class="you-badge">YOU</span>
-                  {/if}
+                  <span class="text-sm font-mono inline-block min-w-[8ch] max-w-full">{formatAddress(entry.who)}</span>
                 </div>
               </div>
               
@@ -474,7 +471,10 @@
               <div class="flex items-center gap-2 text-xs text-gray-400">
                 <Target class="w-3 h-3" />
                 <span>{entry.total_spins} spins</span>
-              </div>
+                {#if playerAddress === entry.who}
+                <span class="you-badge">YOU</span>
+              {/if}
+      </div>
               
               <!-- Metric value -->
               <div class="text-right">
@@ -489,7 +489,7 @@
           <!-- Desktop Layout (>= sm) -->
           <div class="hidden sm:flex sm:items-center sm:justify-between sm:w-full sm:gap-4">
             <!-- Rank -->
-            <div class="flex-shrink-0 w-16">
+            <div class="flex-shrink-0 w-8">
               {#if getRankIcon(entry.rank_position)}
                 <svelte:component 
                   this={getRankIcon(entry.rank_position)} 
@@ -505,21 +505,21 @@
             <!-- Player info -->
             <div class="flex-1 min-w-0">
               <div class="player-address" title={entry.who}>
-                {formatAddress(entry.who)}
-                {#if playerAddress === entry.who}
-                  <span class="you-badge">YOU</span>
-                {/if}
+                <span class="inline-block min-w-[12ch] max-w-full">{formatAddress(entry.who)}</span>
               </div>
               <div class="player-stats">
                 <span class="stat-item">
                   <Target class="w-3 h-3" />
                   {entry.total_spins} spins
                 </span>
+                {#if playerAddress === entry.who}
+                  <span class="you-badge">YOU</span>
+                {/if}
               </div>
             </div>
 
             <!-- Metric value -->
-            <div class="flex-shrink-0 text-right w-32">
+            <div class="flex-shrink-0 text-right w-28">
               <div class="value {metricConfig.color}">
                 {formatMetricValue(entry)}
               </div>
@@ -598,7 +598,7 @@
   />
 {/if}
 
-<style>
+<style lang="postcss">
   .leaderboard-container {
     @apply w-full;
   }
@@ -694,11 +694,11 @@
   }
 
   .player-address {
-    @apply font-mono font-semibold text-theme flex items-center gap-2;
+    @apply font-mono font-semibold text-theme flex items-center min-w-0;
   }
 
   .you-badge {
-    @apply px-2 py-0.5 text-xs bg-voi-600 text-white rounded-full;
+    @apply px-2 py-0.5 text-xs bg-voi-600 text-white rounded-full flex-shrink-0 whitespace-nowrap;
   }
 
   .player-stats {
@@ -706,7 +706,7 @@
   }
 
   .stat-item {
-    @apply flex items-center gap-1;
+    @apply flex items-center gap-1 whitespace-nowrap;
   }
 
   .metric-value {
