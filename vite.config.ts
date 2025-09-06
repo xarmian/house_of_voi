@@ -36,7 +36,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           // MEMORY OPTIMIZATION: Split heavy blockchain libraries into separate chunks
-          'blockchain': [ '@algorandfoundation/algokit-utils' ],
           'wallet': ['avm-wallet-svelte'],
           'contract-utils': ['ulujs'],
           // Split Svelte components into logical chunks
