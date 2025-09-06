@@ -2,8 +2,8 @@ import { env } from '$env/dynamic/public';
 import { CONTRACTS_CONFIG } from '$lib/config/contracts.config';
 
 export const NETWORK_CONFIG = {
-  nodeUrl: env.PUBLIC_VOI_NODE_URL || '',
-  indexerUrl: env.PUBLIC_VOI_INDEXER_URL || '',
+  nodeUrl: env.PUBLIC_VOI_NODE_URL || 'https://mainnet-api.voi.nodely.dev',
+  indexerUrl: env.PUBLIC_VOI_INDEXER_URL || 'https://mainnet-idx.voi.nodely.dev',
   port: parseInt(env.PUBLIC_VOI_PORT || '443'),
   token: env.PUBLIC_VOI_TOKEN || ''
 } as const;
