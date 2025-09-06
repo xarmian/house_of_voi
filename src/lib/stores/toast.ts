@@ -1,6 +1,16 @@
 import { writable } from 'svelte/store';
 
-export type ToastType = 'success' | 'error' | 'info' | 'warning' | 'update';
+export type ToastType = 'success' | 'error' | 'info' | 'warning' | 'update' | 'win';
+
+export interface WinData {
+  payout: number;
+  betAmount: number;
+  lines: number;
+  multiplier: number;
+  winner: string;
+  txid: string;
+  timestamp: Date;
+}
 
 export interface Toast {
   id: string;
@@ -13,6 +23,7 @@ export interface Toast {
     handler: () => void;
   };
   dismissible?: boolean;
+  winData?: WinData; // Additional data for win toasts
 }
 
 export interface ToastOptions {
@@ -25,6 +36,7 @@ export interface ToastOptions {
     handler: () => void;
   };
   dismissible?: boolean;
+  winData?: WinData; // Additional data for win toasts
 }
 
 function createToastStore() {
@@ -39,7 +51,8 @@ function createToastStore() {
       message: options.message,
       duration: options.duration || 5000,
       action: options.action,
-      dismissible: options.dismissible !== false
+      dismissible: options.dismissible !== false,
+      winData: options.winData
     };
 
     update(toasts => [...toasts, toast]);
@@ -83,6 +96,16 @@ function createToastStore() {
         message, 
         duration: 0, // Persistent until dismissed
         action: onReload ? { label: 'Reload', handler: onReload } : undefined,
+        dismissible: true
+      }),
+    win: (title: string, message?: string, winData?: WinData, duration?: number, onViewTransaction?: () => void) =>
+      add({
+        type: 'win',
+        title,
+        message,
+        winData,
+        duration: duration || 6000,
+        action: onViewTransaction ? { label: 'View Tx', handler: onViewTransaction } : undefined,
         dismissible: true
       })
   };

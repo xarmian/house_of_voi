@@ -1,13 +1,18 @@
 <script lang="ts">
   import { toastStore } from '$lib/stores/toast';
   import Toast from './Toast.svelte';
+  import WinToast from '$lib/components/game/WinToast.svelte';
 </script>
 
 <!-- Toast container - fixed position at top-right -->
 <div class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
   {#each $toastStore as toast (toast.id)}
     <div class="pointer-events-auto">
-      <Toast {toast} />
+      {#if toast.type === 'win'}
+        <WinToast {toast} />
+      {:else}
+        <Toast {toast} />
+      {/if}
     </div>
   {/each}
 </div>

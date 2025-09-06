@@ -3,7 +3,8 @@
   import { fade, fly } from 'svelte/transition';
   import { 
     X, Volume2, VolumeX, Headphones, Music, MousePointer, Disc, 
-    Palette, Settings, Gamepad2, Zap, Plus, Minus, RotateCcw, GripVertical, Star
+    Palette, Settings, Gamepad2, Zap, Plus, Minus, RotateCcw, GripVertical, Star,
+    Bell, TrendingUp, Eye, EyeOff, Timer, Activity
   } from 'lucide-svelte';
   import { 
     preferencesStore, 
@@ -11,6 +12,7 @@
     themePreferences, 
     bettingPreferences, 
     animationPreferences,
+    feedPreferences,
     type QuickBet 
   } from '$lib/stores/preferences';
   import { themeStore } from '$lib/stores/theme';
@@ -23,10 +25,10 @@
   }>();
 
   export let isVisible = false;
-  export let initialTab: 'sound' | 'theme' | 'betting' | 'animations' = 'sound';
+  export let initialTab: 'sound' | 'theme' | 'betting' | 'animations' | 'feed' = 'sound';
 
   // Current active tab
-  let activeTab: 'sound' | 'theme' | 'betting' | 'animations' = initialTab;
+  let activeTab: 'sound' | 'theme' | 'betting' | 'animations' | 'feed' = initialTab;
   
   // Update active tab when modal becomes visible and initialTab changes
   $: if (isVisible) {
@@ -38,6 +40,7 @@
   $: themePrefs = $themePreferences;
   $: bettingPrefs = $bettingPreferences;
   $: animationPrefs = $animationPreferences;
+  $: feedPrefs = $feedPreferences;
 
   // Available themes from theme store
   $: availableThemes = themeStore.getAvailableThemes();
@@ -190,6 +193,41 @@
     });
   }
 
+  // Feed functions
+  function toggleFeedEnabled() {
+    preferencesStore.updateFeedPreferences({
+      enabled: !feedPrefs.enabled
+    });
+  }
+
+  function updateMinPayout(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const value = parseFloat(target.value);
+    preferencesStore.updateFeedPreferences({ minPayout: value });
+  }
+
+  function updateMaxToastsPerMinute(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const value = parseInt(target.value);
+    preferencesStore.updateFeedPreferences({ maxToastsPerMinute: value });
+  }
+
+  function toggleShowOwnWins() {
+    preferencesStore.updateFeedPreferences({
+      showOwnWins: !feedPrefs.showOwnWins
+    });
+  }
+
+  function updateAnimationStyle(style: 'slide' | 'fade' | 'bounce') {
+    preferencesStore.updateFeedPreferences({ animationStyle: style });
+  }
+
+  function updateDisplayDuration(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const value = parseInt(target.value);
+    preferencesStore.updateFeedPreferences({ displayDuration: value });
+  }
+
   // Reset functions
   function resetSoundSettings() {
     preferencesStore.resetSection('sound');
@@ -207,6 +245,10 @@
 
   function resetAnimationSettings() {
     preferencesStore.resetSection('animations');
+  }
+
+  function resetFeedSettings() {
+    preferencesStore.resetSection('feed');
   }
 
   // Category configurations for sound settings
@@ -250,7 +292,8 @@
     { id: 'sound', name: 'Sound', icon: Volume2 },
     { id: 'theme', name: 'Theme', icon: Palette },
     { id: 'betting', name: 'Betting', icon: Gamepad2 },
-    { id: 'animations', name: 'Effects', icon: Zap }
+    { id: 'animations', name: 'Effects', icon: Zap },
+    { id: 'feed', name: 'Feed', icon: Bell }
   ];
 </script>
 
@@ -656,6 +699,146 @@
               </div>
             </div>
           </div>
+        {:else if activeTab === 'feed'}
+          <!-- Feed Settings -->
+          <div class="tab-content">
+            <div class="setting-section">
+              <div class="setting-header">
+                <h3 class="setting-title">Win Feed</h3>
+                <button class="reset-icon-button" on:click={resetFeedSettings} title="Reset feed settings">
+                  <RotateCcw class="w-4 h-4" />
+                </button>
+              </div>
+
+              <div class="animation-options">
+                <!-- Enable/Disable Feed -->
+                <div class="animation-option">
+                  <div>
+                    <h4 class="option-title">Enable Win Feed</h4>
+                    <p class="option-description">Show real-time notifications of other players' wins</p>
+                  </div>
+                  <button
+                    class="toggle-button"
+                    class:enabled={feedPrefs.enabled}
+                    on:click={toggleFeedEnabled}
+                  >
+                    <span class="toggle-slider"></span>
+                  </button>
+                </div>
+
+                <!-- Show Own Wins -->
+                <div class="animation-option">
+                  <div>
+                    <h4 class="option-title">Show Your Wins</h4>
+                    <p class="option-description">Include your own wins in the feed</p>
+                  </div>
+                  <button
+                    class="toggle-button"
+                    class:enabled={feedPrefs.showOwnWins}
+                    on:click={toggleShowOwnWins}
+                    disabled={!feedPrefs.enabled}
+                  >
+                    <span class="toggle-slider"></span>
+                  </button>
+                </div>
+
+                <!-- Minimum Payout -->
+                <div class="range-setting" class:disabled={!feedPrefs.enabled}>
+                  <div class="setting-label">
+                    <div class="flex items-center gap-2">
+                      <TrendingUp class="w-4 h-4 text-voi-400" />
+                      <span class="font-medium">Minimum Win Amount</span>
+                    </div>
+                    <span class="text-sm font-mono">{feedPrefs.minPayout} VOI</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="50"
+                    step="1"
+                    value={feedPrefs.minPayout}
+                    on:input={updateMinPayout}
+                    disabled={!feedPrefs.enabled}
+                    class="range-slider"
+                  />
+                  <div class="range-labels">
+                    <span>1 VOI</span>
+                    <span>50 VOI</span>
+                  </div>
+                </div>
+
+                <!-- Max Toasts Per Minute -->
+                <div class="range-setting" class:disabled={!feedPrefs.enabled}>
+                  <div class="setting-label">
+                    <div class="flex items-center gap-2">
+                      <Activity class="w-4 h-4 text-voi-400" />
+                      <span class="font-medium">Max Notifications/Min</span>
+                    </div>
+                    <span class="text-sm font-mono">{feedPrefs.maxToastsPerMinute}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="15"
+                    step="1"
+                    value={feedPrefs.maxToastsPerMinute}
+                    on:input={updateMaxToastsPerMinute}
+                    disabled={!feedPrefs.enabled}
+                    class="range-slider"
+                  />
+                  <div class="range-labels">
+                    <span>1/min</span>
+                    <span>15/min</span>
+                  </div>
+                </div>
+
+                <!-- Display Duration -->
+                <div class="range-setting" class:disabled={!feedPrefs.enabled}>
+                  <div class="setting-label">
+                    <div class="flex items-center gap-2">
+                      <Timer class="w-4 h-4 text-voi-400" />
+                      <span class="font-medium">Display Duration</span>
+                    </div>
+                    <span class="text-sm font-mono">{(feedPrefs.displayDuration / 1000).toFixed(1)}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="3000"
+                    max="10000"
+                    step="500"
+                    value={feedPrefs.displayDuration}
+                    on:input={updateDisplayDuration}
+                    disabled={!feedPrefs.enabled}
+                    class="range-slider"
+                  />
+                  <div class="range-labels">
+                    <span>3s</span>
+                    <span>10s</span>
+                  </div>
+                </div>
+
+                <!-- Animation Style -->
+                <div class="setting-group" class:disabled={!feedPrefs.enabled}>
+                  <div class="setting-label">
+                    <h4 class="option-title">Animation Style</h4>
+                    <p class="option-description">How win notifications appear</p>
+                  </div>
+                  <div class="style-buttons">
+                    {#each ['slide', 'fade', 'bounce'] as style}
+                      <button
+                        class="style-button"
+                        class:active={feedPrefs.animationStyle === style}
+                        on:click={() => updateAnimationStyle(style)}
+                        disabled={!feedPrefs.enabled}
+                      >
+                        {style.charAt(0).toUpperCase() + style.slice(1)}
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         {/if}
       </div>
     </div>
@@ -924,6 +1107,45 @@
   .modal-body::-webkit-scrollbar-thumb {
     background: rgba(16, 185, 129, 0.5);
     border-radius: 2px;
+  }
+
+  /* Feed Settings */
+  .style-buttons {
+    @apply flex gap-2;
+  }
+
+  .style-button {
+    @apply px-3 py-2 text-xs font-medium rounded-md border border-surface-border 
+           bg-surface-secondary text-theme-text transition-all;
+  }
+
+  .style-button:hover:not(:disabled) {
+    @apply border-voi-400 bg-surface-hover;
+  }
+
+  .style-button.active {
+    @apply bg-voi-500 text-white border-voi-500;
+  }
+
+  .style-button:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .setting-group.disabled {
+    @apply opacity-50;
+  }
+
+  .setting-group.disabled .setting-label h4,
+  .setting-group.disabled .setting-label p {
+    @apply opacity-60;
+  }
+
+  .range-setting.disabled {
+    @apply opacity-50;
+  }
+
+  .range-setting.disabled input[type="range"] {
+    @apply opacity-60 cursor-not-allowed;
   }
 
   /* Mobile optimizations */

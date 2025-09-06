@@ -16,11 +16,21 @@ export interface BettingPreferences {
   defaultQuickBet: QuickBet | null; // Optional default quick bet to use on initialization
 }
 
+export interface FeedPreferences {
+  enabled: boolean; // Whether to listen to win feed
+  minPayout: number; // Minimum payout amount to show (in VOI)
+  maxToastsPerMinute: number; // Rate limiting for toasts
+  showOwnWins: boolean; // Whether to show user's own wins
+  animationStyle: 'slide' | 'fade' | 'bounce'; // Toast animation style
+  displayDuration: number; // How long toasts stay visible (ms)
+}
+
 export interface UnifiedPreferences {
   sound: SoundPreferences;
   theme: ThemePreferences;
   betting: BettingPreferences;
   animations: AnimationPreferences;
+  feed: FeedPreferences;
   version: number; // For future migrations
 }
 
@@ -62,11 +72,21 @@ const defaultAnimationPreferences: AnimationPreferences = {
   particlesEnabled: true
 };
 
+const defaultFeedPreferences: FeedPreferences = {
+  enabled: true,
+  minPayout: 5, // 5 VOI minimum
+  maxToastsPerMinute: 8,
+  showOwnWins: false, // Don't show user's own wins by default
+  animationStyle: 'slide',
+  displayDuration: 6000 // 6 seconds
+};
+
 const defaultPreferences: UnifiedPreferences = {
   sound: defaultSoundPreferences,
   theme: defaultThemePreferences,
   betting: defaultBettingPreferences,
   animations: defaultAnimationPreferences,
+  feed: defaultFeedPreferences,
   version: 1
 };
 
@@ -157,6 +177,7 @@ function loadPreferences(): UnifiedPreferences {
         theme: { ...defaultThemePreferences, ...parsed.theme },
         betting: bettingPrefs,
         animations: { ...defaultAnimationPreferences, ...parsed.animations },
+        feed: { ...defaultFeedPreferences, ...parsed.feed },
         version: parsed.version || 1
       };
     }
@@ -203,7 +224,8 @@ function createPreferencesStore() {
           sound: updates.sound ? { ...state.sound, ...updates.sound } : state.sound,
           theme: updates.theme ? { ...state.theme, ...updates.theme } : state.theme,
           betting: updates.betting ? { ...state.betting, ...updates.betting } : state.betting,
-          animations: updates.animations ? { ...state.animations, ...updates.animations } : state.animations
+          animations: updates.animations ? { ...state.animations, ...updates.animations } : state.animations,
+          feed: updates.feed ? { ...state.feed, ...updates.feed } : state.feed
         };
         savePreferences(newState);
         return newState;
@@ -230,6 +252,11 @@ function createPreferencesStore() {
       this.updatePreferences({ animations: animationUpdates });
     },
 
+    // Feed preference updates
+    updateFeedPreferences(feedUpdates: Partial<FeedPreferences>): void {
+      this.updatePreferences({ feed: feedUpdates });
+    },
+
     // Reset all preferences to defaults
     resetToDefaults(): void {
       set(defaultPreferences);
@@ -244,7 +271,8 @@ function createPreferencesStore() {
         sound: defaultSoundPreferences,
         theme: defaultThemePreferences,
         betting: defaultBettingPreferences,
-        animations: defaultAnimationPreferences
+        animations: defaultAnimationPreferences,
+        feed: defaultFeedPreferences
       };
 
       this.updatePreferences({ [section]: sectionDefaults[section] });
@@ -269,6 +297,7 @@ export const soundPreferences = derived(preferencesStore, $prefs => $prefs.sound
 export const themePreferences = derived(preferencesStore, $prefs => $prefs.theme);
 export const bettingPreferences = derived(preferencesStore, $prefs => $prefs.betting);
 export const animationPreferences = derived(preferencesStore, $prefs => $prefs.animations);
+export const feedPreferences = derived(preferencesStore, $prefs => $prefs.feed);
 
 // Legacy compatibility - these can be removed once all components are updated
 export const legacySoundPreferences = soundPreferences;

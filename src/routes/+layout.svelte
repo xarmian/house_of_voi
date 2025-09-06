@@ -10,6 +10,7 @@
   import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
   import { checkForPurchaseResult, clearPurchaseParams, showPurchaseNotification } from '$lib/utils/voiPurchase';
   import { updateDetector } from '$lib/services/updateDetector';
+  import { winFeedStore } from '$lib/stores/winFeed';
   
   export let data;
   
@@ -37,9 +38,17 @@
     // Start the update detector
     updateDetector.start();
     
+    // Initialize win feed store
+    winFeedStore.initialize().catch(error => {
+      console.error('Failed to initialize win feed store:', error);
+    });
+    
     return () => {
       // Clean up update detector on component destroy
       updateDetector.stop();
+      
+      // Clean up win feed store
+      winFeedStore.destroy();
     };
   });
 </script>
