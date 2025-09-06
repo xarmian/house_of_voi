@@ -37,7 +37,6 @@ export default defineConfig({
         manualChunks: {
           // MEMORY OPTIMIZATION: Split heavy blockchain libraries into separate chunks
           'wallet': ['avm-wallet-svelte'],
-          'contract-utils': ['ulujs'],
           // Split Svelte components into logical chunks
           'game-components': [
             'src/lib/components/game/Leaderboard.svelte',
