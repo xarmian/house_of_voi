@@ -44,7 +44,6 @@ export default defineConfig({
             'src/lib/components/game/GameStaking.svelte'
           ],
           'ui-components': [
-            'src/lib/components/ui',
             'lucide-svelte'
           ]
         }
