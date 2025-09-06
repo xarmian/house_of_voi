@@ -320,10 +320,6 @@ export class AlgorandService {
     return this.indexer;
   }
 
-  getAppId(): number {
-    return this.appId;
-  }
-
   /**
    * Get suggested transaction parameters
    */
