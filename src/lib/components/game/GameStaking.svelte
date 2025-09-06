@@ -1,11 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { walletStore } from '$lib/stores/wallet';
+  import { walletService } from '$lib/services/wallet';
   import { ybtService } from '$lib/services/ybt';
   import { BETTING_CONSTANTS } from '$lib/constants/betting';
   import { TrendingUp, Minus, RefreshCw } from 'lucide-svelte';
+  import type { ContractPair } from '$lib/types/multiContract';
+  import { multiContractInitializer } from '$lib/services/multiContractInit';
   
   export let compact = false;
+  export let contractContext: ContractPair;
   
   let isLoading = false;
   let error: string | null = null;
@@ -32,16 +36,20 @@
   const quickUnstakeOptions = [25, 50, 75, 100];
   
   async function loadStakingData() {
-    if (!$walletStore.account?.address) return;
+    const address = $walletStore.account?.address || walletService.getPublicWalletData()?.address;
+    if (!address || !contractContext) return;
     
     isLoading = true;
     error = null;
     
     try {
+      // Ensure the multi-contract system is fully initialized first
+      await multiContractInitializer.initialize();
+      
       const [globalState, shares, contractVal] = await Promise.all([
-        ybtService.getGlobalState(),
-        ybtService.getUserShares($walletStore.account.address),
-        ybtService.getContractTotalValue()
+        ybtService.getGlobalState(contractContext.id),
+        ybtService.getUserShares(address, contractContext.id),
+        ybtService.getContractTotalValue(contractContext.id)
       ]);
       
       userShares = shares;
@@ -84,7 +92,7 @@
     error = null;
     
     try {
-      const result = await ybtService.deposit({ amount: BigInt(amountInMicroVOI) });
+      const result = await ybtService.deposit({ amount: BigInt(amountInMicroVOI) }, contractContext.id);
       
       if (result.success) {
         customAmount = '';
@@ -118,7 +126,7 @@
     error = null;
     
     try {
-      const result = await ybtService.withdraw({ shares: sharesToWithdraw });
+      const result = await ybtService.withdraw({ shares: sharesToWithdraw }, contractContext.id);
       
       if (result.success) {
         showUnstakeForm = false;

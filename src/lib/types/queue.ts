@@ -18,6 +18,9 @@ export interface QueuedSpin {
   timestamp: number;
   status: SpinStatus;
   
+  // Contract details
+  contractId?: string; // ID of the contract this spin belongs to
+  
   // Bet details
   betPerLine: number;
   selectedPaylines: number;

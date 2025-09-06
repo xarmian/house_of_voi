@@ -69,7 +69,7 @@
   }
 
   onMount(async () => {
-    // Give the canvas elements time to render
+    /*// Give the canvas elements time to render
     await tick();
     
     // Check if we already have data
@@ -78,7 +78,7 @@
     } else {
       // If no data, try to refresh it
       await refreshData();
-    }
+    }*/
   });
 
   onDestroy(() => {

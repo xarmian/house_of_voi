@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { gameStore } from '$lib/stores/game';
-  import { onMount } from 'svelte';
   import { contractDataCache } from '$lib/services/contractDataCache';
   import { walletAddress } from '$lib/stores/wallet';
   

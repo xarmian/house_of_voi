@@ -2,7 +2,7 @@ import algosdk from 'algosdk';
 import * as algokit from '@algorandfoundation/algokit-utils';
 import { YieldBearingTokenClient, APP_SPEC as YBTAppSpec } from '../../clients/YieldBearingTokenClient.js';
 import { CONTRACT } from 'ulujs';
-import { NETWORK_CONFIG, CONTRACT_CONFIG } from '$lib/constants/network';
+import { NETWORK_CONFIG } from '$lib/constants/network';
 import { BETTING_CONSTANTS } from '$lib/constants/betting';
 import { selectedWallet, signAndSendTransactions, signTransactions } from 'avm-wallet-svelte';
 import { get } from 'svelte/store';
@@ -13,6 +13,8 @@ import type {
   YBTDepositParams, 
   YBTWithdrawParams 
 } from '$lib/types/ybt';
+import { multiContractYBTService } from './ybtMultiContract';
+import { contractSelectionStore, selectedContract } from '$lib/stores/multiContract';
 
 // Wallet context types
 export type WalletContextType = 'gaming' | 'third-party';
@@ -45,6 +47,21 @@ class YBTService {
       NETWORK_CONFIG.nodeUrl,
       NETWORK_CONFIG.port
     );
+
+    // Set the preferred wallet type on the multi-contract service
+    multiContractYBTService.setPreferredWalletType(this.preferredWalletType);
+  }
+
+  /**
+   * Get the currently selected contract ID
+   */
+  private getCurrentContractId(): string {
+    const current = get(selectedContract);
+    if (!current) {
+      throw new Error('❌ No contract selected! YBT service requires a selected contract');
+    }
+
+    return current.id;
   }
 
   /**
@@ -52,6 +69,7 @@ class YBTService {
    */
   setPreferredWalletType(type: 'gaming' | 'third-party' | 'auto') {
     this.preferredWalletType = type;
+    multiContractYBTService.setPreferredWalletType(type);
   }
 
   /**
@@ -239,10 +257,15 @@ class YBTService {
 
   private async getYBTClient(): Promise<YieldBearingTokenClient> {
     if (!this.ybtClient) {
+      const currentContract = get(selectedContract);
+      if (!currentContract) {
+        throw new Error('❌ No contract selected! Cannot create YBT client');
+      }
+      
       this.ybtClient = new YieldBearingTokenClient(
         {
           resolveBy: 'id',
-          id: CONTRACT_CONFIG.ybtAppId,
+          id: currentContract.ybtAppId,
           sender: {
             addr: get(selectedWallet)?.address || '',
             sk: new Uint8Array(0),
@@ -257,83 +280,33 @@ class YBTService {
 
   private async getReadOnlyYBTClient(): Promise<YieldBearingTokenClient> {
     // Create a client without a sender for read-only operations
+    const currentContract = get(selectedContract);
+    if (!currentContract) {
+      throw new Error('❌ No contract selected! Cannot create read-only YBT client');
+    }
+    
     return new YieldBearingTokenClient(
       {
         resolveBy: 'id',
-        id: CONTRACT_CONFIG.ybtAppId,
+        id: currentContract.ybtAppId,
       },
       this.algodClient
     );
   }
 
-  async getGlobalState(): Promise<YBTGlobalState> {
+  async getGlobalState(contractId?: string): Promise<YBTGlobalState> {
     try {
-      const client = await this.getYBTClient();
-      const appInfo = await this.algodClient.getApplicationByID(CONTRACT_CONFIG.ybtAppId).do();
+      const targetContractId = contractId || this.getCurrentContractId();
+      const globalStateWithContract = await multiContractYBTService.getGlobalState(targetContractId);
       
-      const globalState = appInfo.params['global-state'] || [];
-      const decodedState: any = {};
-      
-      // Decode global state
-      for (const item of globalState) {
-        const keyBytes = new Uint8Array(atob(item.key).split('').map(c => c.charCodeAt(0)));
-        const key = new TextDecoder().decode(keyBytes);
-        if (item.value.type === 1) {
-          // Bytes
-          const valueBytes = new Uint8Array(atob(item.value.bytes).split('').map(c => c.charCodeAt(0)));
-          
-          // Special handling for totalSupply - it's stored as bytes but should be interpreted as uint64
-          if (key === 'totalSupply') {
-            if (valueBytes.length <= 8) {
-              // Pad to 8 bytes if needed (big-endian, so pad at the beginning)
-              const paddedBytes = new Uint8Array(8);
-              paddedBytes.set(valueBytes, 8 - valueBytes.length);
-              
-              const dataView = new DataView(paddedBytes.buffer);
-              const value = dataView.getBigUint64(0, false); // false = big-endian
-              decodedState[key] = value;
-            } else {
-              decodedState[key] = BigInt(0);
-            }
-          } else {
-            // Regular string decoding for other byte fields
-            try {
-              const value = new TextDecoder().decode(valueBytes);
-              decodedState[key] = value;
-            } catch (decodeError) {
-              // If string decoding fails, store as hex
-              const hexValue = Array.from(valueBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-              decodedState[key] = hexValue;
-            }
-          }
-        } else if (item.value.type === 2) {
-          // Uint
-          const value = BigInt(item.value.uint);
-          decodedState[key] = value;
-        }
-      }
-
-      // Ensure totalSupply is always a valid BigInt
-      let totalSupply = BigInt(0);
-      if (decodedState.totalSupply !== undefined && decodedState.totalSupply !== null) {
-        if (typeof decodedState.totalSupply === 'bigint') {
-          totalSupply = decodedState.totalSupply;
-        } else {
-          try {
-            totalSupply = BigInt(decodedState.totalSupply);
-          } catch (error) {
-            totalSupply = BigInt(0);
-          }
-        }
-      }
-
+      // Convert to legacy format for backward compatibility
       return {
-        totalSupply,
-        name: decodedState.name || 'Submarine Gaming Token',
-        symbol: decodedState.symbol || 'GAME',
-        decimals: Number(decodedState.decimals || 9),
-        yieldBearingSource: Number(decodedState.yield_bearing_source || 0),
-        owner: decodedState.owner || ''
+        totalSupply: globalStateWithContract.totalSupply,
+        name: globalStateWithContract.name,
+        symbol: globalStateWithContract.symbol,
+        decimals: globalStateWithContract.decimals,
+        yieldBearingSource: globalStateWithContract.yieldBearingSource,
+        owner: globalStateWithContract.owner
       };
     } catch (error) {
       console.error('Error fetching YBT global state:', error);
@@ -341,129 +314,40 @@ class YBTService {
     }
   }
 
-  async getUserShares(address: string): Promise<bigint> {
+  async getUserShares(address: string, contractId?: string): Promise<bigint> {
     try {
-      // Create ulujs CONTRACT instance for read-only call
-      const ci = new CONTRACT(
-        CONTRACT_CONFIG.ybtAppId,
-        this.algodClient,
-        undefined, // No indexer needed for read-only calls
-        this.ybtABI,
-        {
-          addr: address,
-          sk: new Uint8Array(0) // Empty key for read-only operations
-        }
-      );
-
-      // Call arc200_balanceOf method
-      const result = await ci.arc200_balanceOf(address);
-      
-      if (!result.success) {
-        return BigInt(0);
-      }
-
-      return BigInt(result.returnValue || 0);
+      const targetContractId = contractId || this.getCurrentContractId();
+      return await multiContractYBTService.getUserShares(targetContractId, address);
     } catch (error) {
       console.error('Error fetching user shares:', error);
       return BigInt(0);
     }
   }
 
-  async getDepositCost(): Promise<bigint> {
+  async getDepositCost(contractId?: string): Promise<bigint> {
     try {
-      const context = await this.getWalletContext();
-      if (!context) {
-        throw new Error('No wallet connected');
-      }
-
-      // Create ulujs CONTRACT instance for read-only call
-      const ci = new CONTRACT(
-        CONTRACT_CONFIG.ybtAppId,
-        this.algodClient,
-        undefined, // No indexer needed for read-only calls
-        this.ybtABI,
-        {
-          addr: context.address,
-          sk: new Uint8Array(0) // Empty key for read-only operations
-        }
-      );
-
-      const bal_result = await ci.arc200_balanceOf(context.address);
-      if (!bal_result.success && bal_result.returnValue > BigInt(0)) {
-        return BigInt(0);
-      }
-
-      // Call deposit_cost method - this should be a read-only call
-      const result = await ci.deposit_cost();
-      
-      if (!result.success) {
-        throw new Error(`Deposit cost call failed: ${result.error || 'Unknown error'}`);
-      }
-
-      return BigInt(result.returnValue || 0);
+      const targetContractId = contractId || this.getCurrentContractId();
+      return await multiContractYBTService.getDepositCost(targetContractId);
     } catch (error) {
       console.error('Error getting deposit cost:', error);
       throw new Error('Failed to get deposit cost');
     }
   }
 
-  async deposit(params: YBTDepositParams): Promise<YBTTransactionResult> {
+  async deposit(params: YBTDepositParams, contractId?: string): Promise<YBTTransactionResult> {
     try {
-      const context = await this.getWalletContext();
-      if (!context) {
-        throw new Error('No wallet connected');
-      }
-
-      // Create ulujs CONTRACT instance for deposit
-      const ci = new CONTRACT(
-        CONTRACT_CONFIG.ybtAppId,
-        this.algodClient,
-        undefined,
-        this.ybtABI,
-        {
-          addr: context.address,
-          sk: new Uint8Array(0) // Will be signed based on context
-        }
-      );
-
-      // Set payment amount for the deposit
-      ci.setPaymentAmount(Number(params.amount));
+      const targetContractId = contractId || this.getCurrentContractId();
+      const result = await multiContractYBTService.deposit({
+        ...params,
+        contractId: targetContractId
+      });
       
-      // Set fee to cover the app call and inner payment transaction
-      // Base fee (2000) + inner transaction fee (2000) = 4000 microAlgos
-      ci.setFee(4000);
-
-      // Call deposit method using ulujs (this generates unsigned transactions)
-      const result = await ci.deposit();
-      
-      if (!result.success) {
-        throw new Error(`Deposit failed: ${result.error || 'Unknown error'}`);
-      }
-
-      // Extract unsigned transactions from ulujs result
-      if (!result.txns || result.txns.length === 0) {
-        throw new Error('No transactions generated by ulujs');
-      }
-
-      // Sign and send transactions using the unified method
-      const sendResult = await this.signAndSendTransactions(result.txns, context);
-
-      if (!sendResult || !sendResult.txId) {
-        throw new Error('Transaction signing failed or was cancelled');
-      }
-
-      // Extract transaction information from signed result
-      const txId = sendResult.txId;
-      const sharesReceived = result.returnValue ? BigInt(result.returnValue) : BigInt(0);
-
-      // Wait for transaction confirmation before refreshing balance
-      await this.waitForConfirmation(txId);
-      this.refreshBalance();
-
+      // Convert from multi-contract format to legacy format
       return {
-        txId,
-        sharesReceived,
-        success: true
+        txId: result.txId,
+        sharesReceived: result.sharesReceived,
+        success: result.success,
+        error: result.error
       };
     } catch (error) {
       console.error('Error depositing to YBT:', error);
@@ -475,61 +359,20 @@ class YBTService {
     }
   }
 
-  async withdraw(params: YBTWithdrawParams): Promise<YBTTransactionResult> {
+  async withdraw(params: YBTWithdrawParams, contractId?: string): Promise<YBTTransactionResult> {
     try {
-      const context = await this.getWalletContext();
-      if (!context) {
-        throw new Error('No wallet connected');
-      }
-
-      // Create ulujs CONTRACT instance for withdrawal
-      const ci = new CONTRACT(
-        CONTRACT_CONFIG.ybtAppId,
-        this.algodClient,
-        undefined,
-        this.ybtABI,
-        {
-          addr: context.address,
-          sk: new Uint8Array(0) // Will be signed based on context
-        }
-      );
-
-      // Set fee to cover the app call and inner payment transaction
-      // Withdrawals might need higher fee due to complex inner transactions
-      // Base fee (2000) + inner payment fee (2000) + buffer (2000) = 6000 microAlgos
-      ci.setFee(7000);
-
-      // Call withdraw method using ulujs with shares parameter (this generates unsigned transactions)
-      const result = await ci.withdraw(BigInt(params.shares));
+      const targetContractId = contractId || this.getCurrentContractId();
+      const result = await multiContractYBTService.withdraw({
+        ...params,
+        contractId: targetContractId
+      });
       
-      if (!result.success) {
-        throw new Error(`Withdrawal failed: ${result.error || 'Unknown error'}`);
-      }
-
-      // Extract unsigned transactions from ulujs result
-      if (!result.txns || result.txns.length === 0) {
-        throw new Error('No transactions generated by ulujs');
-      }
-
-      // Sign and send transactions using the unified method
-      const sendResult = await this.signAndSendTransactions(result.txns, context);
-
-      if (!sendResult || !sendResult.txId) {
-        throw new Error('Transaction signing failed or was cancelled');
-      }
-
-      // Extract transaction information from signed result
-      const txId = sendResult.txId;
-      const amountWithdrawn = result.returnValue ? BigInt(result.returnValue) : BigInt(0);
-
-      // Wait for transaction confirmation before refreshing balance
-      await this.waitForConfirmation(txId);
-      this.refreshBalance();
-
+      // Convert from multi-contract format to legacy format
       return {
-        txId,
-        amountWithdrawn,
-        success: true
+        txId: result.txId,
+        amountWithdrawn: result.amountWithdrawn,
+        success: result.success,
+        error: result.error
       };
     } catch (error) {
       console.error('Error withdrawing from YBT:', error);
@@ -542,157 +385,40 @@ class YBTService {
   }
 
   calculateSharePercentage(userShares: bigint, totalSupply: bigint): number {
-    try {
-      // Ensure both parameters are BigInt with better validation
-      let userSharesBigInt: bigint;
-      let totalSupplyBigInt: bigint;
-      
-      if (typeof userShares === 'bigint') {
-        userSharesBigInt = userShares;
-      } else if (typeof userShares === 'number') {
-        userSharesBigInt = BigInt(userShares);
-      } else if (typeof userShares === 'string' && /^\d+$/.test(userShares)) {
-        userSharesBigInt = BigInt(userShares);
-      } else {
-        console.warn('Invalid userShares value:', userShares);
-        userSharesBigInt = 0n;
-      }
-      
-      if (typeof totalSupply === 'bigint') {
-        totalSupplyBigInt = totalSupply;
-      } else if (typeof totalSupply === 'number') {
-        totalSupplyBigInt = BigInt(totalSupply);
-      } else if (typeof totalSupply === 'string' && /^\d+$/.test(totalSupply)) {
-        totalSupplyBigInt = BigInt(totalSupply);
-      } else {
-        console.warn('Invalid totalSupply value:', totalSupply);
-        totalSupplyBigInt = 0n;
-      }
-
-      if (totalSupplyBigInt === 0n) return 0;
-      return Number((userSharesBigInt * 10000n) / totalSupplyBigInt) / 100;
-    } catch (error) {
-      console.error('Error calculating share percentage:', error, { userShares, totalSupply });
-      return 0;
-    }
+    return multiContractYBTService.calculateSharePercentage(userShares, totalSupply);
   }
 
   formatShares(shares: bigint, decimals: number): string {
-    const divisor = BigInt(10 ** decimals);
-    const wholePart = shares / divisor;
-    const fractionalPart = shares % divisor;
-    
-    if (fractionalPart === BigInt(0)) {
-      return wholePart.toString();
-    }
-    
-    const fractionalStr = fractionalPart.toString().padStart(decimals, '0');
-    const trimmedFractional = fractionalStr.replace(/0+$/, '');
-    
-    return `${wholePart}.${trimmedFractional}`;
+    return multiContractYBTService.formatShares(shares, decimals);
   }
 
   getApplicationEscrowAddress(appId: number): string {
-    try {
-      // Convert app ID to escrow account address using algosdk
-      return algosdk.getApplicationAddress(appId);
-    } catch (error) {
-      console.error('Error getting application escrow address:', error);
-      return '';
-    }
+    return multiContractYBTService.getApplicationEscrowAddress(appId);
   }
 
   async getEscrowVoiBalance(appId: number): Promise<bigint> {
-    try {
-      const escrowAddress = this.getApplicationEscrowAddress(appId);
-      if (!escrowAddress) {
-        return BigInt(0);
-      }
-
-      const accountInfo = await this.algodClient.accountInformation(escrowAddress).do();
-      return BigInt((accountInfo.amount - accountInfo['min-balance']) || 0);
-    } catch (error) {
-      console.error('Error fetching escrow VOI balance:', error);
-      return BigInt(0);
-    }
+    return await multiContractYBTService.getEscrowVoiBalance(appId);
   }
 
-  async getContractTotalValue(): Promise<bigint> {
+  async getContractTotalValue(contractId?: string): Promise<bigint> {
     try {
-      const globalState = await this.getGlobalState();
-      if (!globalState.yieldBearingSource || globalState.yieldBearingSource === 0) {
-        return BigInt(0);
-      }
-
-      // Use the contract's authoritative balance tracking instead of account balance
-      const { algorandService } = await import('./algorand');
-      const balances = await algorandService.getBalances({
-        appId: globalState.yieldBearingSource,
-        debug: false
-      });
-
-      // Convert from VOI to microVOI and return as BigInt
-      return BigInt(Math.round(balances.balanceTotal * 1e6));
+      const targetContractId = contractId || this.getCurrentContractId();
+      return await multiContractYBTService.getContractTotalValue(targetContractId);
     } catch (error) {
       console.error('Error getting contract total value:', error);
-      // Fallback to old method if contract balance fails
-      try {
-        const globalState = await this.getGlobalState();
-        if (!globalState.yieldBearingSource || globalState.yieldBearingSource === 0) {
-          return BigInt(0);
-        }
-        return await this.getEscrowVoiBalance(globalState.yieldBearingSource);
-      } catch (fallbackError) {
-        console.error('Error with fallback method:', fallbackError);
-        return BigInt(0);
-      }
+      return BigInt(0);
     }
   }
 
   calculateUserPortfolioValue(userShares: bigint, totalSupply: bigint, contractValue: bigint): bigint {
-    try {
-      if (totalSupply === BigInt(0)) {
-        return BigInt(0);
-      }
-      
-      // Calculate user's share of the total contract value
-      return (userShares * contractValue) / totalSupply;
-    } catch (error) {
-      console.error('Error calculating user portfolio value:', error);
-      return BigInt(0);
-    }
+    return multiContractYBTService.calculateUserPortfolioValue(userShares, totalSupply, contractValue);
   }
 
   /**
    * Validates a staking amount to ensure user keeps at least 1 VOI for transaction fees
    */
   validateStakingAmount(amount: bigint, balance: bigint): { valid: boolean; error?: string } {
-    const reserveAmount = BigInt(BETTING_CONSTANTS.STAKING_RESERVE_AMOUNT);
-    
-    if (balance <= reserveAmount) {
-      return {
-        valid: false,
-        error: `Insufficient balance. You need at least ${(Number(reserveAmount) / 1_000_000).toFixed(6)} VOI in your wallet.`
-      };
-    }
-    
-    const maxStakeAmount = balance - reserveAmount;
-    
-    if (amount > maxStakeAmount) {
-      return {
-        valid: false,
-        error: `Amount exceeds available balance. Maximum stakeable: ${(Number(maxStakeAmount) / 1_000_000).toFixed(6)} VOI (keeping 1 VOI for transaction fees).`
-      };
-    }
-    
-    if (amount <= BigInt(0)) {
-      return {
-        valid: false,
-        error: 'Stake amount must be greater than 0.'
-      };
-    }
-    
-    return { valid: true };
+    return multiContractYBTService.validateStakingAmount(amount, balance);
   }
 }
 

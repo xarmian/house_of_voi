@@ -61,6 +61,23 @@ export interface LeaderboardEntry {
   avg_bet_size: number;
 }
 
+export interface PlayerMachineStats {
+  app_id: number;
+  total_spins: number;
+  total_amount_bet: bigint;
+  total_amount_won: bigint;
+  net_result: bigint;
+  largest_single_win: bigint;
+  average_bet_size: number;
+  win_rate: number;
+  total_paylines_played: number;
+  first_bet_round: number;
+  last_bet_round: number;
+  days_active: number;
+  profit_per_spin: number;
+  highest_multiple: number;
+}
+
 export interface PlayerStats {
   total_spins: bigint;
   total_amount_bet: bigint;
@@ -77,6 +94,7 @@ export interface PlayerStats {
   last_bet_round: bigint;
   days_active: number;
   profit_per_spin: number;
+  machines?: PlayerMachineStats[]; // New property for machine-specific stats
 }
 
 export interface PlayerSpin {
@@ -183,7 +201,7 @@ export interface GetLeaderboardParams {
 }
 
 export interface GetPlayerStatsParams {
-  p_app_id: bigint;
+  p_app_id: bigint | null; // Allow null to fetch stats for all machines
   p_player_address: string;
 }
 

@@ -3,7 +3,7 @@
   import { fade, fly } from 'svelte/transition';
   import { 
     X, Volume2, VolumeX, Headphones, Music, MousePointer, Disc, 
-    Palette, Settings, Gamepad2, Zap, Plus, Minus, RotateCcw, GripVertical
+    Palette, Settings, Gamepad2, Zap, Plus, Minus, RotateCcw, GripVertical, Star
   } from 'lucide-svelte';
   import { 
     preferencesStore, 
@@ -177,6 +177,10 @@
     const target = event.target as HTMLInputElement;
     const value = parseInt(target.value);
     preferencesStore.updateBettingPreferences({ defaultPaylines: value });
+  }
+
+  function setDefaultQuickBet(quickBet: QuickBet | null) {
+    preferencesStore.updateBettingPreferences({ defaultQuickBet: quickBet });
   }
 
   // Animation functions
@@ -437,7 +441,7 @@
                   <RotateCcw class="w-4 h-4" />
                 </button>
               </div>
-              <p class="setting-description">Customize quick bet buttons (amount + paylines). Maximum of 4 buttons.</p>
+              <p class="setting-description">Customize quick bet buttons (amount + paylines). Click the star to set as default. Maximum of 4 buttons.</p>
               
               <div class="quick-bet-list">
                 {#each bettingPrefs.quickBets as quickBet, index}
@@ -476,14 +480,27 @@
                       />
                       <span class="quick-bet-suffix">L</span>
                     </div>
-                    <button
-                      class="remove-button"
-                      on:click={() => removeQuickBet(quickBet)}
-                      disabled={bettingPrefs.quickBets.length <= 1}
-                      title="Remove quick bet"
-                    >
-                      <Minus class="w-3 h-3" />
-                    </button>
+                    <div class="quick-bet-actions">
+                      <button
+                        class="default-button"
+                        class:active={bettingPrefs.defaultQuickBet?.amount === quickBet.amount && bettingPrefs.defaultQuickBet?.lines === quickBet.lines}
+                        on:click={() => {
+                          const isCurrentlyDefault = bettingPrefs.defaultQuickBet?.amount === quickBet.amount && bettingPrefs.defaultQuickBet?.lines === quickBet.lines;
+                          setDefaultQuickBet(isCurrentlyDefault ? null : quickBet);
+                        }}
+                        title={bettingPrefs.defaultQuickBet?.amount === quickBet.amount && bettingPrefs.defaultQuickBet?.lines === quickBet.lines ? "Remove as default" : "Set as default"}
+                      >
+                        <Star class="w-3 h-3" />
+                      </button>
+                      <button
+                        class="remove-button"
+                        on:click={() => removeQuickBet(quickBet)}
+                        disabled={bettingPrefs.quickBets.length <= 1}
+                        title="Remove quick bet"
+                      >
+                        <Minus class="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 {/each}
               </div>
@@ -839,6 +856,18 @@
 
   .max-quick-bets-message {
     @apply mt-3 p-3 bg-surface-tertiary bg-opacity-30 border border-surface-border rounded-lg text-center;
+  }
+
+  .quick-bet-actions {
+    @apply flex items-center gap-1;
+  }
+
+  .default-button {
+    @apply w-8 h-8 rounded bg-surface-tertiary hover:bg-surface-hover text-theme-text opacity-60 hover:text-voi-400 transition-all duration-200 flex items-center justify-center;
+  }
+
+  .default-button.active {
+    @apply bg-voi-600 hover:bg-voi-700 text-white opacity-100;
   }
 
   .paylines-control {

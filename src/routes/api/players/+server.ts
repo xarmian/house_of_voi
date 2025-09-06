@@ -29,8 +29,6 @@ function prepareRpcParams(params: Record<string, any>): { p_app_id: number; p_pl
     if (isNaN(rpcParams.p_app_id)) {
         throw new Error('Invalid appId format. Must be a number.');
     }
-  } else {
-    throw new Error('appId is required');
   }
 
   // Pass address as string if present

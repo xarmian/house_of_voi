@@ -19,12 +19,13 @@
   import ReelGrid from './ReelGrid.svelte';
   import PaylineOverlay from './PaylineOverlay.svelte';
   import BettingControls from './BettingControls.svelte';
-  import GameQueue from './GameQueue.svelte';
   import WinCelebration from './WinCelebration.svelte';
   import LoadingOverlay from '../ui/LoadingOverlay.svelte';
   import { soundService, playSpinStart, playReelStop, playWinSound, playLoss } from '$lib/services/soundService';
   import { themeStore, currentTheme } from '$lib/stores/theme';
   import { themeImagePreloader } from '$lib/services/themeImagePreloader';
+  import { selectedContract, isMultiContractMode } from '$lib/stores/multiContract';
+  import type { ContractPair } from '$lib/types/multiContract';
   
   // References to ReelGrid components for direct function calls
   let desktopReelGrid: ReelGrid;
@@ -55,10 +56,10 @@
     const nextIndex = (currentIndex + 1) % themeNames.length;
     const nextTheme = currentThemes[themeNames[nextIndex]];
     
-    // Preload next theme assets in background
+    // MEMORY OPTIMIZATION: Preload only essential theme assets in background
     if (nextTheme) {
-      themeImagePreloader.preloadThemeAssets(nextTheme).catch(error => {
-        console.warn('Failed to preload theme assets:', error);
+      themeImagePreloader.preloadEssentialThemeAssets(nextTheme).catch(error => {
+        console.warn('Failed to preload essential theme assets:', error);
         // Continue with theme switch even if preloading fails
       });
     }
@@ -78,6 +79,7 @@
   export let compact = false;
   export let initialReplayData: any = null;
   export let hideBettingControls = false;
+  export let contractContext: ContractPair | null = null; // Optional contract context for multi-contract mode
   
   // Win celebration state - support multiple concurrent celebrations
   type CelebrationData = {
@@ -93,6 +95,8 @@
     timeout: NodeJS.Timeout;
   };
   
+  // MEMORY LEAK FIX: Limit the size of active celebrations to prevent unbounded growth
+  const MAX_ACTIVE_CELEBRATIONS = 10;
   let activeCelebrations: Map<string, CelebrationData> = new Map();
   
   // Loss feedback state
@@ -123,12 +127,16 @@
   // Track if we're in replay mode to prevent queue auto-start
   let isReplayMode = false;
   
+  // Get current contract for operations - use prop override or global selected contract
+  $: currentContract = contractContext || $selectedContract;
+  
   // Payline overlay visibility with auto-fade
   let showPaylineOverlay = false;
   let paylineTimeout: NodeJS.Timeout | null = null;
   let lastSelectedPaylines = $bettingStore.selectedPaylines;
   
   // GLOBAL deduplication to prevent multiple SlotMachine instances from processing same replay
+  // MEMORY LEAK FIX: Use a more limited global set to prevent unbounded growth
   const GLOBAL_PROCESSED_REPLAYS = globalThis.GLOBAL_PROCESSED_REPLAYS || (globalThis.GLOBAL_PROCESSED_REPLAYS = new Set<string>());
 
   // Maintenance overlay state - don't show until after initial balance check
@@ -277,6 +285,8 @@
     if (spinningInterval) clearInterval(spinningInterval);
     if (lossFeedbackTimeout) clearTimeout(lossFeedbackTimeout);
     if (paylineTimeout) clearTimeout(paylineTimeout);
+    if (failureFeedbackTimeout) clearTimeout(failureFeedbackTimeout);
+    
     // Clear all replay timeouts
     replayTimeouts.forEach(timeout => clearTimeout(timeout));
     replayTimeouts = [];
@@ -286,6 +296,14 @@
       clearTimeout(celebration.timeout);
     });
     activeCelebrations.clear();
+    
+    // MEMORY LEAK FIX: Clean up global deduplication set periodically
+    if (GLOBAL_PROCESSED_REPLAYS.size > 50) {
+      GLOBAL_PROCESSED_REPLAYS.clear();
+    }
+    
+    // MEMORY LEAK FIX: Clear auto-celebrated spin IDs to prevent memory bloat
+    autoCelebratedSpinIds.clear();
     
     // Stop any spinning sounds
     soundService.stopLoopingSound('spin-loop', { fadeOut: 0.1 }).catch(() => {
@@ -318,7 +336,7 @@
     });
     
     // Add spin to queue (this will handle the blockchain processing in background)
-    const spinId = queueStore.addSpin(betPerLine, selectedPaylines, totalBet);
+    const spinId = queueStore.addSpin(betPerLine, selectedPaylines, totalBet, undefined, $selectedContract?.id);
     
     // New spin takes over display immediately
     
@@ -482,10 +500,10 @@
           }
         }
         
-        // Clean up old auto-celebrated IDs to prevent memory bloat
+        // MEMORY LEAK FIX: Clean up old auto-celebrated IDs to prevent memory bloat
         if (autoCelebratedSpinIds.size > 20) {
           const idsArray = Array.from(autoCelebratedSpinIds);
-          autoCelebratedSpinIds = new Set(idsArray.slice(-20));
+          autoCelebratedSpinIds = new Set(idsArray.slice(-10)); // Keep only last 10 to be more aggressive
         }
       }
     }
@@ -793,6 +811,19 @@
     selectedPaylines?: number;
     isReplay?: boolean;
   }, spinId?: string) {
+    // MEMORY LEAK FIX: Prevent unbounded growth of active celebrations
+    if (activeCelebrations.size >= MAX_ACTIVE_CELEBRATIONS) {
+      // Clear oldest celebration to make room
+      const oldestKey = activeCelebrations.keys().next().value;
+      if (oldestKey) {
+        const oldestCelebration = activeCelebrations.get(oldestKey);
+        if (oldestCelebration) {
+          clearTimeout(oldestCelebration.timeout);
+        }
+        activeCelebrations.delete(oldestKey);
+      }
+    }
+    
     // Create unique celebration ID
     const celebrationId = spinId || `celebration_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -1202,12 +1233,7 @@
           </div>
         {/if}
         
-        <!-- Game Queue - Can scroll below the fold -->
-        {#if !initialReplayData}
-          <div class="flex-shrink-0">
-            <GameQueue maxHeight="300px" />
-          </div>
-        {/if}
+        <!-- Note: GameQueue and other tabs are now handled by the page route -->
       </div>
     {:else}
       <!-- Original mobile layout for non-compact -->
@@ -1272,14 +1298,12 @@
           </div>
         </div>
         
-        <!-- Mobile Controls and Queue -->
+        <!-- Mobile Controls -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           {#if !hideBettingControls && !initialReplayData}
             <BettingControls on:spin={handleSpin} {compact} disabled={disabled} />
           {/if}
-          {#if !initialReplayData}
-            <GameQueue maxHeight="400px" />
-          {/if}
+          <!-- Note: GameQueue and other tabs are now handled by the page route -->
         </div>
       </div>
     {/if}

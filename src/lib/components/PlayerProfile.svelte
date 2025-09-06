@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 	import { 
 		User,
@@ -26,7 +25,27 @@
 	import PlayerAchievements from '$lib/components/game/PlayerAchievements.svelte';
 	import { hovStatsStore, connectionStatus } from '$lib/stores/hovStats';
 	import { hovStatsService } from '$lib/services/hovStats';
-	import { PUBLIC_SLOT_MACHINE_APP_ID } from '$env/static/public';
+	import { MULTI_CONTRACT_CONFIG } from '$lib/constants/network';
+
+	// Get the default slot machine app ID from multi-contract config
+	function getDefaultSlotMachineAppId(): bigint {
+		if (!MULTI_CONTRACT_CONFIG) {
+			console.warn('No multi-contract configuration found for player profile');
+			return BigInt(0);
+		}
+		
+		const defaultContract = MULTI_CONTRACT_CONFIG.contracts.find(
+			c => c.id === MULTI_CONTRACT_CONFIG.defaultContractId
+		);
+		
+		if (!defaultContract) {
+			console.warn('Default contract not found in multi-contract configuration');
+			return BigInt(0);
+		}
+		
+		return BigInt(defaultContract.slotMachineAppId);
+	}
+
 	import { walletStore } from '$lib/stores/wallet';
 	import { walletService } from '$lib/services/wallet';
 	import { formatVOI } from '$lib/constants/betting';
@@ -69,12 +88,6 @@
 		percentile: rank?.percentile || null
 	} : null;
 
-	onMount(() => {
-		if (address) {
-			loadPlayerProfile();
-		}
-	});
-
 	// Reload when address changes
 	$: if (address) {
 		loadPlayerProfile();
@@ -85,17 +98,24 @@
 		error = null;
 
 		try {
+			// Ensure hovStatsService is initialized (fallback in case store didn't initialize)
+			await hovStatsService.initialize();
+			
+			// Ensure we have hovStats store initialized for this profile page
+			if (!$connectionStatus || $connectionStatus === 'disconnected') {
+				await hovStatsStore.initialize({ includePlatformStats: false });
+			}
 			// Load player stats, rank, and biggest wins in parallel
 			const [statsResult, rankResult, biggestWinsResult] = await Promise.allSettled([
 				hovStatsService.getPlayerStats({
-					p_app_id: BigInt(PUBLIC_SLOT_MACHINE_APP_ID),
+					p_app_id: getDefaultSlotMachineAppId(),
 					p_player_address: address
 				}),
 				hovStatsService.getPlayerRank({
-					p_app_id: BigInt(PUBLIC_SLOT_MACHINE_APP_ID),
+					p_app_id: getDefaultSlotMachineAppId(),
 					p_player_address: address
 				}),
-				hovStatsService.getPlayerBiggestWins(address, BigInt(PUBLIC_SLOT_MACHINE_APP_ID))
+				hovStatsService.getPlayerBiggestWins(address, getDefaultSlotMachineAppId())
 			]);
 
 			if (statsResult.status === 'fulfilled') {
@@ -898,7 +918,7 @@
 	.tab-navigation {
 		display: flex;
 		gap: 0.5rem;
-		margin-bottom: 2rem;
+		margin-bottom: 1rem;
 		background: rgba(15, 23, 42, 0.5);
 		border: 1px solid rgba(148, 163, 184, 0.1);
 		border-radius: 16px;
@@ -1318,17 +1338,7 @@
 		border-radius: 0;
 	}
 
-	:global(.profile-page .player-history-container) {
-		background: transparent;
-		border: none;
-		border-radius: 0;
-	}
-
 	:global(.profile-page .stats-header) {
-		display: none;
-	}
-
-	:global(.profile-page .history-header) {
 		display: none;
 	}
 </style>

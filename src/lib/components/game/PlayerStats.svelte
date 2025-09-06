@@ -104,9 +104,6 @@
   ];
 
   onMount(() => {
-    if (targetAddress && !initialStats) {
-      loadPlayerStats();
-    }
     if (autoRefresh) {
       startAutoRefresh();
     }

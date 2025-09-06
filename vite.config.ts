@@ -28,6 +28,30 @@ export default defineConfig({
     __BUILD_TIME__: JSON.stringify(Date.now())
   },
   optimizeDeps: {
-    include: ['algosdk']
+    include: ['buffer']
+    // MEMORY OPTIMIZATION: Removed 'algosdk' from optimizeDeps to enable lazy loading
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // MEMORY OPTIMIZATION: Split heavy blockchain libraries into separate chunks
+          'blockchain': ['algosdk', '@algorandfoundation/algokit-utils'],
+          'wallet': ['avm-wallet-svelte'],
+          'contract-utils': ['ulujs'],
+          // Split Svelte components into logical chunks
+          'game-components': [
+            'src/lib/components/game/Leaderboard.svelte',
+            'src/lib/components/game/PlayerStats.svelte', 
+            'src/lib/components/game/GameStaking.svelte'
+          ],
+          'ui-components': [
+            'src/lib/components/ui',
+            'lucide-svelte'
+          ]
+        }
+      }
+    },
+    chunkSizeWarningLimit: 1000 // Increase limit to avoid warnings for intentionally large chunks
   }
 });

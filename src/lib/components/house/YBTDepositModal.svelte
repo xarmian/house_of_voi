@@ -5,8 +5,11 @@
   import { ybtService } from '$lib/services/ybt';
   import { BETTING_CONSTANTS } from '$lib/constants/betting';
   import type { YBTDepositParams } from '$lib/types/ybt';
+  import type { ContractPair } from '$lib/types/multiContract';
+  import { selectedContract } from '$lib/stores/multiContract';
 
   export let open = false;
+  export let contractContext: ContractPair | null = null;
 
   const dispatch = createEventDispatcher();
 
@@ -36,14 +39,17 @@
   $: totalPaymentAmount = microVoiAmount + depositCost;
   $: transactionFee = BigInt(4000); // 4000 microAlgos for app call + inner payment
   $: totalRequired = totalPaymentAmount + transactionFee;
-  $: canDeposit = voiAmount > 0 && walletBalance >= Number(totalRequired) && !isProcessing && walletAccount;
+  $: canDeposit = voiAmount > 0 && walletBalance >= Number(totalRequired) && !isProcessing && walletAccount && currentContract && currentContract.features?.depositsEnabled;
+
+  // Get current contract - use prop override or global selected contract
+  $: currentContract = contractContext || $selectedContract;
 
   async function loadDepositCost() {
-    if (!open) return;
+    if (!open || !currentContract) return;
     
     isLoadingCost = true;
     try {
-      depositCost = await ybtService.getDepositCost();
+      depositCost = await ybtService.getDepositCost(currentContract.id);
     } catch (err) {
       console.error('Error loading deposit cost:', err);
       error = 'Failed to load deposit cost';
@@ -53,9 +59,21 @@
   }
 
   async function handleDeposit() {
-    console.log('handleDeposit called', { canDeposit, account: walletAccount });
+    console.log('handleDeposit called', { canDeposit, account: walletAccount, contract: currentContract?.name });
     
-    if (!canDeposit || !walletAccount) return;
+    if (!canDeposit || !walletAccount || !currentContract) return;
+
+    // Check if contract allows deposits
+    if (!currentContract.features?.depositsEnabled) {
+      error = `Deposits are not enabled for ${currentContract.name}`;
+      return;
+    }
+
+    // Check contract status
+    if (currentContract.status !== 'active') {
+      error = `${currentContract.name} is currently ${currentContract.status}`;
+      return;
+    }
 
     // Validate deposit amount with 1 VOI reserve requirement
     const validation = ybtService.validateStakingAmount(totalPaymentAmount, BigInt(walletBalance));
@@ -68,14 +86,18 @@
     isProcessing = true;
     error = '';
     
-    console.log('Starting deposit with params:', { totalPaymentAmount: Number(totalPaymentAmount) });
+    console.log('Starting deposit with params:', { 
+      totalPaymentAmount: Number(totalPaymentAmount),
+      contractId: currentContract.id,
+      contractName: currentContract.name
+    });
 
     try {
       const params: YBTDepositParams = {
         amount: totalPaymentAmount
       };
 
-      const result = await ybtService.deposit(params);
+      const result = await ybtService.deposit(params, currentContract.id);
       console.log('Deposit result:', result);
 
       if (result.success) {
@@ -133,7 +155,12 @@
     <div class="bg-slate-800 rounded-lg shadow-xl max-w-md w-full border border-slate-700">
       <!-- Header -->
       <div class="flex items-center justify-between p-6 border-b border-slate-700">
-        <h2 class="text-xl font-bold text-theme">Deposit to YBT</h2>
+        <h2 class="text-xl font-bold text-theme">
+          Deposit to YBT
+          {#if currentContract}
+            <span class="text-base font-normal text-slate-400">• {currentContract.name}</span>
+          {/if}
+        </h2>
         <button
           on:click={closeModal}
           class="text-slate-400 hover:text-theme transition-colors"

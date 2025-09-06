@@ -109,8 +109,13 @@
   // Get stored wallet address for locked gaming wallet
   $: storedWalletAddress = browser ? walletService.getStoredWalletAddress() : null;
   
+  // Balance fetch guards to prevent excessive API calls
+  let lastLockedWalletAddress: string | null = null;
+  let lastExternalWalletAddress: string | null = null;
+  
   // Fetch balance for locked wallet when address changes
-  $: if (storedWalletAddress && gamingWalletLocked) {
+  $: if (storedWalletAddress && gamingWalletLocked && storedWalletAddress !== lastLockedWalletAddress) {
+    lastLockedWalletAddress = storedWalletAddress;
     balanceManager.getBalance(storedWalletAddress).then(balance => {
       lockedWalletBalance = balance;
     }).catch(error => {
@@ -120,7 +125,8 @@
   }
   
   // Fetch balance for external wallet when address changes
-  $: if ($selectedWallet?.address) {
+  $: if ($selectedWallet?.address && $selectedWallet.address !== lastExternalWalletAddress) {
+    lastExternalWalletAddress = $selectedWallet.address;
     balanceManager.getBalance($selectedWallet.address).then(balance => {
       externalWalletBalance = balance;
     }).catch(error => {

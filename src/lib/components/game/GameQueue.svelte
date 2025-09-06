@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
   import { fly, fade } from 'svelte/transition';
   import { Clock, RefreshCw, TrendingUp, TrendingDown, X, Check, Loader, Info, Share2 } from 'lucide-svelte';
   import { queueStore, queueStats, pendingSpins, recentSpins, allSpins } from '$lib/stores/queue';
@@ -33,11 +33,6 @@
   // Track share button states
   let sharingSpinId: string | null = null;
   let shareSuccess = false;
-  
-  onMount(() => {
-    // Auto-refresh disabled - the queue processor handles all updates
-    // Removed empty interval that was wasting CPU cycles
-  });
   
   onDestroy(() => {
     // Cleanup not needed anymore
@@ -244,6 +239,7 @@
         totalBet: spin.totalBet,
         selectedPaylines: spin.selectedPaylines,
         timestamp: spin.timestamp,
+        contractId: spin.contractId,
         txId: spin.txId
       });
       

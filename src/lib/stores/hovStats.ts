@@ -19,7 +19,8 @@ import type {
   PaylineAnalysis,
   HovStatsError
 } from '$lib/types/hovStats';
-import { PUBLIC_SLOT_MACHINE_APP_ID, PUBLIC_DEBUG_MODE } from '$env/static/public';
+import { PUBLIC_DEBUG_MODE } from '$env/static/public';
+import { MULTI_CONTRACT_CONFIG } from '$lib/constants/network';
 
 // Store state interfaces
 interface StoreState<T> {
@@ -80,16 +81,48 @@ const initialState: HovStatsState = {
 };
 
 // Configuration
+// MEMORY OPTIMIZATION: Longer intervals to reduce network requests and memory pressure
 const REFRESH_INTERVALS = {
-  platformStats: 60000, // 1 minute
-  leaderboard: 300000, // 5 minutes
-  timeStats: 600000, // 10 minutes
-  hotColdPlayers: 300000, // 5 minutes
-  whales: 600000, // 10 minutes
-  paylineAnalysis: 1800000 // 30 minutes
+  platformStats: 120000, // 2 minutes (increased from 1 minute)
+  leaderboard: 600000, // 10 minutes (increased from 5 minutes)
+  timeStats: 900000, // 15 minutes (increased from 10 minutes)
+  hotColdPlayers: 600000, // 10 minutes (kept same)
+  whales: 1200000, // 20 minutes (increased from 10 minutes)
+  paylineAnalysis: 3600000 // 60 minutes (increased from 30 minutes)
 };
 
-const DEFAULT_APP_ID = BigInt(PUBLIC_SLOT_MACHINE_APP_ID || '0');
+// Get the current contract app ID (dynamic based on selected contract)
+const getCurrentSlotMachineAppId = async (): Promise<bigint> => {
+  try {
+    // Import selectedContract dynamically to avoid circular deps
+    const { selectedContract } = await import('$lib/stores/multiContract');
+    const { get } = await import('svelte/store');
+    const currentContract = get(selectedContract);
+    
+    if (currentContract) {
+      return BigInt(currentContract.slotMachineAppId);
+    }
+  } catch (error) {
+    console.warn('Failed to get selected contract, falling back to default:', error);
+  }
+  
+  // Fallback to default contract
+  if (!MULTI_CONTRACT_CONFIG) {
+    console.warn('No multi-contract configuration found for HOV stats');
+    return BigInt(0);
+  }
+  
+  const defaultContract = MULTI_CONTRACT_CONFIG.contracts.find(
+    c => c.id === MULTI_CONTRACT_CONFIG.defaultContractId
+  );
+  
+  if (!defaultContract) {
+    console.warn('Default contract not found in multi-contract configuration');
+    return BigInt(0);
+  }
+  
+  return BigInt(defaultContract.slotMachineAppId);
+};
 
 // Create main store
 function createHovStatsStore() {
@@ -182,14 +215,27 @@ function createHovStatsStore() {
         hovStatsService.clearPlatformStatsCache();
         
         return await updateStoreSection('platformStats', async () => {
-          return await hovStatsService.getPlatformStats({ p_app_id: DEFAULT_APP_ID });
+          const appId = await getCurrentSlotMachineAppId();
+          return await hovStatsService.getPlatformStats({ p_app_id: appId });
         });
+      } catch (error) {
+        // MEMORY OPTIMIZATION: Always clean up promise on error
+        delete refreshPromises[promiseKey];
+        throw error;
       } finally {
         delete refreshPromises[promiseKey];
       }
     })();
     
     refreshPromises[promiseKey] = refreshPromise;
+    
+    // MEMORY LEAK PREVENTION: Set timeout to clean up hanging promises
+    setTimeout(() => {
+      if (refreshPromises[promiseKey] === refreshPromise) {
+        delete refreshPromises[promiseKey];
+      }
+    }, 30000); // 30 second timeout
+    
     return refreshPromise;
   }
 
@@ -212,7 +258,7 @@ function createHovStatsStore() {
   /**
    * Refresh leaderboard
    */
-  async function refreshLeaderboard(metric: string = 'net_result', limit: number = 100): Promise<void> {
+  async function refreshLeaderboard(metric: string = 'total_won', limit: number = 100): Promise<void> {
     const promiseKey = `leaderboard_${metric}_${limit}`;
     
     // Return existing promise if already refreshing this exact request
@@ -226,19 +272,32 @@ function createHovStatsStore() {
         hovStatsService.clearLeaderboardCache();
         
         return await updateStoreSection('leaderboard', async () => {
+          const appId = await getCurrentSlotMachineAppId();
           return await hovStatsService.getLeaderboard({
-            p_app_id: DEFAULT_APP_ID,
+            p_app_id: appId,
             p_metric: metric as any,
             p_limit: limit,
             forceRefresh: true
           });
         });
+      } catch (error) {
+        // MEMORY OPTIMIZATION: Always clean up promise on error
+        delete refreshPromises[promiseKey];
+        throw error;
       } finally {
         delete refreshPromises[promiseKey];
       }
     })();
 
     refreshPromises[promiseKey] = refreshPromise;
+    
+    // MEMORY LEAK PREVENTION: Set timeout to clean up hanging promises
+    setTimeout(() => {
+      if (refreshPromises[promiseKey] === refreshPromise) {
+        delete refreshPromises[promiseKey];
+      }
+    }, 30000); // 30 second timeout
+    
     return refreshPromise;
   }
 
@@ -247,8 +306,9 @@ function createHovStatsStore() {
    */
   async function refreshTimeStats(timeUnit: 'hour' | 'day' | 'week' = 'day', limit: number = 30): Promise<void> {
     return updateStoreSection('timeStats', async () => {
+      const appId = await getCurrentSlotMachineAppId();
       return await hovStatsService.getTimeStats({
-        p_app_id: DEFAULT_APP_ID,
+        p_app_id: appId,
         p_time_unit: timeUnit,
         p_limit: limit
       });
@@ -260,7 +320,8 @@ function createHovStatsStore() {
    */
   async function refreshHotColdPlayers(): Promise<void> {
     return updateStoreSection('hotColdPlayers', async () => {
-      return await hovStatsService.getHotColdPlayers({ p_app_id: DEFAULT_APP_ID });
+      const appId = await getCurrentSlotMachineAppId();
+      return await hovStatsService.getHotColdPlayers({ p_app_id: appId });
     });
   }
 
@@ -269,7 +330,8 @@ function createHovStatsStore() {
    */
   async function refreshWhales(): Promise<void> {
     return updateStoreSection('whales', async () => {
-      return await hovStatsService.getWhales({ p_app_id: DEFAULT_APP_ID });
+      const appId = await getCurrentSlotMachineAppId();
+      return await hovStatsService.getWhales({ p_app_id: appId });
     });
   }
 
@@ -278,7 +340,8 @@ function createHovStatsStore() {
    */
   async function refreshPaylineAnalysis(): Promise<void> {
     return updateStoreSection('paylineAnalysis', async () => {
-      return await hovStatsService.getPaylineAnalysis(DEFAULT_APP_ID);
+      const appId = await getCurrentSlotMachineAppId();
+      return await hovStatsService.getPaylineAnalysis(appId);
     });
   }
 
@@ -287,8 +350,9 @@ function createHovStatsStore() {
    */
   async function getPlayerStats(playerAddress: string): Promise<PlayerStats | null> {
     try {
+      const appId = await getCurrentSlotMachineAppId();
       return await hovStatsService.getPlayerStats({
-        p_app_id: DEFAULT_APP_ID,
+        p_app_id: appId,
         p_player_address: playerAddress
       });
     } catch (error) {
@@ -307,8 +371,9 @@ function createHovStatsStore() {
       // Clear cache first to force fresh data
       hovStatsService.clearCache();
       
+      const appId = await getCurrentSlotMachineAppId();
       return await hovStatsService.getPlayerStats({
-        p_app_id: DEFAULT_APP_ID,
+        p_app_id: appId,
         p_player_address: playerAddress
       });
     } catch (error) {
@@ -324,9 +389,10 @@ function createHovStatsStore() {
    */
   async function getLeaderboard(params?: { metric?: string; limit?: number; offset?: number }): Promise<LeaderboardEntry[]> {
     try {
+      const appId = await getCurrentSlotMachineAppId();
       return await hovStatsService.getLeaderboard({
-        p_app_id: DEFAULT_APP_ID,
-        p_metric: (params?.metric as any) || 'net_result',
+        p_app_id: appId,
+        p_metric: (params?.metric as any) || 'total_won',
         p_limit: params?.limit || 100,
         p_offset: params?.offset || 0
       });
@@ -365,8 +431,9 @@ function createHovStatsStore() {
 
     try {
       // First get player stats to know total count and aggregates
+      const appId = await getCurrentSlotMachineAppId();
       const playerStats = await hovStatsService.getPlayerStats({
-        p_app_id: DEFAULT_APP_ID,
+        p_app_id: appId,
         p_player_address: playerAddress
       });
 
@@ -376,7 +443,7 @@ function createHovStatsStore() {
 
       // Get the spins for this page
       const spins = await hovStatsService.getPlayerSpins({
-        p_app_id: DEFAULT_APP_ID,
+        p_app_id: appId,
         p_player_address: playerAddress,
         p_limit: pageSize,
         p_offset: page * pageSize
@@ -578,9 +645,8 @@ function createHovStatsStore() {
   function startPeriodicRefresh(options?: { includePlatformStats?: boolean }): void {
     if (!browser) return;
 
-    // Clear existing intervals
-    Object.values(intervals).forEach(clearInterval);
-    intervals = {};
+    // IMPORTANT: Always clear existing intervals first to prevent memory leaks
+    stopPeriodicRefresh();
 
     // Platform stats - only on house page
     if (options?.includePlatformStats !== false) {
@@ -647,6 +713,9 @@ function createHovStatsStore() {
    */
   function reset(): void {
     stopPeriodicRefresh();
+    // Clear all pending promises to prevent memory leaks
+    refreshPromises = {};
+    loadingStates = {};
     hovStatsService.clearCache();
     set(initialState);
     initialized = false;
@@ -681,7 +750,10 @@ function createHovStatsStore() {
     refreshAll,
     reset,
     healthCheck,
-    stopPeriodicRefresh
+    stopPeriodicRefresh,
+    
+    // MEMORY OPTIMIZATION: Manual initialization for app routes
+    initializeForAppRoute: () => initialize({ includePlatformStats: false })
   };
 }
 
@@ -815,6 +887,8 @@ export const connectionStatus = derived(
 // Route-aware initialization - different features for different pages
 if (browser) {
   let currentRoute: string | null = null;
+  let currentContract: string | null = null;
+  let appRouteInitialized = false; // Track if app route was manually initialized
   
   // Subscribe to route changes to initialize/deinitialize based on current route
   page.subscribe(($page) => {
@@ -828,11 +902,51 @@ if (browser) {
       // House page: Initialize everything including platform stats
       hovStatsStore.initialize({ includePlatformStats: true });
     } else if (routeId?.startsWith('/app')) {
-      // App page: Initialize but exclude platform stats - only leaderboard
+      // MEMORY OPTIMIZATION: Don't auto-initialize on app pages to reduce initial load
+      // App components will initialize manually when needed (e.g., when Leaderboard tab is clicked)
+      console.log('🎯 App route detected - deferring HOV stats initialization until needed');
+      appRouteInitialized = false;
+      hovStatsStore.stopPeriodicRefresh();
+    } else if (routeId?.startsWith('/profile')) {
+      // Profile page: Initialize without platform stats (similar to app pages)
+      console.log('👤 Profile route detected - initializing HOV stats for player profile');
       hovStatsStore.initialize({ includePlatformStats: false });
     } else {
       // Other pages: Stop all periodic refreshes
       hovStatsStore.stopPeriodicRefresh();
     }
+  });
+
+  // Subscribe to contract changes to refresh stats immediately
+  import('$lib/stores/multiContract').then(({ selectedContract }) => {
+    selectedContract.subscribe(async (contract) => {
+      const contractId = contract?.id || null;
+      
+      // Only refresh if contract actually changed and we're initialized
+      if (contractId !== currentContract && currentRoute && (currentRoute.startsWith('/house') || currentRoute.startsWith('/app') || currentRoute.startsWith('/profile'))) {
+        currentContract = contractId;
+        
+        if (contractId) {
+          console.log(`🔄 Refreshing stats for contract switch: ${contractId}`);
+          
+          // Refresh relevant data immediately when contract changes
+          if (currentRoute.startsWith('/house')) {
+            // House page: refresh platform stats and time stats (leaderboard handles contract changes via reactive statements)
+            await Promise.allSettled([
+              hovStatsStore.refreshPlatformStats(),
+              hovStatsStore.refreshTimeStats()
+            ]);
+          } else if (currentRoute.startsWith('/app')) {
+            // App page: only refresh leaderboard
+            await hovStatsStore.refreshLeaderboard();
+          } else if (currentRoute.startsWith('/profile')) {
+            // Profile page: refresh leaderboard (for player ranking context)
+            await hovStatsStore.refreshLeaderboard();
+          }
+        }
+      }
+    });
+  }).catch(error => {
+    console.warn('Failed to subscribe to contract changes:', error);
   });
 }

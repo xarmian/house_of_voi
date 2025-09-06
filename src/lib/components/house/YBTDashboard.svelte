@@ -7,9 +7,10 @@
   import YBTStats from './YBTStats.svelte';
   import YBTDepositModal from './YBTDepositModal.svelte';
   import YBTWithdrawModal from './YBTWithdrawModal.svelte';
-  import type { YBTGlobalState } from '$lib/types/ybt';
   import type { HouseBalanceData } from '$lib/services/houseBalance';
+  import type { ContractPair } from '$lib/types/multiContract';
   import { isMaintenanceMode } from '$lib/stores/maintenanceMode';
+  import { selectedContract } from '$lib/stores/multiContract';
 
   export let houseBalance: HouseBalanceData | null = null;
   export let balanceLoading = false;
@@ -17,13 +18,13 @@
   export let isGamingWalletLocked = false;
   export let showConnectedView = false;
   export let hasWalletConnected = false;
+  export let contractContext: ContractPair | null = null; // New prop for contract context
 
   const dispatch = createEventDispatcher();
 
   let showDepositModal = false;
   let showWithdrawModal = false;
   let isRefreshing = false;
-  let globalState: YBTGlobalState | null = null;
 
   async function handleRefresh() {
     isRefreshing = true;
@@ -44,29 +45,21 @@
   }
 
   function formatShares(shares: bigint): string {
-    return globalState ? ybtService.formatShares(shares, globalState.decimals) : ybtService.formatShares(shares, 9);
+    // Use default decimals (9) since YBT contracts typically use 9 decimals
+    return ybtService.formatShares(shares, 9);
   }
   
-  async function loadGlobalState() {
-    try {
-      globalState = await ybtService.getGlobalState();
-    } catch (error) {
-      console.error('Error loading global state:', error);
-    }
-  }
   
   
   function calculateUserPortfolioValue(): bigint {
-    if (!globalState || $userShares === BigInt(0) || $totalSupply === BigInt(0) || !houseBalance) {
+    if ($userShares === BigInt(0) || $totalSupply === BigInt(0) || !houseBalance) {
       return BigInt(0);
     }
     const contractValue = BigInt(houseBalance.total);
     return ybtService.calculateUserPortfolioValue($userShares, $totalSupply, contractValue);
   }
   
-  onMount(() => {
-    loadGlobalState();
-  });
+  // Global state is handled by YBT store - use derived values directly
 
   $: hasShares = $userShares > BigInt(0);
   
@@ -75,6 +68,9 @@
   
   // Check if wallet operations are blocked due to locked gaming wallet
   $: isWalletOperationBlocked = isGamingWalletLocked;
+
+  // Get current contract for display purposes
+  $: currentContract = contractContext || $selectedContract;
 </script>
 
 <div class="space-y-4 sm:space-y-6">
@@ -82,8 +78,19 @@
   <div class="card p-4 sm:p-6">
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3">
       <div class="flex-1">
-        <h2 class="text-xl sm:text-2xl font-bold text-theme">YBT Portfolio</h2>
-        <p class="text-xs sm:text-sm text-slate-400 mt-1">Your investment position and contract status</p>
+        <h2 class="text-xl sm:text-2xl font-bold text-theme">
+          YBT Portfolio
+          {#if currentContract}
+            <span class="text-base font-normal text-slate-400">• {currentContract.name}</span>
+          {/if}
+        </h2>
+        <p class="text-xs sm:text-sm text-slate-400 mt-1">
+          {#if currentContract}
+            {currentContract.description} • Your investment position and contract status
+          {:else}
+            Your investment position and contract status
+          {/if}
+        </p>
       </div>
       <button
         on:click={handleRefresh}
@@ -312,6 +319,7 @@
 {#if showDepositModal}
   <YBTDepositModal 
     bind:open={showDepositModal}
+    {contractContext}
     on:success={handleYBTSuccess}
   />
 {/if}
@@ -320,6 +328,7 @@
   <YBTWithdrawModal 
     bind:open={showWithdrawModal}
     userShares={$userShares}
+    {contractContext}
     on:success={handleYBTSuccess}
   />
 {/if}

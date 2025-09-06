@@ -1,6 +1,6 @@
 import algosdk from 'algosdk';
 import { CONTRACT } from 'ulujs';
-import { NETWORK_CONFIG, CONTRACT_CONFIG, BLOCKCHAIN_CONFIG } from '$lib/constants/network';
+import { NETWORK_CONFIG, MULTI_CONTRACT_CONFIG, BLOCKCHAIN_CONFIG } from '$lib/constants/network';
 import type { WalletAccount } from '$lib/types/wallet';
 import type { 
   TransactionParams, 
@@ -106,12 +106,52 @@ export class AlgorandService {
       NETWORK_CONFIG.port
     );
     
-    this.appId = CONTRACT_CONFIG.slotMachineAppId;
+    // Get the default slot machine app ID from multi-contract config
+    const defaultSlotMachineAppId = this.getDefaultSlotMachineAppId();
+    this.appId = defaultSlotMachineAppId;
     
     if (!this.appId || this.appId === 0) {
-      console.error('Missing or invalid slot machine app ID');
-      throw new Error('Invalid contract configuration');
+      console.warn('No slot machine app ID available yet - AlgorandService will have limited functionality until contracts are loaded');
+      this.appId = 0; // Set to 0 instead of throwing an error
     }
+  }
+
+  /**
+   * Get the default slot machine app ID from multi-contract config
+   */
+  private getDefaultSlotMachineAppId(): number {
+    if (!MULTI_CONTRACT_CONFIG) {
+      console.warn('No multi-contract configuration found for AlgorandService');
+      return 0;
+    }
+    
+    const defaultContract = MULTI_CONTRACT_CONFIG.contracts.find(
+      c => c.id === MULTI_CONTRACT_CONFIG.defaultContractId
+    );
+    
+    if (!defaultContract) {
+      console.warn('Default contract not found in multi-contract configuration');
+      return 0;
+    }
+    
+    return defaultContract.slotMachineAppId;
+  }
+
+  /**
+   * Update the app ID after contracts are loaded
+   */
+  public updateAppId(appId: number): void {
+    if (appId > 0) {
+      this.appId = appId;
+      console.log('✅ AlgorandService app ID updated to:', appId);
+    }
+  }
+
+  /**
+   * Get the current app ID
+   */
+  public getAppId(): number {
+    return this.appId;
   }
 
   private hexToUint8Array(hex: string): Uint8Array {
@@ -158,6 +198,11 @@ export class AlgorandService {
   async getBalances(options?: { appId?: number; addr?: string; sk?: Uint8Array; debug?: boolean }): Promise<{ balanceAvailable: number; balanceTotal: number; balanceLocked: number }> {
     try {
       const appId = options?.appId || this.appId;
+      
+      if (!appId || appId === 0) {
+        throw new Error('No app ID available for getBalances - ensure contracts are loaded');
+      }
+      
       const addr = options?.addr || algosdk.getApplicationAddress(appId);
       const sk = options?.sk || new Uint8Array(64); // Dummy SK for readonly calls
 
@@ -195,7 +240,11 @@ export class AlgorandService {
       return balances;
 
     } catch (error) {
-      console.error('💥 getBalances failed:', error);
+      // Don't log "balance below min" errors as they're expected for unfunded contracts
+      const errorMessage = error?.message || '';
+      if (!errorMessage.includes('balance') || !errorMessage.includes('below min')) {
+        console.error('💥 getBalances failed:', error);
+      }
       throw this.handleError(error, 'Failed to get contract balances');
     }
   }
@@ -1135,7 +1184,11 @@ export class AlgorandService {
 
 
   private handleError(error: any, context: string): BlockchainError {
-    console.error(`${context}:`, error);
+    // Don't log "balance below min" errors as they're expected for unfunded contracts
+    const errorMessage = error?.message || '';
+    if (!errorMessage.includes('balance') || !errorMessage.includes('below min')) {
+      console.error(`${context}:`, error);
+    }
     
     let errorType: BlockchainError['type'] = 'UNKNOWN';
     let message = error?.message || 'Unknown blockchain error';

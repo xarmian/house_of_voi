@@ -115,9 +115,9 @@
       return true;
     } catch (error) {
       console.error('❌ Failed to fetch contract reel data:', error);
-      reelDataError = 'Using deterministic reel configuration';
+      reelDataError = 'Unable to load contract data. Slot machine unavailable.';
       isLoadingReelData = false;
-      // Continue with deterministic data - don't fail completely
+      // DO NOT fallback - slot machine should be disabled if contract data fails
       return false;
     }
   }
@@ -131,14 +131,15 @@
     return isMounted && 
            extendedReels.length > 0 && 
            physicsEngine !== null && 
-           reelElements.length > 0;
+           reelElements.length > 0 &&
+           reelDataError === null; // Slot machine not ready if reel data failed to load
   }
 
   // Direct function that gets called from parent component
   export function startSpin(spinId: string) {
     if (!isMounted || !physicsEngine || !reelElements.length || 
-        spinId === lastProcessedSpinId || currentlySpinning) {
-      return;
+        spinId === lastProcessedSpinId || currentlySpinning || reelDataError !== null) {
+      return; // Don't allow spinning if reel data failed to load
     }
     lastProcessedSpinId = spinId;
     currentlySpinning = true;
@@ -683,7 +684,7 @@
     border-radius: 8px;
     border: 1px solid var(--theme-surface-border);
     position: relative;
-    overflow: hidden;
+    /*overflow: hidden;*/
     transition: all 0.3s ease;
   }
 
@@ -694,9 +695,9 @@
   }
   
   .symbol-position:hover {
-    border-color: var(--theme-primary);
+    /* border-color: var(--theme-primary); */
     box-shadow: 0 0 12px color-mix(in srgb, var(--theme-primary) 30%, transparent);
-    background: var(--theme-surface-hover);
+    /* background: var(--theme-surface-hover); */
   }
   
   /* Physics debug info */

@@ -60,7 +60,8 @@ const availableThemes: Record<string, ThemeColors> = {
       tertiary: '#475569',
       border: '#64748b',
       hover: '#475569'
-    }
+    },
+    symbolPath: '/themes/dorks',
   },
   black: {
     primary: '#000000',
@@ -81,7 +82,8 @@ const availableThemes: Record<string, ThemeColors> = {
       tertiary: '#374151',
       border: '#4b5563',
       hover: '#374151'
-    }
+    },
+    symbolPath: '/themes/dorks',
   },
   transparent: {
     primary: 'rgba(255, 255, 255, 0.1)',
@@ -102,7 +104,8 @@ const availableThemes: Record<string, ThemeColors> = {
       tertiary: 'rgba(255, 255, 255, 0.4)',
       border: 'rgba(203, 213, 225, 0.8)',
       hover: 'rgba(255, 255, 255, 0.9)'
-    }
+    },
+    symbolPath: '/themes/dorks',
   },
   voi: {
     primary: '#10b981',
@@ -123,7 +126,8 @@ const availableThemes: Record<string, ThemeColors> = {
       tertiary: '#b45309',
       border: '#d97706',
       hover: '#b45309'
-    }
+    },
+    symbolPath: '/themes/dorks',
   },
   redgold: {
     primary: '#dc2626',
@@ -144,7 +148,8 @@ const availableThemes: Record<string, ThemeColors> = {
       tertiary: '#2563eb',
       border: '#3b82f6',
       hover: '#2563eb'
-    }
+    },
+    symbolPath: '/themes/dorks',
   },
   dorks: {
     primary: '#8b5cf6',
@@ -209,6 +214,24 @@ function savePreferences(preferences: ThemePreferences): void {
   }
 }
 
+// Helper function to convert hex color to RGB values
+function hexToRgb(hex: string): string {
+  // Remove # if present
+  hex = hex.replace('#', '');
+  
+  // Handle 3-digit hex
+  if (hex.length === 3) {
+    hex = hex.split('').map(char => char + char).join('');
+  }
+  
+  // Convert to RGB
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  
+  return `${r}, ${g}, ${b}`;
+}
+
 // Apply theme CSS custom properties to document root
 function applyThemeToDOM(theme: ThemeColors): void {
   if (!browser) return;
@@ -231,7 +254,18 @@ function applyThemeToDOM(theme: ThemeColors): void {
     root.style.setProperty('--theme-surface-tertiary', theme.surface.tertiary);
     root.style.setProperty('--theme-surface-border', theme.surface.border);
     root.style.setProperty('--theme-surface-hover', theme.surface.hover);
+    
+    // Also set RGB values for rgba() usage
+    root.style.setProperty('--theme-surface-primary-rgb', hexToRgb(theme.surface.primary));
+    root.style.setProperty('--theme-surface-secondary-rgb', hexToRgb(theme.surface.secondary));
+    root.style.setProperty('--theme-surface-tertiary-rgb', hexToRgb(theme.surface.tertiary));
+    root.style.setProperty('--theme-surface-border-rgb', hexToRgb(theme.surface.border));
+    root.style.setProperty('--theme-surface-hover-rgb', hexToRgb(theme.surface.hover));
   }
+  
+  // Set primary and secondary RGB values
+  root.style.setProperty('--theme-primary-rgb', hexToRgb(theme.primary));
+  root.style.setProperty('--theme-secondary-rgb', hexToRgb(theme.secondary));
 
   // Set background image CSS custom property for casino border use
   if (theme.useBackgroundImage && theme.backgroundImage) {

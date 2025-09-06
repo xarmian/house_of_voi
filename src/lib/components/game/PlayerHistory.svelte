@@ -622,7 +622,7 @@
   }
 
   .page-size-select {
-    @apply px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-voi-400 focus:border-transparent;
+    @apply px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-voi-400 focus:border-transparent pr-7;
   }
 
   .empty-state, .loading-state, .error-state {

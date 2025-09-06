@@ -1,4 +1,5 @@
 import { env } from '$env/dynamic/public';
+import { CONTRACTS_CONFIG } from '$lib/config/contracts.config';
 
 export const NETWORK_CONFIG = {
   nodeUrl: env.PUBLIC_VOI_NODE_URL || '',
@@ -15,22 +16,68 @@ if (typeof window !== 'undefined') {
   }
 }
 
-export const CONTRACT_CONFIG = {
-  slotMachineAppId: parseInt(env.PUBLIC_SLOT_MACHINE_APP_ID || '0'),
-  ybtAppId: parseInt(env.PUBLIC_YBT_APP_ID || '0'),
-  version: env.PUBLIC_CONTRACT_VERSION || '1.0.0',
-  cacheDuration: parseInt(env.PUBLIC_CONTRACT_CACHE_DURATION || '86400000'), // Default 24 hours
-} as const;
 
-// Phase 7: Enable contract validation for blockchain integration  
+
+
+
+// Export multi-contract configuration
+export const MULTI_CONTRACT_CONFIG = CONTRACTS_CONFIG;
+
+// Helper function to get contract configuration mode
+export function getContractMode(): 'single' | 'multi' {
+  return MULTI_CONTRACT_CONFIG.contracts.length === 1 ? 'single' : 'multi';
+}
+
+// Helper function to get all contract app IDs (for validation)
+export function getAllContractAppIds(): { slotMachineAppIds: number[]; ybtAppIds: number[] } {
+  return {
+    slotMachineAppIds: MULTI_CONTRACT_CONFIG.contracts.map(c => c.slotMachineAppId),
+    ybtAppIds: MULTI_CONTRACT_CONFIG.contracts.map(c => c.ybtAppId)
+  };
+}
+
+// Validation for contract configuration
 if (typeof window !== 'undefined') {
   // Only validate in browser environment
-  if (!CONTRACT_CONFIG.slotMachineAppId || CONTRACT_CONFIG.slotMachineAppId === 0) {
-    console.warn('Missing or invalid slot machine app ID. Check PUBLIC_SLOT_MACHINE_APP_ID environment variable.');
+  const mode = getContractMode();
+  console.log(`✅ Contract registry initialized in ${mode} mode with ${MULTI_CONTRACT_CONFIG.contracts.length} contract(s)`);
+  
+  // Debug log the configuration
+  console.log('📋 Multi-contract configuration:', {
+    defaultContractId: MULTI_CONTRACT_CONFIG.defaultContractId,
+    contracts: MULTI_CONTRACT_CONFIG.contracts.map(c => ({
+      id: c.id,
+      name: c.name,
+      slotMachineAppId: c.slotMachineAppId,
+      ybtAppId: c.ybtAppId,
+      status: c.status
+    }))
+  });
+
+  // Validate app IDs
+  const { slotMachineAppIds, ybtAppIds } = getAllContractAppIds();
+  
+  const invalidSlotIds = slotMachineAppIds.filter(id => !id || id === 0);
+  const invalidYbtIds = ybtAppIds.filter(id => !id || id === 0);
+  
+  if (invalidSlotIds.length > 0) {
+    console.warn(`Invalid slot machine app IDs found: ${invalidSlotIds.join(', ')}`);
   }
   
-  if (!CONTRACT_CONFIG.ybtAppId || CONTRACT_CONFIG.ybtAppId === 0) {
-    console.warn('Missing or invalid YBT app ID. Check PUBLIC_YBT_APP_ID environment variable.');
+  if (invalidYbtIds.length > 0) {
+    console.warn(`Invalid YBT app IDs found: ${invalidYbtIds.join(', ')}`);
+  }
+
+  // Check for duplicate app IDs
+  const duplicateSlotIds = slotMachineAppIds.filter((id, index, arr) => arr.indexOf(id) !== index);
+  const duplicateYbtIds = ybtAppIds.filter((id, index, arr) => arr.indexOf(id) !== index);
+  
+  if (duplicateSlotIds.length > 0) {
+    console.warn(`Duplicate slot machine app IDs found: ${duplicateSlotIds.join(', ')}`);
+  }
+  
+  if (duplicateYbtIds.length > 0) {
+    console.warn(`Duplicate YBT app IDs found: ${duplicateYbtIds.join(', ')}`);
   }
 }
 

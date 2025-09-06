@@ -3,7 +3,8 @@
   import { X, Eye, DollarSign, Target } from 'lucide-svelte';
   import { contractDataCache } from '$lib/services/contractDataCache';
   import { walletAddress } from '$lib/stores/wallet';
-  import { WINNING_SYMBOLS } from '$lib/constants/symbols';
+  import { WINNING_SYMBOLS, getThemeSymbol } from '$lib/constants/symbols';
+  import { currentTheme } from '$lib/stores/theme';
   
   export let showModal = false;
 
@@ -12,8 +13,13 @@
   let loading = true;
   let error: string | null = null;
 
-  // Get symbol info from constants
-  const symbolInfo = WINNING_SYMBOLS;
+  // Get theme-aware symbol info
+  $: symbolInfo = Object.fromEntries(
+    Object.entries(WINNING_SYMBOLS).map(([id, symbol]) => [
+      id, 
+      getThemeSymbol(id, $currentTheme)
+    ])
+  );
 
   async function loadPaylineData() {
     if (!$walletAddress) {

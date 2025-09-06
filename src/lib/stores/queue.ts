@@ -74,7 +74,7 @@ function createQueueStore() {
     subscribe,
 
     // Add new spin to queue
-    addSpin(betPerLine: number, selectedPaylines: number, totalBet: number, estimatedTotalCost?: number): string {
+    addSpin(betPerLine: number, selectedPaylines: number, totalBet: number, estimatedTotalCost?: number, contractId?: string): string {
       const spinId = generateSpinId();
       
       update(state => {
@@ -84,7 +84,9 @@ function createQueueStore() {
 
         // Remove oldest spins if queue is at capacity
         while (spins.length >= MAX_QUEUE_SIZE) {
-          const removedSpin = spins.shift(); // Remove oldest spin
+          // Sort by timestamp to find the actual oldest spin
+          spins.sort((a, b) => a.timestamp - b.timestamp);
+          const removedSpin = spins.shift(); // Remove oldest spin by timestamp
           if (removedSpin) {
             // Update pending value if the removed spin was pending
             if (removedSpin.status === SpinStatus.PENDING) {
@@ -106,6 +108,7 @@ function createQueueStore() {
           id: spinId,
           timestamp: Date.now(),
           status: SpinStatus.PENDING,
+          contractId,
           betPerLine,
           selectedPaylines,
           totalBet,

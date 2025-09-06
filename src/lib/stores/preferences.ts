@@ -13,6 +13,7 @@ export interface BettingPreferences {
   quickBets: QuickBet[]; // Quick bet configurations (amount + lines)
   defaultMaxPaylines: boolean; // Whether to start with max paylines
   defaultPaylines: number; // Custom default paylines if not max
+  defaultQuickBet: QuickBet | null; // Optional default quick bet to use on initialization
 }
 
 export interface UnifiedPreferences {
@@ -49,7 +50,8 @@ const defaultBettingPreferences: BettingPreferences = {
     { amount: 10, lines: 20 }
   ],
   defaultMaxPaylines: false,
-  defaultPaylines: 1
+  defaultPaylines: 1,
+  defaultQuickBet: null
 };
 
 const defaultAnimationPreferences: AnimationPreferences = {

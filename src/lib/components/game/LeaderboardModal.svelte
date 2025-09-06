@@ -23,7 +23,6 @@
   import { connectionStatus } from '$lib/stores/hovStats';
   import type { LeaderboardEntry } from '$lib/types/hovStats';
   import { formatVOI } from '$lib/constants/betting';
-  import { PUBLIC_SLOT_MACHINE_APP_ID } from '$env/static/public';
   import { goto } from '$app/navigation';
 
   const dispatch = createEventDispatcher();
@@ -31,6 +30,7 @@
   // Props
   export let isVisible = false;
   export let initialMetric = 'total_won';
+  export let contractId: bigint; // Required: contract ID for leaderboard data
   
   // State
   let entries: LeaderboardEntry[] = [];
@@ -105,7 +105,7 @@
     
     try {
       const data = await hovStatsService.getLeaderboard({
-        p_app_id: BigInt(PUBLIC_SLOT_MACHINE_APP_ID || '0'),
+        p_app_id: contractId,
         p_metric: selectedMetric as any,
         p_limit: 100,
         forceRefresh: true
@@ -244,6 +244,11 @@
   // Reset initialization when modal closes
   $: if (!isVisible) {
     initialized = false;
+  }
+
+  // Reload data when contractId changes
+  $: if (contractId && isVisible && $connectionStatus.initialized && initialized) {
+    loadLeaderboard();
   }
 
   // Set up event listeners and body scroll management

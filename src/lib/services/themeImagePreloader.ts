@@ -45,50 +45,84 @@ class ThemeImagePreloader {
   }
 
   /**
-   * Preload all theme assets
+   * Preload essential theme assets only (background + basic symbols)
+   * MEMORY OPTIMIZATION: Load only critical assets upfront
    */
-  async preloadThemeAssets(theme: ThemeColors): Promise<void> {
-    const imagesToPreload: string[] = [];
+  async preloadEssentialThemeAssets(theme: ThemeColors): Promise<void> {
+    const essentialImages: string[] = [];
 
-    // Add background image if theme uses it
+    // Add background image if theme uses it (critical for display)
     if (theme.useBackgroundImage && theme.backgroundImage) {
-      imagesToPreload.push(theme.backgroundImage);
+      essentialImages.push(theme.backgroundImage);
     }
 
-    // Add theme-specific symbols if theme has custom symbol path
+    // Add only basic symbols (A, B, C, D, X) - not additional theme assets
     if (theme.symbolPath) {
-      const symbolNames = ['A.png', 'B.png', 'C.png', 'D.png', 'X.png'];
-      symbolNames.forEach(symbolName => {
-        imagesToPreload.push(`${theme.symbolPath}/${symbolName}`);
+      const basicSymbols = ['A.png', 'B.png', 'C.png', 'D.png', 'X.png'];
+      basicSymbols.forEach(symbolName => {
+        essentialImages.push(`${theme.symbolPath}/${symbolName}`);
       });
-
-      // Also preload additional Dorks theme assets
-      if (theme.name === 'dorks') {
-        const additionalAssets = [
-          'Crystal Ball 100.png',
-          'Secrets 100.png', 
-          'black_pearl 100.png',
-          'dragon 100.png',
-          'octopus_cute 100.png',
-          'top_hat_v1 100.png',
-          'v_baloon 100.png'
-        ];
-        additionalAssets.forEach(asset => {
-          imagesToPreload.push(`${theme.symbolPath}/${asset}`);
-        });
-      }
     }
 
-    // Preload all images in parallel
+    // Preload essential images in parallel
     try {
       await Promise.all(
-        imagesToPreload.map(imagePath => this.preloadImage(imagePath))
+        essentialImages.map(imagePath => this.preloadImage(imagePath))
       );
-      console.log(`✅ Preloaded ${imagesToPreload.length} images for theme: ${theme.displayName}`);
+      console.log(`✅ Preloaded ${essentialImages.length} essential images for theme: ${theme.displayName}`);
     } catch (error) {
-      console.warn(`⚠️ Failed to preload some images for theme: ${theme.displayName}`, error);
+      console.warn(`⚠️ Failed to preload some essential images for theme: ${theme.displayName}`, error);
       // Don't throw - partial preloading is acceptable
     }
+  }
+
+  /**
+   * Preload additional theme assets (decorative/non-critical)
+   * MEMORY OPTIMIZATION: Load additional assets on demand
+   */
+  async preloadAdditionalThemeAssets(theme: ThemeColors): Promise<void> {
+    const additionalImages: string[] = [];
+
+    // Only load additional assets for specific themes when needed
+    if (theme.symbolPath && theme.name === 'dorks') {
+      const additionalAssets = [
+        'Crystal Ball 100.png',
+        'Secrets 100.png', 
+        'black_pearl 100.png',
+        'dragon 100.png',
+        'octopus_cute 100.png',
+        'top_hat_v1 100.png',
+        'v_baloon 100.png'
+      ];
+      additionalAssets.forEach(asset => {
+        additionalImages.push(`${theme.symbolPath}/${asset}`);
+      });
+    }
+
+    if (additionalImages.length === 0) return;
+
+    // Preload additional images with lower priority
+    try {
+      await Promise.all(
+        additionalImages.map(imagePath => this.preloadImage(imagePath))
+      );
+      console.log(`✅ Preloaded ${additionalImages.length} additional images for theme: ${theme.displayName}`);
+    } catch (error) {
+      console.warn(`⚠️ Failed to preload some additional images for theme: ${theme.displayName}`, error);
+    }
+  }
+
+  /**
+   * Preload all theme assets (backward compatibility)
+   */
+  async preloadThemeAssets(theme: ThemeColors): Promise<void> {
+    // Load essential assets first, then additional ones
+    await this.preloadEssentialThemeAssets(theme);
+    
+    // Load additional assets in the background (don't await)
+    this.preloadAdditionalThemeAssets(theme).catch(error => {
+      console.warn(`Background loading of additional theme assets failed:`, error);
+    });
   }
 
   /**

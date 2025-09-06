@@ -21,17 +21,16 @@
   } from 'lucide-svelte';
   import LeaderboardModal from './LeaderboardModal.svelte';
   import PlayerStatsModal from './PlayerStatsModal.svelte';
-  import { hovStatsService } from '$lib/services/hovStats';
-  import { connectionStatus } from '$lib/stores/hovStats';
+  import { hovStatsStore, connectionStatus } from '$lib/stores/hovStats';
   import { walletStore } from '$lib/stores/wallet';
   import { goto } from '$app/navigation';
   import type { LeaderboardEntry } from '$lib/types/hovStats';
   import { formatVOI } from '$lib/constants/betting';
-  import { PUBLIC_SLOT_MACHINE_APP_ID } from '$env/static/public';
 
   // Props
   export let compact = false;
   export let showPlayerHighlight = true;
+  export let contractId: bigint; // Required: contract ID for leaderboard data
 
   const dispatch = createEventDispatcher();
 
@@ -44,10 +43,10 @@
   let highlightedPlayer: string | null = null;
   let debounceTimer: NodeJS.Timeout | null = null;
   
-  // Local leaderboard state (bypass store)
-  let leaderboardData: LeaderboardEntry[] = [];
-  let leaderboardLoading = false;
-  let leaderboardError: string | null = null;
+  // Use store data instead of local state
+  $: leaderboardData = $hovStatsStore.leaderboard.data || [];
+  $: leaderboardLoading = $hovStatsStore.leaderboard.loading;
+  $: leaderboardError = $hovStatsStore.leaderboard.error;
   let initialized = false;
   
   // Modal state
@@ -112,19 +111,9 @@
     }
   };
 
-  onMount(async () => {
-    // Load initial data
-    if ($connectionStatus.initialized && !leaderboardData.length && !leaderboardLoading) {
-      await loadLeaderboardData();
-      initialized = true;
-    }
-  });
+  // onMount removed - using reactive statement to prevent double loading
 
-  // Load data when connection becomes available
-  $: if ($connectionStatus.initialized && !leaderboardData.length && !leaderboardLoading && !initialized) {
-    loadLeaderboardData();
-    initialized = true;
-  }
+  // Store handles all data loading automatically - no need for reactive triggers
 
   onDestroy(() => {
     // Clean up debounce timer
@@ -135,26 +124,21 @@
   });
 
 
+  // Prevent concurrent leaderboard loads
+  let isLoadingLeaderboard = false;
+  
   async function loadLeaderboardData() {
-    if (!$connectionStatus.initialized || leaderboardLoading) return;
+    if (!$connectionStatus.initialized || leaderboardLoading || isLoadingLeaderboard) return;
     
-    leaderboardLoading = true;
-    leaderboardError = null;
+    isLoadingLeaderboard = true;
     
     try {
-      const data = await hovStatsService.getLeaderboard({
-        p_app_id: BigInt(PUBLIC_SLOT_MACHINE_APP_ID || '0'),
-        p_metric: selectedMetric as any,
-        p_limit: 100,
-        forceRefresh: true
-      });
-      
-      leaderboardData = data;
+      // Use the store's refresh method - store data will be updated automatically
+      await hovStatsStore.refreshLeaderboard(selectedMetric);
     } catch (error) {
-      leaderboardError = error instanceof Error ? error.message : 'Failed to load leaderboard';
-      leaderboardData = [];
+      console.error('Failed to refresh leaderboard:', error);
     } finally {
-      leaderboardLoading = false;
+      isLoadingLeaderboard = false;
     }
   }
 
@@ -582,6 +566,7 @@
   <LeaderboardModal 
     bind:isVisible={showLeaderboardModal}
     initialMetric={selectedMetric}
+    {contractId}
     on:close={() => showLeaderboardModal = false}
     on:viewPlayerStats={handleLeaderboardModalPlayerStats}
   />

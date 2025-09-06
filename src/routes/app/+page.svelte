@@ -1,207 +1,387 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { walletStore } from '$lib/stores/wallet';
-  import { contractDataCache } from '$lib/services/contractDataCache';
-  import { balanceManager } from '$lib/services/balanceManager';
+  import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { currentTheme } from '$lib/stores/theme';
   import { isMasterSoundEnabled } from '$lib/stores/sound';
+  import { initializeMultiContractStores } from '$lib/stores/multiContract';
+  import { machineStatsService, MachineStatsService } from '$lib/services/machineStatsService';
   import WalletManager from '$lib/components/wallet/WalletManager.svelte';
-  import SlotMachine from '$lib/components/game/SlotMachine.svelte';
-  import GameQueue from '$lib/components/game/GameQueue.svelte';
-  import GameHeader from '$lib/components/game/GameHeader.svelte';
+  import MachineCard from '$lib/components/game/MachineCard.svelte';
   import VoiRadioPlayer from '$lib/components/app/VoiRadioPlayer.svelte';
-  import Leaderboard from '$lib/components/game/Leaderboard.svelte';
-  import PlayerStats from '$lib/components/game/PlayerStats.svelte';
-  import GameStaking from '$lib/components/game/GameStaking.svelte';
+  import { Search, Filter, Home, Gamepad2, TrendingUp, Users } from 'lucide-svelte';
+  import type { ContractPair } from '$lib/types/multiContract';
+  import type { PageData } from './$types';
   
-  export let data;
+  export let data: PageData;
   
-  // Import odds test utility for development
-  import '$lib/utils/testOddsWithRealData';
-  
-  let hasPreloadedCache = false;
-  let walletUnsubscribe: (() => void) | null = null;
-  let showLeaderboard = false;
-  let showPlayerStats = false;
-  let showStaking = false;
+  let searchTerm = '';
+  let statusFilter: 'all' | 'active' | 'maintenance' | 'testing' = 'all';
+  let sortBy: 'name' | 'tvl' | 'players' | 'winRate' = 'name';
+  let showFilters = false;
+  let aggregateStats: {
+    totalPlayers: number;
+    totalBets: string;
+    totalVolume: string;
+    isLoading: boolean;
+  } | null = null;
 
-  // Generate dynamic background style based on current theme - using background-image instead of background
+  // Generate dynamic background style based on current theme
   $: backgroundStyle = $currentTheme?.background?.via 
     ? `background-image: linear-gradient(${$currentTheme.background.direction}, ${$currentTheme.background.from}, ${$currentTheme.background.via}, ${$currentTheme.background.to});`
     : $currentTheme?.background 
     ? `background-image: linear-gradient(${$currentTheme.background.direction}, ${$currentTheme.background.from}, ${$currentTheme.background.to});`
     : 'background-image: linear-gradient(to bottom right, #0f172a, #1e293b, #0f172a);';
     
-  // Add text color for contrast when needed
   $: textStyle = $currentTheme?.textColor ? `color: ${$currentTheme.textColor};` : '';
-  
   $: combinedStyle = backgroundStyle + (textStyle ? ' ' + textStyle : '');
 
-  onMount(async () => {
-    // Pre-load contract data after wallet is initialized - but only once per session
-    walletUnsubscribe = walletStore.subscribe(async (state) => {
-      if (state.account && !state.isLocked && !hasPreloadedCache) {
-        hasPreloadedCache = true; // Prevent multiple preloads
-        try {
-          console.log('🚀 Initializing contract data cache...');
-          await contractDataCache.preloadContractData(state.account.address);
-          console.log('✅ Contract data cache initialized');
-        } catch (error) {
-          console.warn('⚠️ Failed to pre-load contract data:', error);
-          hasPreloadedCache = false; // Allow retry on next wallet connection
-        }
-        // Keep subscription active in case wallet changes
+  // Filter and sort contracts
+  $: filteredContracts = data.contracts
+    .filter(contract => {
+      // Search filter
+      if (searchTerm && !contract.name.toLowerCase().includes(searchTerm.toLowerCase()) && 
+          !contract.description.toLowerCase().includes(searchTerm.toLowerCase())) {
+        return false;
+      }
+      
+      // Status filter
+      if (statusFilter !== 'all' && contract.status !== statusFilter) {
+        return false;
+      }
+      
+      return true;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'winRate':
+          // For now, sort by display order since we don't have real-time sorting by stats
+          // TODO: Implement stats-based sorting once stats are loaded
+          return a.displayOrder - b.displayOrder;
+        case 'tvl':
+        case 'players':
+        default:
+          return a.displayOrder - b.displayOrder;
       }
     });
+
+  // Navigate to machine
+  function playMachine(event: CustomEvent<{ contract: ContractPair }>) {
+    const { contract } = event.detail;
+    goto(`/app/${contract.slotMachineAppId}`);
+  }
+
+  // Navigate home
+  function goHome() {
+    goto('/');
+  }
+
+  // Load aggregate statistics
+  async function loadAggregateStats() {
+    aggregateStats = {
+      totalPlayers: 0,
+      totalBets: '0',
+      totalVolume: '0 VOI',
+      isLoading: true
+    };
+
+    try {
+      const statsMap = await machineStatsService.getMultipleMachineStats(data.contracts);
+      let totalPlayers = 0;
+      let totalBetsCount = BigInt(0);
+      let totalVolume = BigInt(0);
+
+      for (const stats of statsMap.values()) {
+        if (!stats.error) {
+          totalPlayers += Number(stats.uniquePlayers);
+          totalBetsCount += stats.totalBets;
+          totalVolume += stats.totalAmountBet;
+        }
+      }
+
+      aggregateStats = {
+        totalPlayers,
+        totalBets: MachineStatsService.formatNumber(totalBetsCount),
+        totalVolume: MachineStatsService.formatVOI(totalVolume) + ' VOI',
+        isLoading: false
+      };
+    } catch (error) {
+      console.error('Failed to load aggregate stats:', error);
+      aggregateStats = {
+        totalPlayers: 0,
+        totalBets: '0',
+        totalVolume: '0 VOI',
+        isLoading: false
+      };
+    }
+  }
+
+  onMount(async () => {
+    // Initialize multi-contract stores
+    await initializeMultiContractStores();
+    // Load aggregate statistics
+    loadAggregateStats();
   });
 
-  onDestroy(() => {
-    // Clean up wallet subscription
-    if (walletUnsubscribe) {
-      walletUnsubscribe();
-      walletUnsubscribe = null;
-    }
-    
-    // Reset balance manager to stop any intervals and clear monitoring
-    balanceManager.reset();
-  });
 </script>
 
 
 <main class="min-h-screen transition-all duration-700 ease-in-out" style={combinedStyle}>
-  <div class="max-w-7xl mx-auto px-4 py-2 lg:py-2">
-    <!-- Desktop Layout: Horizontal -->
-    <div class="hidden lg:block min-h-screen">
-      <!-- Header across full width -->
-      <div class="mb-4">
-        <GameHeader />
-      </div>
-      
-      <!-- Main content grid -->
-      <div class="grid grid-cols-12 gap-6 items-start">
-        <!-- Main game area -->
-        <div class="col-span-8 relative">
-          <SlotMachine disabled={false} />
+  <div class="max-w-7xl mx-auto px-4 py-4 lg:py-6">
+    <!-- Header -->
+    <div class="mb-8">
+      <!-- Navigation -->
+      <div class="flex items-center gap-2 mb-6">
+        <button
+          on:click={goHome}
+          class="nav-button"
+          title="Home"
+        >
+          <Home class="w-4 h-4" />
+          <span class="hidden sm:inline">Home</span>
+        </button>
+        <span class="text-slate-500">/</span>
+        <div class="flex items-center gap-2 text-theme">
+          <Gamepad2 class="w-4 h-4" />
+          <span class="font-medium">Choose Your Machine</span>
         </div>
-        
-        <!-- Right sidebar: Wallet and Tabbed panels -->
-        <div class="col-span-4 space-y-4 relative">
-          <WalletManager />
-          
-          <!-- Tabbed panels -->
-          <div class="tabbed-panels">
-            <!-- Tab buttons -->
-            <div class="tab-buttons">
-              <button 
-                class="tab-button {!showLeaderboard && !showPlayerStats && !showStaking ? 'active' : ''}"
-                on:click={() => { showLeaderboard = false; showPlayerStats = false; showStaking = false; }}
-              >
-                Queue
-              </button>
-              <button 
-                class="tab-button {showLeaderboard ? 'active' : ''}"
-                on:click={() => { showLeaderboard = true; showPlayerStats = false; showStaking = false; }}
-              >
-                Leaderboard
-              </button>
-              <button 
-                class="tab-button {showPlayerStats ? 'active' : ''}"
-                on:click={() => { showPlayerStats = true; showLeaderboard = false; showStaking = false; }}
-              >
-                Stats
-              </button>
-              <button 
-                class="tab-button {showStaking ? 'active' : ''}"
-                on:click={() => { showStaking = true; showLeaderboard = false; showPlayerStats = false; }}
-              >
-                Staking
-              </button>
+      </div>
+
+      <!-- Page Title and Stats -->
+      <div class="text-center mb-8">
+        <h1 class="text-3xl lg:text-4xl font-bold text-theme mb-3">
+          Slot Machine Selection
+        </h1>
+        <p class="text-slate-400 text-lg mb-4">
+          Choose from our collection of provably fair blockchain slot machines
+        </p>
+        <div class="flex flex-wrap items-center justify-center gap-4 text-sm text-slate-400 mb-4">
+          <span>{data.playableCount} Machines Available</span>
+          <span>•</span>
+          <span>Provably Fair</span>
+          <span>•</span>
+          <span>Instant Payouts</span>
+        </div>
+
+        <!-- Aggregate Statistics -->
+        {#if aggregateStats}
+          <div class="flex flex-wrap items-center justify-center gap-6 text-sm">
+            <div class="flex items-center gap-2">
+              <Users class="w-4 h-4 text-blue-400" />
+              <span class="text-slate-400">Total Players:</span>
+              <span class="font-semibold text-theme">
+                {#if aggregateStats.isLoading}
+                  Loading...
+                {:else}
+                  {aggregateStats.totalPlayers}
+                {/if}
+              </span>
             </div>
-            
-            <!-- Tab content -->
-            <div class="tab-content">
-              {#if showLeaderboard}
-                <Leaderboard compact={true} />
-              {:else if showPlayerStats}
-                <PlayerStats compact={true} />
-              {:else if showStaking}
-                <GameStaking compact={true} />
-              {:else}
-                <GameQueue />
-              {/if}
+            <span class="text-slate-600">•</span>
+            <div class="flex items-center gap-2">
+              <Gamepad2 class="w-4 h-4 text-purple-400" />
+              <span class="text-slate-400">Total Bets:</span>
+              <span class="font-semibold text-theme">
+                {#if aggregateStats.isLoading}
+                  Loading...
+                {:else}
+                  {aggregateStats.totalBets}
+                {/if}
+              </span>
+            </div>
+            <span class="text-slate-600">•</span>
+            <div class="flex items-center gap-2">
+              <TrendingUp class="w-4 h-4 text-green-400" />
+              <span class="text-slate-400">Total Volume:</span>
+              <span class="font-semibold text-theme">
+                {#if aggregateStats.isLoading}
+                  Loading...
+                {:else}
+                  {aggregateStats.totalVolume}
+                {/if}
+              </span>
             </div>
           </div>
+        {/if}
+      </div>
+
+      <!-- Search and Filters -->
+      <div class="hidden flex-col sm:flex-row items-center gap-4 mb-6">
+        <!-- Search -->
+        <div class="relative flex-1 w-full sm:max-w-md">
+          <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            bind:value={searchTerm}
+            placeholder="Search machines..."
+            class="search-input pl-10 pr-4"
+          />
         </div>
+
+        <!-- Filter Toggle -->
+        <button
+          on:click={() => showFilters = !showFilters}
+          class="filter-toggle"
+          class:active={showFilters}
+        >
+          <Filter class="w-4 h-4" />
+          <span>Filters</span>
+        </button>
       </div>
+
+      <!-- Filters Panel -->
+      {#if showFilters}
+        <div class="filters-panel">
+          <div class="filter-group">
+            <label class="filter-label">Status</label>
+            <select bind:value={statusFilter} class="filter-select">
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="testing">Testing</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label class="filter-label">Sort By</label>
+            <select bind:value={sortBy} class="filter-select">
+              <option value="name">Name</option>
+              <option value="tvl">Total Value Locked</option>
+              <option value="players">Active Players</option>
+              <option value="winRate">Win Rate</option>
+            </select>
+          </div>
+        </div>
+      {/if}
     </div>
-    
-    <!-- Mobile Layout: Fixed viewport optimized -->
-    <div class="lg:hidden min-h-screen flex flex-col safe-area-top safe-area-bottom">
-      <!-- Compact wallet header -->
-      <div class="flex-shrink-0 px-2 py-2 safe-area-left safe-area-right">
-        <WalletManager compact={true} />
-      </div>
-      
-      <!-- Main game area - allows natural scrolling -->
-      <div class="flex-1 flex flex-col px-2 pb-2 safe-area-left safe-area-right">
-        <SlotMachine disabled={false} compact={true} />
-      </div>
+
+    <!-- Machine Grid -->
+    <div class="machines-grid">
+      {#if filteredContracts.length === 0}
+        <div class="no-results">
+          <Gamepad2 class="w-12 h-12 text-slate-500 mx-auto mb-4" />
+          <h3 class="text-xl font-semibold text-slate-300 mb-2">No machines found</h3>
+          <p class="text-slate-400 mb-4">
+            {#if searchTerm}
+              No machines match your search "{searchTerm}".
+            {:else if statusFilter !== 'all'}
+              No machines are currently {statusFilter}.
+            {:else}
+              No machines are available at the moment.
+            {/if}
+          </p>
+          {#if searchTerm || statusFilter !== 'all'}
+            <button
+              on:click={() => { searchTerm = ''; statusFilter = 'all'; }}
+              class="clear-filters-btn"
+            >
+              Clear Filters
+            </button>
+          {/if}
+        </div>
+      {:else}
+        {#each filteredContracts as contract (contract.id)}
+          <MachineCard
+            {contract}
+            size="md"
+            showStats={true}
+            showPlayButton={true}
+            on:play={playMachine}
+            on:select={playMachine}
+          />
+        {/each}
+      {/if}
     </div>
   </div>
   
-  <!-- VOI Radio Player - Fixed position, visible when sound is enabled -->
+  <!-- VOI Radio Player -->
   {#if $isMasterSoundEnabled}
     <VoiRadioPlayer />
   {/if}
 </main>
 
 <style>
-  .tabbed-panels {
-    @apply rounded-xl border overflow-hidden;
-    background: var(--theme-surface-primary);
-    border-color: var(--theme-surface-border);
+  .nav-button {
+    @apply flex items-center gap-2 px-3 py-2 text-sm text-slate-400;
+    @apply hover:text-theme transition-colors duration-200;
+    @apply focus:outline-none focus:ring-2 focus:ring-voi-400/50 rounded-lg;
   }
 
-  .tab-buttons {
-    @apply flex border-b;
-    border-color: var(--theme-surface-border);
+  .search-input {
+    @apply w-full py-3 text-sm bg-slate-800 border border-slate-700;
+    @apply rounded-lg text-slate-200 placeholder-slate-400;
+    @apply focus:outline-none focus:ring-2 focus:ring-voi-400/50 focus:border-voi-400;
+    @apply transition-all duration-200;
   }
 
-  .tab-button {
-    @apply flex-1 px-4 py-3 text-sm font-medium transition-all duration-200 border-b-2 border-transparent;
-    color: var(--theme-text, #9ca3af);
+  .filter-toggle {
+    @apply flex items-center gap-2 px-4 py-3 text-sm;
+    @apply bg-slate-800 border border-slate-700 rounded-lg;
+    @apply text-slate-200 hover:text-white hover:border-slate-600;
+    @apply focus:outline-none focus:ring-2 focus:ring-voi-400/50;
+    @apply transition-all duration-200;
   }
 
-  .tab-button:hover {
-    color: var(--theme-primary);
-    background: var(--theme-surface-hover);
+  .filter-toggle.active {
+    @apply bg-voi-600 border-voi-500 text-white;
   }
 
-  .tab-button.active {
-    color: var(--theme-primary);
-    border-color: var(--theme-primary);
-    background: var(--theme-surface-secondary);
+  .filters-panel {
+    @apply flex flex-wrap items-center gap-4 p-4 bg-slate-800/50;
+    @apply border border-slate-700/50 rounded-lg backdrop-blur-sm mb-6;
   }
 
-  .tab-content {
-    @apply overflow-hidden;
-    min-height: calc(100vh - 22rem);
+  .filter-group {
+    @apply flex flex-col gap-1;
   }
 
-  /* VOI color utility */
+  .filter-label {
+    @apply text-xs font-medium text-slate-400;
+  }
+
+  .filter-select {
+    @apply px-3 py-2 text-sm bg-slate-700 border border-slate-600 rounded-lg;
+    @apply text-slate-200 focus:outline-none focus:ring-2 focus:ring-voi-400/50;
+    @apply focus:border-voi-400 transition-all duration-200;
+  }
+
+  .machines-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6;
+  }
+
+  .no-results {
+    @apply col-span-full flex flex-col items-center justify-center py-16;
+    @apply text-center;
+  }
+
+  .clear-filters-btn {
+    @apply px-4 py-2 bg-voi-600 hover:bg-voi-700 text-white rounded-lg;
+    @apply text-sm font-medium transition-all duration-200;
+    @apply focus:outline-none focus:ring-2 focus:ring-voi-400/50;
+  }
+
+  /* Theme colors */
   .text-voi-400 {
     color: #10b981;
-  }
-
-  .border-voi-400 {
-    border-color: #10b981;
   }
 
   .bg-voi-600 {
     background-color: #059669;
   }
 
-  .bg-voi-500\/20 {
-    background-color: rgba(16, 185, 129, 0.2);
+  .hover\:bg-voi-700:hover {
+    background-color: #047857;
+  }
+
+  .border-voi-500 {
+    border-color: #10b981;
+  }
+
+  .focus\:border-voi-400:focus {
+    border-color: #10b981;
+  }
+
+  .focus\:ring-voi-400\/50:focus {
+    --tw-ring-color: rgba(16, 185, 129, 0.5);
   }
 </style>

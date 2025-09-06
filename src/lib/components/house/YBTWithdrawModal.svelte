@@ -4,10 +4,13 @@
   import { walletStore as gamingWalletStore } from '$lib/stores/wallet';
   import { ybtService } from '$lib/services/ybt';
   import type { YBTWithdrawParams } from '$lib/types/ybt';
+  import type { ContractPair } from '$lib/types/multiContract';
+  import { selectedContract } from '$lib/stores/multiContract';
 
   export let open = false;
   export let userShares: bigint = BigInt(0);
   export let selectedWalletSource: 'gaming' | 'external' = 'external';
+  export let contractContext: ContractPair | null = null;
   
   let tokenDecimals = 9; // Default to 9, will be fetched
   let totalSupply = BigInt(0);
@@ -41,25 +44,46 @@
     }
   }
 
+  // Get current contract - use prop override or global selected contract
+  $: currentContract = contractContext || $selectedContract;
+
   $: sharesAmount = parseFloat(withdrawAmount) || 0;
   $: sharesBigInt = BigInt(Math.floor(sharesAmount * (10 ** tokenDecimals)));
   $: transactionFee = BigInt(6000); // 6000 microAlgos for app call + inner payment
-  $: canWithdraw = sharesAmount > 0 && sharesBigInt <= userShares && !isProcessing && walletAccount && walletBalance >= Number(transactionFee);
+  $: canWithdraw = sharesAmount > 0 && sharesBigInt <= userShares && !isProcessing && walletAccount && walletBalance >= Number(transactionFee) && currentContract && currentContract.features?.withdrawalsEnabled;
   $: maxShares = Number(userShares) / (10 ** tokenDecimals);
   $: voiAmount = ybtService.calculateUserPortfolioValue(sharesBigInt, totalSupply, contractValue);
 
   async function handleWithdraw() {
-    if (!canWithdraw || !walletAccount) return;
+    if (!canWithdraw || !walletAccount || !currentContract) return;
+
+    // Check if contract allows withdrawals
+    if (!currentContract.features?.withdrawalsEnabled) {
+      error = `Withdrawals are not enabled for ${currentContract.name}`;
+      return;
+    }
+
+    // Check contract status
+    if (currentContract.status !== 'active') {
+      error = `${currentContract.name} is currently ${currentContract.status}`;
+      return;
+    }
 
     isProcessing = true;
     error = '';
+
+    console.log('Starting withdrawal with params:', {
+      shares: sharesBigInt.toString(),
+      contractId: currentContract.id,
+      contractName: currentContract.name
+    });
 
     try {
       const params: YBTWithdrawParams = {
         shares: sharesBigInt
       };
 
-      const result = await ybtService.withdraw(params);
+      const result = await ybtService.withdraw(params, currentContract.id);
 
       if (result.success) {
         dispatch('success', result);
@@ -95,19 +119,21 @@
   }
   
   async function loadTokenData() {
+    if (!currentContract) return;
+    
     try {
-      const globalState = await ybtService.getGlobalState();
+      const globalState = await ybtService.getGlobalState(currentContract.id);
       tokenDecimals = globalState.decimals;
       totalSupply = globalState.totalSupply;
-      contractValue = await ybtService.getContractTotalValue();
+      contractValue = await ybtService.getContractTotalValue(currentContract.id);
     } catch (error) {
-      console.error('Error loading token data:', error);
+      console.error('Error loading token data for contract', currentContract.id, ':', error);
       // Keep default values
     }
   }
   
-  // Load token data and wallet context when modal opens
-  $: if (open) {
+  // Load token data and wallet context when modal opens or contract changes
+  $: if (open && currentContract) {
     loadTokenData();
     loadWalletContext();
   }
@@ -120,7 +146,12 @@
     <div class="bg-slate-800 rounded-lg shadow-xl max-w-md w-full border border-slate-700 max-h-[90vh] overflow-y-auto">
       <!-- Header -->
       <div class="flex items-center justify-between p-4 sm:p-6 border-b border-slate-700">
-        <h2 class="text-lg sm:text-xl font-bold text-theme">Withdraw YBT Shares</h2>
+        <h2 class="text-lg sm:text-xl font-bold text-theme">
+          Withdraw YBT Shares
+          {#if currentContract}
+            <span class="text-sm font-normal text-slate-400">• {currentContract.name}</span>
+          {/if}
+        </h2>
         <button
           on:click={closeModal}
           class="text-slate-400 hover:text-theme transition-colors p-2"

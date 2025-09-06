@@ -3,6 +3,7 @@
   import { Copy, QrCode, CreditCard, X } from 'lucide-svelte';
   import QRCode from 'qrcode';
   import IBuyVoiWidget from '../widget/IBuyVoiWidget.svelte';
+  import AlgorandTransferTab from './AlgorandTransferTab.svelte';
   import { deviceCapabilities } from '$lib/utils/device';
 
   console.log(deviceCapabilities.isMobile);
@@ -14,6 +15,7 @@
   let qrCodeUrl = '';
   let copySuccess = false;
   let activeTab = 'buy'; // 'transfer' | 'buy'
+  let transferSubTab = 'voi'; // 'voi' | 'algorand'
   let purchaseSuccess = false;
   let purchaseError: string | null = null;
   
@@ -103,22 +105,24 @@
     <!-- Tab Navigation -->
     <div class="flex border-b border-surface-border">
       <button
-        class="flex-1 py-3 px-6 text-center transition-colors"
+        class="flex-1 py-4 px-6 text-center transition-colors"
         class:bg-surface-secondary={activeTab === 'buy'}
         class:text-theme={activeTab === 'buy'}
         class:text-gray-400={activeTab !== 'buy'}
         on:click={() => activeTab = 'buy'}
       >
-        Buy VOI
+        <div class="font-medium">Buy VOI</div>
+        <div class="text-xs mt-1 opacity-75">With USD using Debit or Apple Pay</div>
       </button>
       <button
-        class="flex-1 py-3 px-6 text-center transition-colors"
+        class="flex-1 py-4 px-6 text-center transition-colors"
         class:bg-surface-secondary={activeTab === 'transfer'}
         class:text-theme={activeTab === 'transfer'}
         class:text-gray-400={activeTab !== 'transfer'}
         on:click={() => activeTab = 'transfer'}
       >
-        Transfer VOI
+        <div class="font-medium">Transfer VOI</div>
+        <div class="text-xs mt-1 opacity-75">From a Voi or Algorand Wallet</div>
       </button>
     </div>
     
@@ -127,59 +131,89 @@
       {#if activeTab === 'transfer'}
         <!-- Transfer Tab -->
         <div class="space-y-6">
-          <!-- QR Code -->
-          {#if qrCodeUrl}
-            <div class="text-center">
-              <div class="inline-block p-4 bg-white rounded-lg">
-                <img src={qrCodeUrl} alt="Wallet QR Code" class="mx-auto" />
+          <!-- Transfer Sub-navigation -->
+          <div class="flex border-b border-surface-border">
+            <button
+              class="flex-1 py-2 px-4 text-center text-sm transition-colors"
+              class:bg-surface-secondary={transferSubTab === 'voi'}
+              class:text-theme={transferSubTab === 'voi'}
+              class:text-gray-400={transferSubTab !== 'voi'}
+              on:click={() => transferSubTab = 'voi'}
+            >
+              From Voi Network
+            </button>
+            <button
+              class="flex-1 py-2 px-4 text-center text-sm transition-colors"
+              class:bg-surface-secondary={transferSubTab === 'algorand'}
+              class:text-theme={transferSubTab === 'algorand'}
+              class:text-gray-400={transferSubTab !== 'algorand'}
+              on:click={() => transferSubTab = 'algorand'}
+            >
+              From Algorand Network
+            </button>
+          </div>
+          
+          {#if transferSubTab === 'voi'}
+            <!-- Voi Transfer (Original Content) -->
+            <div class="space-y-6">
+              <!-- QR Code -->
+              {#if qrCodeUrl}
+                <div class="text-center">
+                  <div class="inline-block p-4 bg-white rounded-lg">
+                    <img src={qrCodeUrl} alt="Wallet QR Code" class="mx-auto" />
+                  </div>
+                  <p class="text-sm text-gray-400 mt-2">Scan with your VOI wallet</p>
+                </div>
+              {/if}
+              
+              <!-- Address -->
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">
+                  Wallet Address
+                </label>
+                <div class="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={address}
+                    readonly
+                    class="flex-1 input-field font-mono text-sm"
+                  />
+                  <button
+                    on:click={copyAddress}
+                    class="btn-secondary p-2"
+                    title="Copy address"
+                  >
+                    <Copy class="w-4 h-4" />
+                  </button>
+                </div>
+                {#if copySuccess}
+                  <p class="text-voi-400 text-xs mt-1">Address copied!</p>
+                {/if}
               </div>
-              <p class="text-sm text-gray-400 mt-2">Scan with your VOI wallet</p>
+              
+              <!-- Instructions -->
+              <div class="space-y-3">
+                <h4 class="font-medium text-theme">How to add funds:</h4>
+                <ol class="list-decimal list-inside space-y-2 text-sm text-gray-400">
+                  <li>Copy the wallet address above or scan the QR code</li>
+                  <li>Send VOI tokens from your main wallet or exchange</li>
+                  <li>Funds will appear in your gaming wallet within seconds</li>
+                  <li>Start playing once the transaction confirms</li>
+                </ol>
+              </div>
+              
+              <!-- Warning -->
+              <div class="p-4 bg-blue-900/20 border border-blue-700/50 rounded-lg">
+                <p class="text-blue-400 text-sm">
+                  <strong>ℹ️ Note:</strong> Only send VOI tokens to this address using Voi Network. 
+                  Sending other tokens, or using another networks, may result in permanent loss.
+                </p>
+              </div>
             </div>
+          {:else}
+            <!-- Algorand Transfer (New Content) -->
+            <AlgorandTransferTab {address} />
           {/if}
-          
-          <!-- Address -->
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">
-              Wallet Address
-            </label>
-            <div class="flex items-center gap-2">
-              <input
-                type="text"
-                value={address}
-                readonly
-                class="flex-1 input-field font-mono text-sm"
-              />
-              <button
-                on:click={copyAddress}
-                class="btn-secondary p-2"
-                title="Copy address"
-              >
-                <Copy class="w-4 h-4" />
-              </button>
-            </div>
-            {#if copySuccess}
-              <p class="text-voi-400 text-xs mt-1">Address copied!</p>
-            {/if}
-          </div>
-          
-          <!-- Instructions -->
-          <div class="space-y-3">
-            <h4 class="font-medium text-theme">How to add funds:</h4>
-            <ol class="list-decimal list-inside space-y-2 text-sm text-gray-400">
-              <li>Copy the wallet address above or scan the QR code</li>
-              <li>Send VOI tokens from your main wallet or exchange</li>
-              <li>Funds will appear in your gaming wallet within minutes</li>
-              <li>Start playing once the transaction confirms</li>
-            </ol>
-          </div>
-          
-          <!-- Warning -->
-          <div class="p-4 bg-blue-900/20 border border-blue-700/50 rounded-lg">
-            <p class="text-blue-400 text-sm">
-              <strong>ℹ️ Note:</strong> Only send VOI tokens to this address. 
-              Sending other tokens may result in permanent loss.
-            </p>
-          </div>
         </div>
       {:else}
         <!-- Buy Tab -->

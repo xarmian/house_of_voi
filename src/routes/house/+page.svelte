@@ -10,6 +10,8 @@
   import YBTDashboard from '$lib/components/house/YBTDashboard.svelte';
   import YBTStats from '$lib/components/house/YBTStats.svelte';
   import WalletSourceSelector from '$lib/components/house/WalletSourceSelector.svelte';
+  import ContractSelector from '$lib/components/contract/ContractSelector.svelte';
+  import ContractSwitcher from '$lib/components/contract/ContractSwitcher.svelte';
   // import OddsAnalysis from '$lib/components/analytics/OddsAnalysis.svelte';
   import LoadingOverlay from '$lib/components/ui/LoadingOverlay.svelte';
   import Leaderboard from '$lib/components/game/Leaderboard.svelte';
@@ -20,6 +22,13 @@
   import { BarChart3, TrendingUp, Users, Coins, Target, Zap, Clock, Crown, Wallet, Trophy, PieChart, AlertTriangle } from 'lucide-svelte';
   import { PUBLIC_WALLETCONNECT_PROJECT_ID } from '$env/static/public';
   import { isMaintenanceMode, maintenanceModeMessage } from '$lib/stores/maintenanceMode';
+  import { 
+    contractSelectionStore, 
+    selectedContract, 
+    isMultiContractMode,
+    initializeMultiContractStores
+  } from '$lib/stores/multiContract';
+  import type { ContractPair } from '$lib/types/multiContract';
 
   let isLoaded = false;
   let algodClient: algosdk.Algodv2;
@@ -29,6 +38,7 @@
   let selectedWalletSource: 'gaming' | 'external' = 'external';
   let isSelectedWalletLocked = false;
   let refreshDebounceTimer: NodeJS.Timeout | null = null;
+  let isYBTRefreshing = false;
   
   // Initialize Algorand client for avm-wallet-svelte
   algodClient = new algosdk.Algodv2(
@@ -41,6 +51,9 @@
   const availableWallets = ['Kibisis', 'LuteWallet', 'WalletConnect'];
 
   onMount(async () => {
+    // Initialize multi-contract stores first
+    await initializeMultiContractStores();
+    
     // Initialize gaming wallet store - this now preserves existing unlocked state
     await walletStore.initialize();
     
@@ -85,13 +98,27 @@
     }
   }
 
+  // Helper to prevent concurrent YBT refreshes
+  async function safeYBTRefresh() {
+    if (isYBTRefreshing) {
+      console.log('YBT refresh already in progress, skipping');
+      return;
+    }
+    isYBTRefreshing = true;
+    try {
+      await ybtStore.refresh();
+    } finally {
+      isYBTRefreshing = false;
+    }
+  }
+
   async function refreshHouseBalance() {
     try {
       balanceLoading = true;
       houseBalance = await houseBalanceService.refreshHouseBalance();
       
       // Also refresh YBT data since portfolio value depends on contract balances
-      await ybtStore.refresh();
+      await safeYBTRefresh();
     } catch (error) {
       console.error('Failed to refresh house balance:', error);
     } finally {
@@ -146,7 +173,7 @@
       const walletType = selectedWalletSource === 'external' ? 'third-party' : 'gaming';
       ybtService.setPreferredWalletType(walletType);
       // Force refresh YBT data with new wallet source
-      await ybtStore.refresh();
+      await safeYBTRefresh();
       refreshDebounceTimer = null;
     }, 200); // 200ms debounce
   }
@@ -172,11 +199,41 @@
         refreshDebounceTimer = setTimeout(() => {
           const walletType = selectedWalletSource === 'external' ? 'third-party' : 'gaming';
           ybtService.setPreferredWalletType(walletType);
-          ybtStore.refresh();
+          safeYBTRefresh();
           refreshDebounceTimer = null;
         }, 300);
       }
     }
+  }
+
+  // Track last contract ID to prevent unnecessary refreshes
+  let lastContractId: string | null = null;
+  
+  // Reactive statement to refresh house balance when contract changes
+  $: if (isLoaded && $selectedContract?.id) {
+    // Only refresh if contract actually changed
+    if (lastContractId && lastContractId !== $selectedContract.id) {
+      console.log('Contract changed, refreshing house balance');
+      loadHouseBalance();
+    }
+    lastContractId = $selectedContract.id;
+  }
+
+  // Handle contract selection changes
+  async function handleContractSelection(event: CustomEvent<{ contractId: string; contract: ContractPair }>) {
+    const { contractId, contract } = event.detail;
+    console.log('Contract selected in House page:', contract.name);
+    
+    // Select the contract in the store
+    await contractSelectionStore.selectContract(contractId);
+  }
+
+  // Handle contract switching
+  async function handleContractChange(event: CustomEvent<{ previousId: string | null; newId: string; contract: ContractPair }>) {
+    const { previousId, newId, contract } = event.detail;
+    console.log('Contract switched from', previousId, 'to', newId);
+
+    await safeYBTRefresh();
   }
 </script>
 
@@ -273,6 +330,7 @@
                   />
                 </div>
                 {/if}
+
                 
                 <!-- YBT Dashboard - always rendered and visible -->
                 <YBTDashboard 
@@ -431,7 +489,7 @@
                     <Crown class="w-5 h-5 text-yellow-400" />
                     <h2 class="text-lg font-bold text-theme">Top Players</h2>
                   </div>
-                  <Leaderboard maxHeight="700px" showPlayerHighlight={anyWalletConnected} />
+                  <Leaderboard maxHeight="700px" showPlayerHighlight={anyWalletConnected} contractId={BigInt($selectedContract?.slotMachineAppId || 0)} />
                 </div>
               </div>
               
@@ -444,6 +502,25 @@
           
           <!-- Platform Statistics - Always Visible -->
           <div class="dashboard-secondary">
+            <!-- Contract Selection - show when multi-contract mode -->
+            {#if $isMultiContractMode}
+            <div class="card p-4 mb-4">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h3 class="text-lg font-semibold text-theme">Machine Contract</h3>
+                </div>
+                <div class="text-right">
+                  <ContractSwitcher 
+                    contractFilter="houseDashboard"
+                    size="md"
+                    showDescription={false}
+                    showHealthStatus={true}
+                    on:contractChanged={handleContractChange}
+                  />
+                </div>
+              </div>
+            </div>
+            {/if}
             <div class="card p-3 sm:p-4 h-fit">
               <div class="flex items-center gap-2 mb-3 sm:mb-4">
                 <BarChart3 class="w-4 h-4 sm:w-5 sm:h-5 text-voi-400" />

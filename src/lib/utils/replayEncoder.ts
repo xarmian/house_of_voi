@@ -7,6 +7,7 @@ interface DecodedReplayData {
   betAmount: number;
   paylines: number;
   timestamp: number;
+  contractId?: string;
   txId?: string;
 }
 
@@ -69,6 +70,7 @@ export function encodeReplayData(spin: {
   totalBet: number;
   selectedPaylines: number;
   timestamp: number;
+  contractId?: string;
   txId?: string;
 }): string {
   if (!spin.outcome || typeof spin.winnings !== 'number') {
@@ -89,7 +91,8 @@ export function encodeReplayData(spin: {
     winningsVOI.toString(36),            // 1-3 chars typically
     betVOI.toString(36),                  // 1-2 chars typically
     spin.selectedPaylines.toString(36),   // 1 char (max 25 -> 'p')
-    timestampHours.toString(36)           // 6-7 chars
+    timestampHours.toString(36),          // 6-7 chars
+    spin.contractId || ''                 // contract ID (empty if not provided)
   ];
   
   const dataString = parts.join('.');
@@ -106,15 +109,19 @@ export function decodeReplayData(encodedData: string): DecodedReplayData | null 
     // Split by delimiter
     const parts = encodedData.split('.');
     
-    if (parts.length !== 6) {
-      console.warn('Invalid format: expected 6 parts, got', parts.length);
+    if (parts.length !== 7 && parts.length !== 6) {
+      // Support both old format (6 parts) and new format (7 parts with contractId)
+      console.warn('Invalid format: expected 6 or 7 parts, got', parts.length);
       return null;
     }
     
-    const [compressedOutcome, winningsStr, betStr, paylinesStr, timestampStr, receivedHash] = parts;
+    // Handle both old and new formats
+    const isNewFormat = parts.length === 7;
+    const [compressedOutcome, winningsStr, betStr, paylinesStr, timestampStr, contractIdStr, receivedHash] = 
+      isNewFormat ? parts : [...parts.slice(0, 5), '', parts[5]];
     
     // Verify hash
-    const dataString = parts.slice(0, 5).join('.');
+    const dataString = isNewFormat ? parts.slice(0, 6).join('.') : parts.slice(0, 5).join('.');
     const calculatedHash = generateHash(dataString);
     
     if (receivedHash !== calculatedHash) {
@@ -130,13 +137,15 @@ export function decodeReplayData(encodedData: string): DecodedReplayData | null 
     const betAmount = parseInt(betStr, 36) * 1000000; // Convert back to atomic
     const paylines = parseInt(paylinesStr, 36);
     const timestamp = parseInt(timestampStr, 36) * 3600000; // Convert back to ms
+    const contractId = contractIdStr || undefined; // Only include if not empty
     
     return {
       outcome,
       winnings,
       betAmount,
       paylines,
-      timestamp
+      timestamp,
+      contractId
     };
   } catch (error) {
     console.error('Error decoding replay data:', error);

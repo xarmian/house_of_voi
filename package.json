@@ -26,6 +26,7 @@
     "avm-wallet-svelte": "^0.8.1",
     "buffer": "^6.0.3",
     "chart.js": "^4.5.0",
+    "crypto-browserify": "^3.12.1",
     "crypto-js": "^4.2.0",
     "lucide-svelte": "^0.539.0",
     "qrcode": "^1.5.4",

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher } from 'svelte';
   import { scale, fade, fly, blur } from 'svelte/transition';
   import { elasticOut, bounceOut, backOut } from 'svelte/easing';
   import type { SlotSymbol, ReelPosition } from '$lib/types/symbols';
@@ -116,12 +116,6 @@
       }, 600);
     }
   }
-  
-  onMount(() => {
-    // Only trigger reveal animation if we were just spinning (not on initial page load)
-    // We can detect this by checking if the component was recently in a spinning state
-    // For now, we'll disable auto-reveal on mount to prevent bouncing on page load
-  });
 </script>
 
 <div 
@@ -245,10 +239,10 @@
     cursor: pointer;
   }
   
-  .symbol-container.clickable:focus {
+  /*.symbol-container.clickable:focus {
     outline: 2px solid var(--theme-primary);
     outline-offset: 2px;
-  }
+  }*/
   
   .symbol-container.spinning {
     /* Container stays stable, individual symbols handle their own spinning effects */
@@ -298,7 +292,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 6px;
-    overflow: hidden;
+    /*overflow: hidden;*/
     perspective: 1000px;
     transform-style: preserve-3d;
   }

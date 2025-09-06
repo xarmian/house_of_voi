@@ -5,6 +5,7 @@ import { walletStore, walletAddress as gamingWalletAddress } from './wallet';
 import { ybtService } from '$lib/services/ybt';
 import type { YBTState, YBTGlobalState } from '$lib/types/ybt';
 import { browser } from '$app/environment';
+import { multiContractInitializer } from '$lib/services/multiContractInit';
 
 function createYBTStore() {
   const { subscribe, set, update } = writable<YBTState>({
@@ -19,6 +20,7 @@ function createYBTStore() {
   let refreshInterval: NodeJS.Timeout | null = null;
   let isRefreshing = false;
   let refreshPromise: Promise<void> | null = null;
+  let isInitialized = false;
 
   const startAutoRefresh = () => {
     // Auto refresh disabled - only refresh on manual actions or wallet changes
@@ -38,6 +40,7 @@ function createYBTStore() {
     
     // Prevent concurrent refreshes
     if (isRefreshing) {
+      console.log('YBT refresh already in progress, returning existing promise');
       return refreshPromise; // Return existing refresh promise
     }
 
@@ -67,10 +70,21 @@ function createYBTStore() {
       }
 
       try {
-        // Fetch global state and user shares in parallel
+        // Get current contract context
+        const context = await ybtService.getWalletContext();
+        if (!context) {
+          throw new Error('No wallet context available');
+        }
+        
+        // Import selectedContract dynamically to avoid circular deps
+        const { selectedContract } = await import('$lib/stores/multiContract');
+        const { get } = await import('svelte/store');
+        const currentContract = get(selectedContract);
+        
+        // Fetch global state and user shares in parallel using contract context
         const [globalState, userShares] = await Promise.all([
-          ybtService.getGlobalState(),
-          ybtService.getUserShares(address!)
+          ybtService.getGlobalState(currentContract?.id),
+          ybtService.getUserShares(address!, currentContract?.id)
         ]);
 
         const sharePercentage = ybtService.calculateSharePercentage(userShares, globalState.totalSupply);
@@ -127,6 +141,7 @@ function createYBTStore() {
   let currentAddress = '';
   let thirdPartyWalletSubscription: (() => void) | null = null;
   let gamingWalletSubscription: (() => void) | null = null;
+  let contractSelectionSubscription: (() => void) | null = null;
 
   let addressChangeTimer: NodeJS.Timeout | null = null;
   
@@ -134,6 +149,7 @@ function createYBTStore() {
     // Debounce address changes to prevent rapid fire updates
     if (addressChangeTimer) {
       clearTimeout(addressChangeTimer);
+      addressChangeTimer = null;
     }
     
     addressChangeTimer = setTimeout(() => {
@@ -147,25 +163,29 @@ function createYBTStore() {
     ybtService.getWalletContext().then(context => {
       const activeAddress = context?.address || null;
       
-      // Only refresh if the active address actually changed
+      // Update currentAddress tracking, but only refresh if initialized and address changed
       if (activeAddress !== currentAddress) {
+        const previousAddress = currentAddress;
         currentAddress = activeAddress || '';
         
-        if (activeAddress) {
-          refreshData(activeAddress);
-          // No auto refresh - only refresh on wallet change
-        } else {
-          stopAutoRefresh();
-          // Only reset state if not currently loading to prevent interruption
-          if (!isRefreshing) {
-            set({
-              userShares: BigInt(0),
-              totalSupply: BigInt(0),
-              sharePercentage: 0,
-              isLoading: false,
-              error: null,
-              lastUpdated: null
-            });
+        if (isInitialized) {
+          console.log(`YBT address changed from ${previousAddress} to ${activeAddress}, refreshing`);
+          if (activeAddress) {
+            refreshData(activeAddress);
+            // No auto refresh - only refresh on wallet change
+          } else {
+            stopAutoRefresh();
+            // Only reset state if not currently loading to prevent interruption
+            if (!isRefreshing) {
+              set({
+                userShares: BigInt(0),
+                totalSupply: BigInt(0),
+                sharePercentage: 0,
+                isLoading: false,
+                error: null,
+                lastUpdated: null
+              });
+            }
           }
         }
       }
@@ -193,6 +213,25 @@ function createYBTStore() {
     gamingWalletSubscription = gamingWalletAddress.subscribe((address) => {
       handleAddressChange(address, 'gaming');
     });
+
+    // Subscribe to contract selection changes
+    (async () => {
+      try {
+        const { contractSelectionStore } = await import('$lib/stores/multiContract');
+        contractSelectionSubscription = contractSelectionStore.subscribe(async (state) => {
+          // Refresh YBT data when contract changes (but not on initial load or during initialization)
+          if (state.selectedContractId && !state.isChanging && isInitialized) {
+            console.log('Contract changed, refreshing YBT data');
+            const context = await ybtService.getWalletContext();
+            if (context) {
+              await refreshData(context.address);
+            }
+          }
+        });
+      } catch (error) {
+        console.error('Failed to setup contract selection subscription:', error);
+      }
+    })();
   }
 
   return {
@@ -226,11 +265,24 @@ function createYBTStore() {
     async initialize() {
       if (!browser) return;
       
-      // Use current wallet context instead of just third-party wallet
-      const context = await ybtService.getWalletContext();
-      if (context) {
-        await refreshData(context.address);
-        // No auto refresh - only refresh on initialization
+      try {
+        // Initialize multi-contract system first
+        await multiContractInitializer.initialize();
+        
+        // Use current wallet context instead of just third-party wallet
+        const context = await ybtService.getWalletContext();
+        if (context) {
+          currentAddress = context.address; // Set current address to prevent duplicate refresh
+          await refreshData(context.address);
+          // No auto refresh - only refresh on initialization
+        }
+        
+        // Mark as initialized to prevent duplicate refreshes from subscriptions
+        isInitialized = true;
+      } catch (error) {
+        console.error('Failed to initialize YBT store:', error);
+        update(s => ({ ...s, error: 'Failed to initialize multi-contract system' }));
+        isInitialized = true; // Still mark as initialized to prevent further issues
       }
     },
 
@@ -243,11 +295,26 @@ function createYBTStore() {
       isRefreshing = false;
       refreshPromise = null;
       currentAddress = '';
+      isInitialized = false;
       
       // Clear address change timer
       if (addressChangeTimer) {
         clearTimeout(addressChangeTimer);
         addressChangeTimer = null;
+      }
+
+      // Clean up subscriptions
+      if (thirdPartyWalletSubscription) {
+        thirdPartyWalletSubscription();
+        thirdPartyWalletSubscription = null;
+      }
+      if (gamingWalletSubscription) {
+        gamingWalletSubscription();
+        gamingWalletSubscription = null;
+      }
+      if (contractSelectionSubscription) {
+        contractSelectionSubscription();
+        contractSelectionSubscription = null;
       }
       
       set({

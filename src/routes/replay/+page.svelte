@@ -8,6 +8,7 @@
   import { Play, Home, ExternalLink, RotateCcw } from 'lucide-svelte';
   import WarningModal from '$lib/components/ui/WarningModal.svelte';
   import WarningBanner from '$lib/components/ui/WarningBanner.svelte';
+  import { contractSelectionStore, initializeMultiContractStores, multiContractStore } from '$lib/stores/multiContract';
 
   export let data;
 
@@ -23,6 +24,17 @@
     goto('/');
   }
 
+  function getGameUrl(): string {
+    // Navigate to specific machine if contractId is available, otherwise to main app page
+    if (replayData?.contractId) {
+      const contract = multiContractStore.getContract(replayData.contractId);
+      if (contract) {
+        return `/app/${contract.slotMachineAppId}`;
+      }
+    }
+    return '/app';
+  }
+
   function playGame() {
     // Check if user has already dismissed the warning
     const warningDismissed = localStorage.getItem('hov-warning-dismissed');
@@ -31,7 +43,7 @@
       showWarningModal = true;
     } else {
       // Direct navigation if warning already dismissed
-      goto('/app');
+      goto(getGameUrl());
     }
   }
   
@@ -44,7 +56,7 @@
     }
     
     // Navigate to game after dismissing warning
-    goto('/app');
+    goto(getGameUrl());
   }
 
   function replayAgain() {
@@ -80,6 +92,31 @@
       navigator.clipboard.writeText(window.location.href);
     }
   }
+
+  onMount(async () => {
+    // Initialize multi-contract stores
+    await initializeMultiContractStores();
+    
+    // If replay data has a contractId, select that contract
+    if (replayData?.contractId) {
+      try {
+        await contractSelectionStore.selectContract(replayData.contractId);
+      } catch (error) {
+        console.warn('Failed to select contract for replay:', replayData.contractId, error);
+        // Fall back to default contract if the specific contract isn't available
+        const defaultContract = multiContractStore.getDefaultContract();
+        if (defaultContract) {
+          await contractSelectionStore.selectContract(defaultContract.id);
+        }
+      }
+    } else {
+      // No contractId in replay data, select default contract
+      const defaultContract = multiContractStore.getDefaultContract();
+      if (defaultContract) {
+        await contractSelectionStore.selectContract(defaultContract.id);
+      }
+    }
+  });
 </script>
 
 
@@ -251,6 +288,8 @@
 
   .slot-machine-container {
     @apply mb-6;
+    max-width: 820px;
+    margin: 10px auto;
   }
 
   .replay-actions {

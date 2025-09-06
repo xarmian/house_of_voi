@@ -12,10 +12,10 @@
 <div class="game-header mb-6">
   <!-- Main Title -->
   <div class="text-center">
-    <h1 class="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-voi-400 to-blue-400 mb-2">
+    <h1 class="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-theme-primary to-theme-secondary mb-2">
       House of Voi
     </h1>
-    <p class="text-gray-400 text-lg">Blockchain Slot Machine</p>
+    <p class="text-theme-text text-lg opacity-70">Blockchain Slot Machine</p>
   </div>
   
   <!-- Paytable Modal -->
@@ -27,7 +27,7 @@
             <h3 class="text-xl font-semibold text-theme">Paytable</h3>
             <button
               on:click={() => showPaytable = false}
-              class="text-gray-400 hover:text-theme"
+              class="text-theme-text opacity-70 hover:text-theme-primary hover:opacity-100"
             >
               ×
             </button>
@@ -36,53 +36,53 @@
           <div class="space-y-4">
             <div class="grid grid-cols-2 gap-4">
               <!-- Symbol A -->
-              <div class="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
+              <div class="flex items-center gap-3 p-3 bg-surface-secondary/50 rounded-lg">
                 <div class="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
                   <span class="text-theme font-bold">A</span>
                 </div>
                 <div>
                   <p class="text-theme font-medium">Diamond</p>
-                  <p class="text-sm text-gray-400">3: 50x | 4: 200x | 5: 1000x</p>
+                  <p class="text-sm text-theme-text opacity-70">3: 50x | 4: 200x | 5: 1000x</p>
                 </div>
               </div>
               
               <!-- Symbol B -->
-              <div class="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
+              <div class="flex items-center gap-3 p-3 bg-surface-secondary/50 rounded-lg">
                 <div class="w-12 h-12 bg-yellow-600 rounded-lg flex items-center justify-center">
                   <span class="text-theme font-bold">B</span>
                 </div>
                 <div>
                   <p class="text-theme font-medium">Gold</p>
-                  <p class="text-sm text-gray-400">3: 20x | 4: 100x | 5: 500x</p>
+                  <p class="text-sm text-theme-text opacity-70">3: 20x | 4: 100x | 5: 500x</p>
                 </div>
               </div>
               
               <!-- Symbol C -->
-              <div class="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
+              <div class="flex items-center gap-3 p-3 bg-surface-secondary/50 rounded-lg">
                 <div class="w-12 h-12 bg-gray-600 rounded-lg flex items-center justify-center">
                   <span class="text-theme font-bold">C</span>
                 </div>
                 <div>
                   <p class="text-theme font-medium">Silver</p>
-                  <p class="text-sm text-gray-400">3: 10x | 4: 50x | 5: 200x</p>
+                  <p class="text-sm text-theme-text opacity-70">3: 10x | 4: 50x | 5: 200x</p>
                 </div>
               </div>
               
               <!-- Symbol D -->
-              <div class="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
+              <div class="flex items-center gap-3 p-3 bg-surface-secondary/50 rounded-lg">
                 <div class="w-12 h-12 bg-orange-800 rounded-lg flex items-center justify-center">
                   <span class="text-theme font-bold">D</span>
                 </div>
                 <div>
                   <p class="text-theme font-medium">Bronze</p>
-                  <p class="text-sm text-gray-400">3: 5x | 4: 20x | 5: 100x</p>
+                  <p class="text-sm text-theme-text opacity-70">3: 5x | 4: 20x | 5: 100x</p>
                 </div>
               </div>
             </div>
             
-            <div class="border-t border-slate-700 pt-4">
+            <div class="border-t border-surface-border pt-4">
               <h4 class="text-theme font-medium mb-2">How to Win</h4>
-              <ul class="text-sm text-gray-400 space-y-1">
+              <ul class="text-sm text-theme-text opacity-70 space-y-1">
                 <li>• Match 3 or more identical symbols on a payline</li>
                 <li>• Symbols must be consecutive from left to right</li>
                 <li>• Higher value symbols pay more</li>

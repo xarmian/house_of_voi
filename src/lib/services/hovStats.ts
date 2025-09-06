@@ -31,18 +31,39 @@ import type {
   HovStatsServiceConfig
 } from '../types/hovStats';
 import { browser } from '$app/environment';
-import { PUBLIC_SLOT_MACHINE_APP_ID, PUBLIC_DEBUG_MODE } from '$env/static/public';
+import { PUBLIC_DEBUG_MODE } from '$env/static/public';
+import { MULTI_CONTRACT_CONFIG } from '$lib/constants/network';
+
+// Get the default slot machine app ID from multi-contract config
+const getDefaultSlotMachineAppId = (): bigint => {
+  if (!MULTI_CONTRACT_CONFIG) {
+    console.warn('No multi-contract configuration found for HOV stats service');
+    return BigInt(0);
+  }
+  
+  const defaultContract = MULTI_CONTRACT_CONFIG.contracts.find(
+    c => c.id === MULTI_CONTRACT_CONFIG.defaultContractId
+  );
+  
+  if (!defaultContract) {
+    console.warn('Default contract not found in multi-contract configuration');
+    return BigInt(0);
+  }
+  
+  return BigInt(defaultContract.slotMachineAppId);
+};
 
 // Default configuration
+// MEMORY LEAK FIX: Reduced cache sizes to prevent unbounded growth
 const DEFAULT_CONFIG: HovStatsServiceConfig = {
   supabaseUrl: '',
   supabaseKey: '',
-  defaultAppId: BigInt(PUBLIC_SLOT_MACHINE_APP_ID || '0'),
+  defaultAppId: getDefaultSlotMachineAppId(),
   cache: {
-    platformStats: { ttl: 60000, maxSize: 10 }, // 1 minute
-    leaderboard: { ttl: 300000, maxSize: 50 }, // 5 minutes
-    playerStats: { ttl: 120000, maxSize: 100 }, // 2 minutes
-    timeStats: { ttl: 600000, maxSize: 20 } // 10 minutes
+    platformStats: { ttl: 60000, maxSize: 5 }, // 1 minute, reduced size
+    leaderboard: { ttl: 300000, maxSize: 20 }, // 5 minutes, reduced size
+    playerStats: { ttl: 120000, maxSize: 50 }, // 2 minutes, reduced size
+    timeStats: { ttl: 600000, maxSize: 10 } // 10 minutes, reduced size
   },
   fallbackToLocal: true,
   retryConfig: {
@@ -75,11 +96,15 @@ class SimpleCache<T> {
   }
 
   set(key: string, data: T): void {
-    // Implement LRU eviction if cache is full
+    // MEMORY LEAK FIX: More aggressive cache cleanup
     if (this.cache.size >= this.maxSize) {
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey) {
-        this.cache.delete(firstKey);
+      // Remove oldest entries until we're under the limit
+      const entries = Array.from(this.cache.entries());
+      entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+      
+      const toRemove = Math.max(1, Math.floor(this.maxSize * 0.3)); // Remove 30% of cache
+      for (let i = 0; i < toRemove && i < entries.length; i++) {
+        this.cache.delete(entries[i][0]);
       }
     }
 
@@ -220,7 +245,7 @@ class HovStatsService {
    */
   async getLeaderboard(params?: GetLeaderboardParams & { forceRefresh?: boolean }): Promise<LeaderboardEntry[]> {
     const appId = params?.p_app_id || this.config.defaultAppId;
-    const metric = params?.p_metric || 'net_result';
+    const metric = params?.p_metric || 'total_won';
     const limit = params?.p_limit || 100;
     const offset = params?.p_offset || 0;
     const forceRefresh = params?.forceRefresh || false;
@@ -269,8 +294,8 @@ class HovStatsService {
    * Get player statistics
    */
   async getPlayerStats(params: GetPlayerStatsParams): Promise<PlayerStats> {
-    const appId = params.p_app_id || this.config.defaultAppId;
-    const cacheKey = `player_${appId}_${params.p_player_address}`;
+    const appId = params.p_app_id !== null ? (params.p_app_id || this.config.defaultAppId) : null;
+    const cacheKey = `player_${appId || 'all'}_${params.p_player_address}`;
 
     const cached = this.caches.playerStats.get(cacheKey);
     if (cached) return cached;
@@ -281,7 +306,7 @@ class HovStatsService {
     }
     const client = supabaseService.getClient();
     const { data, error } = await client.rpc('get_player_stats', {
-      p_app_id: appId.toString(),
+      p_app_id: appId ? appId.toString() : null,
       p_player_address: params.p_player_address
     });
 
@@ -308,6 +333,26 @@ class HovStatsService {
       days_active: Number(row.days_active || 0),
       profit_per_spin: Number(row.profit_per_spin || 0)
     };
+
+    // Parse machines array if present (when appId is null)
+    if (row.machines && Array.isArray(row.machines)) {
+      stats.machines = row.machines.map((machine: any) => ({
+        app_id: Number(machine.app_id),
+        total_spins: Number(machine.total_spins || 0),
+        total_amount_bet: BigInt(Math.floor(Number(machine.total_amount_bet || 0))),
+        total_amount_won: BigInt(Math.floor(Number(machine.total_amount_won || 0))),
+        net_result: BigInt(Math.floor(Number(machine.net_result || 0))),
+        largest_single_win: BigInt(Math.floor(Number(machine.largest_single_win || 0))),
+        average_bet_size: Number(machine.average_bet_size || 0),
+        win_rate: Number(machine.win_rate || 0),
+        total_paylines_played: Number(machine.total_paylines_played || 0),
+        first_bet_round: Number(machine.first_bet_round || 0),
+        last_bet_round: Number(machine.last_bet_round || 0),
+        days_active: Number(machine.days_active || 0),
+        profit_per_spin: Number(machine.profit_per_spin || 0),
+        highest_multiple: Number(machine.highest_multiple || 0)
+      }));
+    }
 
     this.caches.playerStats.set(cacheKey, stats);
     return stats;
