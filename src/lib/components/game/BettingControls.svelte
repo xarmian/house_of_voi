@@ -684,14 +684,16 @@
     @apply flex items-stretch gap-6 p-2 backdrop-blur-sm border border-surface-border rounded-xl shadow-lg;
     background: linear-gradient(135deg, rgba(var(--theme-surface-primary-rgb), 0.8) 0%, rgba(var(--theme-surface-secondary-rgb), 0.6) 100%);
     min-height: 120px;
+    overflow: hidden;
   }
   
   /* Left Section: Betting Controls (Stacked) */
   .betting-controls-section {
     @apply flex flex-col gap-3 p-4 rounded-lg border border-surface-border;
     background: rgba(var(--theme-surface-primary-rgb), 0.3);
-    flex: 0 0 auto;
-    width: clamp(240px, 20vw, 280px);
+    flex: 0 1 auto;
+    min-width: clamp(240px, 20vw, 280px);
+    max-width: clamp(280px, 25vw, 320px);
   }
   
   .control-row {
@@ -731,12 +733,15 @@
   }
   
   .quick-bets-container {
-    @apply flex items-center gap-2;
+    @apply flex items-center gap-2 flex-wrap;
+    min-width: 0;
   }
   
   .quick-bet-btn {
     @apply px-3 py-2 text-xs font-medium bg-surface-tertiary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed rounded transition-all duration-200 text-theme-text hover:text-theme;
     min-height: 32px;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
   
   .quick-bet-btn.active {
@@ -976,7 +981,8 @@
     }
     
     .betting-controls-section {
-      width: clamp(220px, 22vw, 260px);
+      min-width: clamp(220px, 22vw, 260px);
+      max-width: clamp(260px, 28vw, 300px);
     }
     
     .total-section {
@@ -996,7 +1002,8 @@
     }
     
     .betting-controls-section {
-      width: clamp(200px, 25vw, 240px);
+      min-width: clamp(200px, 25vw, 240px);
+      max-width: clamp(240px, 30vw, 280px);
     }
     
     .total-section {
