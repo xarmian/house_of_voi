@@ -43,6 +43,8 @@
   // Theme switching function
   let isThemeChanging = false;
   async function handleThemeClick(event: MouseEvent) {
+    return false;
+
     event.preventDefault();
     event.stopPropagation();
     
@@ -1493,7 +1495,7 @@
   }
 
   .casino-border {
-    @apply absolute -inset-4 rounded-2xl cursor-pointer;
+    @apply absolute -inset-4 rounded-2xl cursor-default;
     background: linear-gradient(45deg, 
       var(--theme-primary) 0%, var(--theme-secondary) 25%, var(--theme-primary) 50%, var(--theme-secondary) 75%, var(--theme-primary) 100%);
     background-size: 200% 200%;
@@ -1513,14 +1515,14 @@
     border: 2px solid var(--theme-primary);
   }
 
-  .casino-border:hover {
+  /*.casino-border:hover {
     transform: scale(1.02);
     filter: brightness(1.1);
   }
 
   .casino-border:active {
     transform: scale(0.98);
-  }
+  }*/
 
   .casino-border.theme-changing {
     animation: theme-change-pulse 0.5s ease-out;
