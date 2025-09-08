@@ -31,41 +31,79 @@
   let showWithdrawModal = false;
   let showTransactionHistoryModal = false;
   let isRefreshing = false;
+  let isManualRefreshing = false; // Track manual refresh to avoid reactive conflicts
 
   async function handleRefresh() {
     isRefreshing = true;
-    await ybtStore.refresh();
+    isManualRefreshing = true;
     
-    // Also refresh P/L data if we have a wallet context
     try {
-      if (viewingAddress && currentContract?.id) {
-        await ybtTransfersStore.refresh(viewingAddress, currentContract.id);
+      // Batch all refresh operations together for coordinated loading
+      const refreshPromises: Promise<any>[] = [];
+      
+      // Always refresh YBT data
+      refreshPromises.push(ybtStore.refresh());
+      
+      // Refresh house balance if handler provided
+      if (onRefreshBalance) {
+        refreshPromises.push(onRefreshBalance());
       }
+      
+      // Refresh P/L data if we have context (but let it fail gracefully)
+      if (viewingAddress && currentContract?.id) {
+        refreshPromises.push(
+          ybtTransfersStore.refresh(viewingAddress, currentContract.id).catch(error => {
+            console.error('Error refreshing P/L data:', error);
+            // Don't throw - let other operations complete
+          })
+        );
+      }
+      
+      // Execute all refreshes in parallel and wait for completion
+      await Promise.all(refreshPromises);
+      
     } catch (error) {
-      console.error('Error refreshing P/L data:', error);
+      console.error('Error during coordinated refresh:', error);
+    } finally {
+      isRefreshing = false;
+      isManualRefreshing = false;
     }
-    
-    if (onRefreshBalance) {
-      await onRefreshBalance();
-    }
-    isRefreshing = false;
   }
 
   async function handleYBTSuccess() {
-    await ybtStore.refresh();
+    isManualRefreshing = true;
     
-    // Also refresh P/L data after successful YBT operation
     try {
-      if (viewingAddress && currentContract?.id) {
-        await ybtTransfersStore.refresh(viewingAddress, currentContract.id);
+      // Batch refresh operations after successful YBT operation
+      const refreshPromises: Promise<any>[] = [];
+      
+      // Always refresh YBT data after deposit/withdraw
+      refreshPromises.push(ybtStore.refresh());
+      
+      // Refresh house balance if handler provided
+      if (onRefreshBalance) {
+        refreshPromises.push(onRefreshBalance());
       }
+      
+      // Refresh P/L data if we have context (but let it fail gracefully)
+      if (viewingAddress && currentContract?.id) {
+        refreshPromises.push(
+          ybtTransfersStore.refresh(viewingAddress, currentContract.id).catch(error => {
+            console.error('Error refreshing P/L data after YBT operation:', error);
+            // Don't throw - let other operations complete
+          })
+        );
+      }
+      
+      // Execute all refreshes in parallel
+      await Promise.all(refreshPromises);
+      
     } catch (error) {
-      console.error('Error refreshing P/L data after YBT operation:', error);
+      console.error('Error during post-YBT refresh:', error);
+    } finally {
+      isManualRefreshing = false;
     }
     
-    if (onRefreshBalance) {
-      await onRefreshBalance();
-    }
     // Notify parent component that balances have changed due to YBT operation
     dispatch('balanceChanged');
   }
@@ -125,7 +163,8 @@
   let lastWalletAddress: string | null = null;
   
   // Initialize/refresh P/L data (initial load, contract change, wallet change)
-  $: if (currentContract && viewingAddress) {
+  // Skip during manual refresh to avoid conflicts
+  $: if (currentContract && viewingAddress && !isManualRefreshing) {
     const contractId = currentContract.id;
     const contractChanged = contractId !== lastContractId;
     const walletChanged = viewingAddress !== lastWalletAddress;
@@ -196,39 +235,35 @@
           <p class="text-sm">Connect your wallet using the selector above to see your YBT holdings and manage your investments.</p>
         </div>
       </div>
-    {:else if $isYBTLoading}
-      <!-- Loading state -->
-      <div class="text-center py-8">
-        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-voi-500 mx-auto"></div>
-        <p class="text-slate-400 mt-2">Loading your YBT data...</p>
-      </div>
     {:else}
       <!-- Main content - wallet connected and loaded -->
       <!-- Portfolio Value Highlight -->
       <div class="bg-gradient-to-r from-slate-700 to-slate-600 rounded-lg p-4 sm:p-6 border border-yellow-400/20 mb-4 sm:mb-6">
         <div class="text-slate-400 text-xs sm:text-sm font-medium mb-2">Portfolio Value</div>
-        <div class="text-2xl sm:text-3xl md:text-4xl font-bold text-yellow-400 mb-2">
-          {#if balanceLoading || !houseBalance}
-            <div class="flex items-center">
-              <svg class="animate-spin h-8 w-8 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <div class="text-2xl sm:text-3xl md:text-4xl font-bold text-yellow-400 mb-2 min-h-[3rem] flex items-center">
+          {#if balanceLoading || !houseBalance || $isYBTLoading}
+            <div class="flex items-center opacity-60">
+              <svg class="animate-spin h-6 w-6 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Loading...
+              <span class="text-slate-300">Updating...</span>
             </div>
           {:else}
             {(Number(calculateUserPortfolioValue()) / 1_000_000).toFixed(6)} VOI
           {/if}
         </div>
-        {#if !balanceLoading && houseBalance}
-          <div class="text-xs sm:text-sm text-slate-400">
+        <div class="text-xs sm:text-sm text-slate-400 min-h-[1.25rem] flex items-center">
+          {#if balanceLoading || !houseBalance || $isYBTLoading}
+            <span class="text-slate-500">Loading ownership details...</span>
+          {:else}
             {$sharePercentage.toFixed(4)}% ownership of {(houseBalance.total / 1e6).toFixed(2)} VOI total pool
-          </div>
-        {/if}
+          {/if}
+        </div>
         
-        <!-- P/L Display -->
-        {#if $ybtProfitLoss && !balanceLoading && houseBalance}
-          <div class="flex items-center gap-4 mt-3 pt-3 border-t border-slate-500/30">
+        <!-- P/L Display - Always show to maintain layout -->
+        <div class="flex items-center gap-4 mt-3 pt-3 border-t border-slate-500/30 min-h-[4rem]">
+          {#if $ybtProfitLoss && !balanceLoading && houseBalance && !$ybtTransfersLoading}
             <div class="flex-1">
               <div class="text-xs text-slate-400 font-medium mb-1">Profit/Loss</div>
               <div class="flex items-center gap-2">
@@ -255,63 +290,95 @@
               </svg>
               History
             </button>
-          </div>
-        {:else if $ybtTransfersLoading}
-          <div class="flex items-center gap-2 mt-3 pt-3 border-t border-slate-500/30">
-            <svg class="animate-spin h-4 w-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span class="text-xs text-slate-400">Loading P/L data...</span>
-          </div>
-        {/if}
+          {:else}
+            <div class="flex-1 flex items-center">
+              <div>
+                <div class="text-xs text-slate-400 font-medium mb-1">Profit/Loss</div>
+                <div class="flex items-center gap-2">
+                  <svg class="animate-spin h-4 w-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span class="text-sm text-slate-500">Loading P/L data...</span>
+                </div>
+              </div>
+            </div>
+            <button
+              class="btn-tertiary text-xs opacity-50"
+              disabled
+            >
+              <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+              </svg>
+              History
+            </button>
+          {/if}
+        </div>
       </div>
 
       <!-- Key Metrics Grid -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
         <!-- Your Shares / Total Supply -->
-        <div class="bg-slate-700 rounded-lg p-3 sm:p-4 sm:col-span-2 lg:col-span-1">
+        <div class="bg-slate-700 rounded-lg p-3 sm:p-4 sm:col-span-2 lg:col-span-1 min-h-[5.5rem]">
           <div class="text-slate-400 text-xs font-medium mb-2">Your Shares</div>
-          <div class="text-lg sm:text-xl font-bold text-theme mb-1">
-            {formatShares($userShares)}
+          <div class="text-lg sm:text-xl font-bold text-theme mb-1 min-h-[1.5rem] flex items-center">
+            {#if $isYBTLoading}
+              <span class="text-slate-400">Loading...</span>
+            {:else}
+              {formatShares($userShares)}
+            {/if}
           </div>
-          <div class="text-xs text-slate-500">
-            of {formatShares($totalSupply)} total
+          <div class="text-xs text-slate-500 min-h-[1rem] flex items-center">
+            {#if $isYBTLoading}
+              <span>Loading total shares...</span>
+            {:else}
+              of {formatShares($totalSupply)} total
+            {/if}
           </div>
           <div class="w-full bg-slate-600 rounded-full h-1.5 mt-2">
             <div 
               class="bg-gradient-to-r from-voi-500 to-voi-400 h-1.5 rounded-full transition-all duration-300"
-              style="width: {Math.min($sharePercentage, 100)}%"
+              style="width: {$isYBTLoading ? 0 : Math.min($sharePercentage, 100)}%"
             ></div>
           </div>
         </div>
 
         <!-- Contract Balance -->
-        <div class="bg-slate-700 rounded-lg p-3 sm:p-4">
+        <div class="bg-slate-700 rounded-lg p-3 sm:p-4 min-h-[5.5rem]">
           <div class="text-slate-400 text-xs font-medium mb-2 flex items-center gap-1 sm:gap-2">
             Contract Balance
-            {#if houseBalance}
+            {#if houseBalance && !balanceLoading}
               <span class="text-xs px-1.5 py-0.5 sm:px-2 rounded-full {houseBalance.isOperational ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}">
                 {houseBalance.isOperational ? '●' : '⚠'}
               </span>
+            {:else}
+              <span class="text-xs px-1.5 py-0.5 sm:px-2 rounded-full bg-slate-600/30 text-slate-400">
+                ⋯
+              </span>
             {/if}
           </div>
-          {#if balanceLoading || !houseBalance}
-            <div class="text-lg sm:text-xl font-bold text-slate-400">Loading...</div>
-          {:else}
-            <div class="text-lg sm:text-xl font-bold text-theme mb-1">
+          <div class="text-lg sm:text-xl font-bold text-theme mb-1 min-h-[1.5rem] flex items-center">
+            {#if balanceLoading || !houseBalance}
+              <span class="text-slate-400">Loading...</span>
+            {:else}
               {(houseBalance.total / 1e6).toFixed(2)} VOI
-            </div>
-            <div class="text-xs text-slate-500">
-              <span class="block sm:inline">{(houseBalance.available / 1e6).toFixed(1)} available</span>
-              <span class="hidden sm:inline"> • </span>
-              <span class="block sm:inline">{(houseBalance.locked / 1e6).toFixed(1)} locked</span>
-            </div>
-          {/if}
+            {/if}
+          </div>
+          <div class="text-xs text-slate-500 min-h-[2rem] flex items-start">
+            {#if balanceLoading || !houseBalance}
+              <span>Loading balance details...</span>
+            {:else}
+              <div>
+                <span class="block sm:inline">{(houseBalance.available / 1e6).toFixed(1)} available</span>
+                <span class="hidden sm:inline"> • </span>
+                <span class="block sm:inline">{(houseBalance.locked / 1e6).toFixed(1)} locked</span>
+              </div>
+            {/if}
+          </div>
         </div>
 
         <!-- Documentation -->
-        <div class="bg-slate-700 rounded-lg p-3 sm:p-4">
+        <div class="bg-slate-700 rounded-lg p-3 sm:p-4 min-h-[5.5rem]">
           <div class="text-slate-400 text-xs font-medium mb-2">Learn More</div>
           <div class="text-xs sm:text-sm text-slate-300 mb-2">Yield-bearing token earning from house profits</div>
           <a 
