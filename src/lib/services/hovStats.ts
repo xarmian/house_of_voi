@@ -62,16 +62,16 @@ const DEFAULT_CONFIG: HovStatsServiceConfig = {
   supabaseKey: '',
   defaultAppId: getDefaultSlotMachineAppId(),
   cache: {
-    platformStats: { ttl: 60000, maxSize: 5 }, // 1 minute, reduced size
+    platformStats: { ttl: 300000, maxSize: 5 }, // 5 minute, reduced size
     leaderboard: { ttl: 300000, maxSize: 20 }, // 5 minutes, reduced size
-    playerStats: { ttl: 120000, maxSize: 50 }, // 2 minutes, reduced size
+    playerStats: { ttl: 300000, maxSize: 50 }, // 5 minutes, reduced size
     timeStats: { ttl: 600000, maxSize: 10 }, // 10 minutes, reduced size
     machineAnalytics: { ttl: 600000, maxSize: 10 } // 10 minutes, reduced size
   },
   fallbackToLocal: true,
   retryConfig: {
     maxAttempts: 3,
-    backoffMs: 1000
+    backoffMs: 5000
   }
 };
 
