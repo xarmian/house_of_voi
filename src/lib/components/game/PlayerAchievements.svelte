@@ -16,6 +16,16 @@
 	let claimErrorMessage: string = '';
 	let selectedAchievement: Achievement | null = null;
 
+	const fallbackAchievementImage: string = '/symbols/star.svg';
+
+	function handleAchievementImageError(event: Event) {
+		const img = event.currentTarget as HTMLImageElement | null;
+		if (!img) return;
+		// Prevent potential error loops if the fallback also fails
+		img.onerror = null;
+		img.src = fallbackAchievementImage;
+	}
+
 	$: groupedAchievements = groupAchievementsBySeries(
 		$achievementsStore.allAchievements,
 		$achievementsStore.playerAchievements,
@@ -403,6 +413,7 @@
 												<img 
 													src={achievement.imageUrl} 
 													alt={achievement.name}
+													on:error={handleAchievementImageError}
 													class="badge-image"
 													class:locked={!achievement.owned}
 												/>
@@ -498,6 +509,7 @@
 						<img 
 							src={selectedAchievement.imageUrl} 
 							alt={selectedAchievement.name}
+							on:error={handleAchievementImageError}
 							class="modal-image"
 							class:locked={!selectedAchievement.owned}
 						/>
