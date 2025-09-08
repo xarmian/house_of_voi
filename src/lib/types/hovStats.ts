@@ -246,6 +246,27 @@ export interface ScanEventsParams {
   p_limit?: number;
 }
 
+export interface GetMachineAnalyticsParams {
+  p_machine_app_id: bigint;
+  p_ybt_app_id: bigint;
+}
+
+export interface MachineAnalytics {
+  day: string;
+  total_bets: bigint;
+  total_payouts: bigint;
+  total_house_pl: bigint;
+  unique_users: number;
+  daily_net_flow: bigint;
+  escrow_balance: bigint;
+  daily_apy_percent: number;
+  trailing_apy_percent: number;
+  days_available: number;
+  sum_total_house_pl: bigint;
+  avg_total_balance: number;
+  total_return_percent: number;
+}
+
 // Error types for better error handling
 export interface SupabaseError {
   message: string;
@@ -276,6 +297,7 @@ export interface HovStatsServiceConfig {
     leaderboard: CacheConfig;
     playerStats: CacheConfig;
     timeStats: CacheConfig;
+    machineAnalytics: CacheConfig;
   };
   fallbackToLocal: boolean;
   retryConfig: {

@@ -81,8 +81,22 @@
       format: (value: bigint) => formatVOI(Number(value)) + ' VOI'
     },
     {
+      key: 'total_amount_won',
+      label: 'Total Won',
+      icon: Trophy,
+      color: 'text-green-400',
+      format: (value: bigint) => formatVOI(Number(value)) + ' VOI'
+    },
+    {
       key: 'win_rate',
       label: 'Win Rate',
+      icon: Percent,
+      color: 'text-purple-400',
+      format: (value: number) => `${value.toFixed(1)}%`
+    },
+    {
+      key: 'rtp',
+      label: 'RTP',
       icon: Percent,
       color: 'text-purple-400',
       format: (value: number) => `${value.toFixed(1)}%`

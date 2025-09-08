@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { browser } from '$app/environment';
   import { selectedWallet, connectedWallets } from 'avm-wallet-svelte';
   import { ybtStore } from '$lib/stores/ybt';
   import { ybtService } from '$lib/services/ybt';
   import { walletStore, isWalletConnected } from '$lib/stores/wallet';
+  import { walletService } from '$lib/services/wallet';
   import { NETWORK_CONFIG } from '$lib/constants/network';
   import { houseBalanceService } from '$lib/services/houseBalance';
   import { houseBalanceManager } from '$lib/stores/houseBalance';
@@ -29,6 +31,7 @@
     initializeMultiContractStores
   } from '$lib/stores/multiContract';
   import type { ContractPair } from '$lib/types/multiContract';
+  import { themeStore } from '$lib/stores/theme';
 
   let isLoaded = false;
   let algodClient: algosdk.Algodv2;
@@ -37,6 +40,9 @@
   let activeTab = 'portfolio';
   let selectedWalletSource: 'gaming' | 'external' = 'external';
   let isSelectedWalletLocked = false;
+  $: viewingAddress = selectedWalletSource === 'external' 
+    ? ($selectedWallet?.address || null)
+    : ($walletStore.account?.address || (isSelectedWalletLocked ? (browser && walletService.hasStoredWallet() ? walletService.getStoredWalletAddress() : null) : null));
   let refreshDebounceTimer: NodeJS.Timeout | null = null;
   let isYBTRefreshing = false;
   
@@ -145,7 +151,7 @@
   $: anyWalletConnected = stableWalletState;
   
   // Handle wallet source changes with debouncing
-  async function handleWalletSourceChange(event) {
+  async function handleWalletSourceChange(event: CustomEvent<{ source: 'gaming' | 'external'; isLocked: boolean }>) {
     const { source, isLocked } = event.detail;
     const previousSource = selectedWalletSource;
     const previousLocked = isSelectedWalletLocked;
@@ -341,6 +347,7 @@
                   isGamingWalletLocked={selectedWalletSource === 'gaming' && isSelectedWalletLocked}
                   showConnectedView={true}
                   hasWalletConnected={anyWalletConnected}
+                  viewingAddress={viewingAddress}
                 />
                 
                 <!-- Public YBT Dashboard - show when no wallet connected -->
@@ -489,7 +496,7 @@
                     <Crown class="w-5 h-5 text-yellow-400" />
                     <h2 class="text-lg font-bold text-theme">Top Players</h2>
                   </div>
-                  <Leaderboard maxHeight="700px" showPlayerHighlight={anyWalletConnected} contractId={BigInt($selectedContract?.slotMachineAppId || 0)} />
+                  <Leaderboard compact={false} showPlayerHighlight={anyWalletConnected} contractId={BigInt($selectedContract?.slotMachineAppId || 0)} />
                 </div>
               </div>
               

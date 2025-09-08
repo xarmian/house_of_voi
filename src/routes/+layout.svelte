@@ -10,6 +10,7 @@
   import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
   import { checkForPurchaseResult, clearPurchaseParams, showPurchaseNotification } from '$lib/utils/voiPurchase';
   import { updateDetector } from '$lib/services/updateDetector';
+  import { themeStore } from '$lib/stores/theme';
   
   export let data;
   

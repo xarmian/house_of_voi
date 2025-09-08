@@ -6,6 +6,7 @@
   import type { YBTWithdrawParams } from '$lib/types/ybt';
   import type { ContractPair } from '$lib/types/multiContract';
   import { selectedContract } from '$lib/stores/multiContract';
+  import { themeStore } from '$lib/stores/theme';
 
   export let open = false;
   export let userShares: bigint = BigInt(0);

@@ -7,10 +7,14 @@
   import YBTStats from './YBTStats.svelte';
   import YBTDepositModal from './YBTDepositModal.svelte';
   import YBTWithdrawModal from './YBTWithdrawModal.svelte';
+  import YBTTransactionHistoryModal from './YBTTransactionHistoryModal.svelte';
+  import { ybtTransfersStore, ybtProfitLoss, ybtTransfersLoading } from '$lib/stores/ybtTransfers';
+  import { ybtTransfersService } from '$lib/services/ybtTransfers';
   import type { HouseBalanceData } from '$lib/services/houseBalance';
   import type { ContractPair } from '$lib/types/multiContract';
   import { isMaintenanceMode } from '$lib/stores/maintenanceMode';
   import { selectedContract } from '$lib/stores/multiContract';
+  import { themeStore } from '$lib/stores/theme';
 
   export let houseBalance: HouseBalanceData | null = null;
   export let balanceLoading = false;
@@ -19,16 +23,28 @@
   export let showConnectedView = false;
   export let hasWalletConnected = false;
   export let contractContext: ContractPair | null = null; // New prop for contract context
+  export let viewingAddress: string | null = null; // Explicit viewing wallet address
 
   const dispatch = createEventDispatcher();
 
   let showDepositModal = false;
   let showWithdrawModal = false;
+  let showTransactionHistoryModal = false;
   let isRefreshing = false;
 
   async function handleRefresh() {
     isRefreshing = true;
     await ybtStore.refresh();
+    
+    // Also refresh P/L data if we have a wallet context
+    try {
+      if (viewingAddress && currentContract?.id) {
+        await ybtTransfersStore.refresh(viewingAddress, currentContract.id);
+      }
+    } catch (error) {
+      console.error('Error refreshing P/L data:', error);
+    }
+    
     if (onRefreshBalance) {
       await onRefreshBalance();
     }
@@ -37,6 +53,16 @@
 
   async function handleYBTSuccess() {
     await ybtStore.refresh();
+    
+    // Also refresh P/L data after successful YBT operation
+    try {
+      if (viewingAddress && currentContract?.id) {
+        await ybtTransfersStore.refresh(viewingAddress, currentContract.id);
+      }
+    } catch (error) {
+      console.error('Error refreshing P/L data after YBT operation:', error);
+    }
+    
     if (onRefreshBalance) {
       await onRefreshBalance();
     }
@@ -48,14 +74,36 @@
     // Use default decimals (9) since YBT contracts typically use 9 decimals
     return ybtService.formatShares(shares, 9);
   }
+
+  // Format P/L amount for display
+  function formatProfitLoss(amount: bigint, isProfit: boolean): string {
+    const formatted = (Number(amount) / 1_000_000).toFixed(6);
+    return isProfit ? `+${formatted}` : formatted;
+  }
+
+  // Format P/L percentage for display  
+  function formatProfitLossPercentage(percentage: number, isProfit: boolean): string {
+    const formatted = Math.abs(percentage).toFixed(2);
+    return isProfit ? `+${formatted}%` : `-${formatted}%`;
+  }
+
+  // Get current user address for transaction history
+  async function getCurrentUserAddress(): Promise<string | null> {
+    try {
+      const context = await ybtService.getWalletContext();
+      return context?.address || null;
+    } catch (error) {
+      console.error('Error getting user address:', error);
+      return null;
+    }
+  }
   
   
   
   function calculateUserPortfolioValue(): bigint {
-    if ($userShares === BigInt(0) || $totalSupply === BigInt(0) || !houseBalance) {
-      return BigInt(0);
-    }
+    if (!houseBalance) return BigInt(0);
     const contractValue = BigInt(houseBalance.total);
+    // Use latest store values, but allow zero shares case; P/L calc handles it
     return ybtService.calculateUserPortfolioValue($userShares, $totalSupply, contractValue);
   }
   
@@ -71,6 +119,33 @@
 
   // Get current contract for display purposes
   $: currentContract = contractContext || $selectedContract;
+  
+  // Track last contract and wallet to prevent duplicate refreshes
+  let lastContractId: string | null = null;
+  let lastWalletAddress: string | null = null;
+  
+  // Initialize/refresh P/L data (initial load, contract change, wallet change)
+  $: if (currentContract && viewingAddress) {
+    const contractId = currentContract.id;
+    const contractChanged = contractId !== lastContractId;
+    const walletChanged = viewingAddress !== lastWalletAddress;
+
+    if (contractChanged || walletChanged) {
+      lastContractId = contractId;
+      lastWalletAddress = viewingAddress;
+      ybtTransfersStore.reset();
+      ybtTransfersStore.refresh(viewingAddress, contractId).catch(error => {
+        console.error('Error initializing/refreshing P/L data:', error);
+      });
+    }
+  }
+
+  // Reset P/L data when wallet disconnects or contract becomes unavailable
+  $: if ((!viewingAddress || !currentContract) && (lastContractId || lastWalletAddress)) {
+    ybtTransfersStore.reset();
+    lastContractId = null;
+    lastWalletAddress = null;
+  }
 </script>
 
 <div class="space-y-4 sm:space-y-6">
@@ -79,7 +154,7 @@
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3">
       <div class="flex-1">
         <h2 class="text-xl sm:text-2xl font-bold text-theme">
-          YBT Portfolio
+          House Portfolio
           {#if currentContract}
             <span class="text-base font-normal text-slate-400">• {currentContract.name}</span>
           {/if}
@@ -148,6 +223,46 @@
         {#if !balanceLoading && houseBalance}
           <div class="text-xs sm:text-sm text-slate-400">
             {$sharePercentage.toFixed(4)}% ownership of {(houseBalance.total / 1e6).toFixed(2)} VOI total pool
+          </div>
+        {/if}
+        
+        <!-- P/L Display -->
+        {#if $ybtProfitLoss && !balanceLoading && houseBalance}
+          <div class="flex items-center gap-4 mt-3 pt-3 border-t border-slate-500/30">
+            <div class="flex-1">
+              <div class="text-xs text-slate-400 font-medium mb-1">Profit/Loss</div>
+              <div class="flex items-center gap-2">
+                <span class="text-lg font-bold {$ybtProfitLoss.isProfit ? 'text-green-400' : 'text-red-400'}">
+                  {formatProfitLoss($ybtProfitLoss.profitLoss, $ybtProfitLoss.isProfit)} VOI
+                </span>
+                <span class="text-sm font-medium {$ybtProfitLoss.isProfit ? 'text-green-400' : 'text-red-400'}">
+                  ({formatProfitLossPercentage($ybtProfitLoss.profitLossPercentage, $ybtProfitLoss.isProfit)})
+                </span>
+              </div>
+            </div>
+            <button
+              on:click={async () => {
+                const address = await getCurrentUserAddress();
+                if (address) {
+                  showTransactionHistoryModal = true;
+                }
+              }}
+              class="btn-tertiary text-xs"
+              disabled={!hasAnyWallet}
+            >
+              <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+              </svg>
+              History
+            </button>
+          </div>
+        {:else if $ybtTransfersLoading}
+          <div class="flex items-center gap-2 mt-3 pt-3 border-t border-slate-500/30">
+            <svg class="animate-spin h-4 w-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-xs text-slate-400">Loading P/L data...</span>
           </div>
         {/if}
       </div>
@@ -333,6 +448,17 @@
   />
 {/if}
 
+{#if showTransactionHistoryModal}
+  {#await getCurrentUserAddress() then userAddress}
+    <YBTTransactionHistoryModal
+      bind:open={showTransactionHistoryModal}
+      {contractContext}
+      {userAddress}
+      on:close={() => showTransactionHistoryModal = false}
+    />
+  {/await}
+{/if}
+
 <style>
   .text-voi-400 {
     color: #10b981;
@@ -383,6 +509,15 @@
   
   .btn-secondary-large:hover {
     transform: translateY(-1px);
+  }
+  
+  .btn-tertiary {
+    @apply bg-slate-600 hover:bg-slate-500 text-slate-300 hover:text-white font-medium py-1.5 px-3 rounded-md transition-all duration-200 flex items-center justify-center text-xs;
+    min-height: 32px;
+  }
+  
+  .btn-tertiary:disabled {
+    @apply opacity-50 cursor-not-allowed;
   }
   
   .bg-voi-600 {

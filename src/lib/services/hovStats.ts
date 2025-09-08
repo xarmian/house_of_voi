@@ -17,6 +17,7 @@ import type {
   WhalePlayer,
   PaylineAnalysis,
   ScanEventResult,
+  MachineAnalytics,
   GetBalanceHistoryParams,
   GetPlatformStatsParams,
   GetLeaderboardParams,
@@ -26,6 +27,7 @@ import type {
   GetTimeStatsParams,
   GetHotColdPlayersParams,
   GetWhalesParams,
+  GetMachineAnalyticsParams,
   ScanEventsParams,
   HovStatsError,
   HovStatsServiceConfig
@@ -63,7 +65,8 @@ const DEFAULT_CONFIG: HovStatsServiceConfig = {
     platformStats: { ttl: 60000, maxSize: 5 }, // 1 minute, reduced size
     leaderboard: { ttl: 300000, maxSize: 20 }, // 5 minutes, reduced size
     playerStats: { ttl: 120000, maxSize: 50 }, // 2 minutes, reduced size
-    timeStats: { ttl: 600000, maxSize: 10 } // 10 minutes, reduced size
+    timeStats: { ttl: 600000, maxSize: 10 }, // 10 minutes, reduced size
+    machineAnalytics: { ttl: 600000, maxSize: 10 } // 10 minutes, reduced size
   },
   fallbackToLocal: true,
   retryConfig: {
@@ -123,6 +126,7 @@ class HovStatsService {
     leaderboard: SimpleCache<LeaderboardEntry[]>;
     playerStats: SimpleCache<PlayerStats>;
     timeStats: SimpleCache<TimeStats[]>;
+    machineAnalytics: SimpleCache<MachineAnalytics[]>;
   };
 
   constructor(config: Partial<HovStatsServiceConfig> = {}) {
@@ -143,6 +147,10 @@ class HovStatsService {
       timeStats: new SimpleCache<TimeStats[]>(
         this.config.cache.timeStats.ttl,
         this.config.cache.timeStats.maxSize
+      ),
+      machineAnalytics: new SimpleCache<MachineAnalytics[]>(
+        this.config.cache.machineAnalytics.ttl,
+        this.config.cache.machineAnalytics.maxSize
       )
     };
   }
@@ -331,7 +339,8 @@ class HovStatsService {
       first_bet_round: BigInt(Math.floor(Number(row.first_bet_round || 0))),
       last_bet_round: BigInt(Math.floor(Number(row.last_bet_round || 0))),
       days_active: Number(row.days_active || 0),
-      profit_per_spin: Number(row.profit_per_spin || 0)
+      profit_per_spin: Number(row.profit_per_spin || 0),
+      rtp: Number(Number(row.total_amount_won) / Number(row.total_amount_bet) * 100 || 0)
     };
 
     // Parse machines array if present (when appId is null)
@@ -350,7 +359,8 @@ class HovStatsService {
         last_bet_round: Number(machine.last_bet_round || 0),
         days_active: Number(machine.days_active || 0),
         profit_per_spin: Number(machine.profit_per_spin || 0),
-        highest_multiple: Number(machine.highest_multiple || 0)
+        highest_multiple: Number(machine.highest_multiple || 0),
+        rtp: Number(Number(machine.total_amount_won) / Number(machine.total_amount_bet) * 100 || 0)
       }));
     }
 
@@ -626,6 +636,55 @@ class HovStatsService {
   }
 
   /**
+   * Get machine analytics
+   */
+  async getMachineAnalytics(params: GetMachineAnalyticsParams): Promise<MachineAnalytics[]> {
+    const cacheKey = `machine_analytics_${params.p_machine_app_id}_${params.p_ybt_app_id}`;
+    
+    // Check cache first
+    const cached = this.caches.machineAnalytics.get(cacheKey);
+    if (cached) return cached;
+
+    return this.withErrorHandling('getMachineAnalytics', async () => {
+      // Ensure service is initialized
+      if (!supabaseService.isReady()) {
+        await supabaseService.initialize();
+      }
+      const client = supabaseService.getClient();
+      const { data, error } = await client.rpc('get_machine_analytics', {
+        p_machine_app_id: params.p_machine_app_id.toString(),
+        p_ybt_app_id: params.p_ybt_app_id.toString()
+      });
+
+      if (error) throw error;
+
+      // The RPC returns data as a direct array
+      const analyticsData = data || [];
+      
+      const result = analyticsData.map((row: any) => ({
+        day: row.day,
+        total_bets: BigInt(row.total_bets),
+        total_payouts: BigInt(row.total_payouts),
+        total_house_pl: BigInt(row.total_house_pl),
+        unique_users: Number(row.unique_users),
+        daily_net_flow: BigInt(row.daily_net_flow),
+        escrow_balance: BigInt(row.escrow_balance),
+        daily_apy_percent: Number(row.daily_apy_percent),
+        trailing_apy_percent: Number(row.trailing_apy_percent),
+        days_available: Number(row.days_available),
+        sum_total_house_pl: BigInt(row.sum_total_house_pl),
+        avg_total_balance: Number(row.avg_total_balance),
+        total_return_percent: Number(row.total_return_percent)
+      }));
+
+      // Cache the result
+      this.caches.machineAnalytics.set(cacheKey, result);
+      
+      return result;
+    });
+  }
+
+  /**
    * Refresh materialized views (leaderboard cache)
    */
   async refreshLeaderboard(): Promise<void> {
@@ -668,7 +727,7 @@ class HovStatsService {
   /**
    * Clear specific cache sections
    */
-  clearSpecificCache(section: 'platformStats' | 'leaderboard' | 'playerStats' | 'timeStats'): void {
+  clearSpecificCache(section: 'platformStats' | 'leaderboard' | 'playerStats' | 'timeStats' | 'machineAnalytics'): void {
     this.caches[section].clear();
   }
 

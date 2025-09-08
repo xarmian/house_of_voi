@@ -4,6 +4,7 @@
   import { ybtService } from '$lib/services/ybt';
   import type { YBTGlobalState } from '$lib/types/ybt';
   import type { HouseBalanceData } from '$lib/services/houseBalance';
+  import { themeStore } from '$lib/stores/theme';
 
   export let houseBalance: HouseBalanceData | null = null;
   export let balanceLoading = false;

@@ -17,6 +17,7 @@ import type {
   HotColdPlayer,
   WhalePlayer,
   PaylineAnalysis,
+  MachineAnalytics,
   HovStatsError
 } from '$lib/types/hovStats';
 import { PUBLIC_DEBUG_MODE } from '$env/static/public';
@@ -52,6 +53,7 @@ interface HovStatsState {
   whales: StoreState<WhalePlayer[]>;
   paylineAnalysis: StoreState<PaylineAnalysis[]>;
   playerSpins: StoreState<PlayerSpinsData> & { playerAddress: string | null };
+  machineAnalytics: StoreState<MachineAnalytics[]>;
   isInitialized: boolean;
   connectionStatus: 'connected' | 'disconnected' | 'connecting' | 'error';
   fallbackActive: boolean;
@@ -74,6 +76,7 @@ const initialState: HovStatsState = {
     fromCache: false,
     playerAddress: null
   },
+  machineAnalytics: { data: null, loading: false, error: null, lastUpdated: null, fromCache: false },
   isInitialized: false,
   connectionStatus: 'disconnected',
   fallbackActive: false,
@@ -88,7 +91,8 @@ const REFRESH_INTERVALS = {
   timeStats: 900000, // 15 minutes (increased from 10 minutes)
   hotColdPlayers: 600000, // 10 minutes (kept same)
   whales: 1200000, // 20 minutes (increased from 10 minutes)
-  paylineAnalysis: 3600000 // 60 minutes (increased from 30 minutes)
+  paylineAnalysis: 3600000, // 60 minutes (increased from 30 minutes)
+  machineAnalytics: 900000 // 15 minutes (same as timeStats)
 };
 
 // Get the current contract app ID (dynamic based on selected contract)
@@ -122,6 +126,39 @@ const getCurrentSlotMachineAppId = async (): Promise<bigint> => {
   }
   
   return BigInt(defaultContract.slotMachineAppId);
+};
+
+// Get the current YBT app ID (dynamic based on selected contract)
+const getCurrentYbtAppId = async (): Promise<bigint> => {
+  try {
+    // Import selectedContract dynamically to avoid circular deps
+    const { selectedContract } = await import('$lib/stores/multiContract');
+    const { get } = await import('svelte/store');
+    const currentContract = get(selectedContract);
+    
+    if (currentContract) {
+      return BigInt(currentContract.ybtAppId);
+    }
+  } catch (error) {
+    console.warn('Failed to get selected contract YBT app ID, falling back to default:', error);
+  }
+  
+  // Fallback to default contract
+  if (!MULTI_CONTRACT_CONFIG) {
+    console.warn('No multi-contract configuration found for YBT app ID');
+    return BigInt(0);
+  }
+  
+  const defaultContract = MULTI_CONTRACT_CONFIG.contracts.find(
+    c => c.id === MULTI_CONTRACT_CONFIG.defaultContractId
+  );
+  
+  if (!defaultContract) {
+    console.warn('Default contract not found in multi-contract configuration');
+    return BigInt(0);
+  }
+  
+  return BigInt(defaultContract.ybtAppId);
 };
 
 // Create main store
@@ -172,7 +209,8 @@ function createHovStatsStore() {
       if (options?.includePlatformStats !== false) {
         initialPromises.push(
           refreshPlatformStats(),
-          refreshTimeStats()
+          refreshTimeStats(),
+          refreshMachineAnalytics()
         );
       }
       
@@ -311,6 +349,20 @@ function createHovStatsStore() {
         p_app_id: appId,
         p_time_unit: timeUnit,
         p_limit: limit
+      });
+    });
+  }
+
+  /**
+   * Refresh machine analytics
+   */
+  async function refreshMachineAnalytics(): Promise<void> {
+    return updateStoreSection('machineAnalytics', async () => {
+      const machineAppId = await getCurrentSlotMachineAppId();
+      const ybtAppId = await getCurrentYbtAppId();
+      return await hovStatsService.getMachineAnalytics({
+        p_machine_app_id: machineAppId,
+        p_ybt_app_id: ybtAppId
       });
     });
   }
@@ -668,6 +720,13 @@ function createHovStatsStore() {
       }, REFRESH_INTERVALS.timeStats);
     }
 
+    // Machine analytics - only on house page
+    if (options?.includePlatformStats !== false) {
+      intervals.machineAnalytics = setInterval(() => {
+        refreshMachineAnalytics();
+      }, REFRESH_INTERVALS.machineAnalytics);
+    }
+
     // Hot/cold players - DISABLED (not used in UI)
     // intervals.hotColdPlayers = setInterval(() => {
     //   refreshHotColdPlayers();
@@ -702,6 +761,7 @@ function createHovStatsStore() {
       refreshPlatformStats(),
       refreshLeaderboard(),
       refreshTimeStats(),
+      refreshMachineAnalytics(),
       // refreshHotColdPlayers(), // DISABLED - not used in UI
       // refreshWhales(), // DISABLED - not used in UI
       refreshPaylineAnalysis()
@@ -736,6 +796,7 @@ function createHovStatsStore() {
     refreshLeaderboard,
     setLeaderboardMetric,
     refreshTimeStats,
+    refreshMachineAnalytics,
     refreshHotColdPlayers,
     refreshWhales,
     refreshPaylineAnalysis,
@@ -862,6 +923,17 @@ export const timeStats = derived(
   })
 );
 
+export const machineAnalytics = derived(
+  hovStatsStore,
+  $hovStats => ({
+    data: $hovStats.machineAnalytics.data,
+    loading: $hovStats.machineAnalytics.loading,
+    error: $hovStats.machineAnalytics.error,
+    lastUpdated: $hovStats.machineAnalytics.lastUpdated,
+    available: !$hovStats.fallbackActive
+  })
+);
+
 export const playerSpins = derived(
   hovStatsStore,
   $hovStats => ({
@@ -931,10 +1003,11 @@ if (browser) {
           
           // Refresh relevant data immediately when contract changes
           if (currentRoute.startsWith('/house')) {
-            // House page: refresh platform stats and time stats (leaderboard handles contract changes via reactive statements)
+            // House page: refresh platform stats, time stats, and machine analytics (leaderboard handles contract changes via reactive statements)
             await Promise.allSettled([
               hovStatsStore.refreshPlatformStats(),
-              hovStatsStore.refreshTimeStats()
+              hovStatsStore.refreshTimeStats(),
+              hovStatsStore.refreshMachineAnalytics()
             ]);
           } else if (currentRoute.startsWith('/app')) {
             // App page: only refresh leaderboard
