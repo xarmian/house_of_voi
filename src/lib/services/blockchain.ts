@@ -116,17 +116,12 @@ export class BlockchainService {
       console.log(`💰 Spin ${spin.id.slice(-8)} moved to WAITING - reserved balance should now be released`);
 
     } catch (error) {
-      console.error('Error submitting spin:', error);
+      const retryInfo = spin.retryCount ? ` (attempt ${spin.retryCount + 1})` : '';
+      console.error(`Error submitting spin${retryInfo}:`, error);
       
-      // **NO OPTIMISTIC UPDATE TO REVERT**: The reservedBalance will be released when the spin status updates to FAILED
-      
-      queueStore.updateSpin({
-        id: spin.id,
-        status: SpinStatus.FAILED,
-        data: {
-          error: this.formatError(error)
-        }
-      });
+      // Don't directly mark as FAILED here - let the queueProcessor handle retries
+      // The queueProcessor will catch this error and decide whether to retry or fail
+      throw error;
     } finally {
       this.processingSpins.delete(spin.id);
     }

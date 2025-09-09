@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
-  import { timeStats, hovStatsStore } from '$lib/stores/hovStats';
+  import { timeStats, machineAnalytics, hovStatsStore } from '$lib/stores/hovStats';
   import { formatVOI } from '$lib/constants/betting';
   import { 
     Chart, 
@@ -16,7 +16,7 @@
     Legend,
     Filler
   } from 'chart.js';
-  import { TrendingUp, Users, Coins, BarChart3, RefreshCw } from 'lucide-svelte';
+  import { TrendingUp, Users, Coins, BarChart3, RefreshCw, Activity } from 'lucide-svelte';
 
   // Register Chart.js components
   Chart.register(
@@ -37,13 +37,15 @@
   let volumeChartCanvas: HTMLCanvasElement;
   let winRateChartCanvas: HTMLCanvasElement;
   let playersChartCanvas: HTMLCanvasElement;
+  let machineAnalyticsChartCanvas: HTMLCanvasElement;
   
   let spinsChart: Chart | null = null;
   let volumeChart: Chart | null = null;
   let winRateChart: Chart | null = null;
   let playersChart: Chart | null = null;
+  let machineAnalyticsChart: Chart | null = null;
 
-  let activeTab: 'spins' | 'volume' | 'winrate' | 'players' = 'spins';
+  let activeTab: 'spins' | 'volume' | 'winrate' | 'players' | 'machine' = 'spins';
   let isRefreshing = false;
   let chartsInitialized = false;
 
@@ -65,6 +67,43 @@
       tick().then(() => {
         updateCharts();
       });
+    }
+  }
+
+  // Watch for machine analytics data changes
+  $: {
+    if ($machineAnalytics.data && !$machineAnalytics.loading && !$machineAnalytics.error && $machineAnalytics.data.length > 0) {
+      // Wait for next tick to ensure DOM is ready
+      tick().then(() => {
+        updateMachineAnalyticsChart();
+      });
+    }
+  }
+
+  // Handle default tab selection based on available data
+  $: {
+    const validTimeStatsTabs = ['spins', 'volume', 'winrate', 'players'];
+    const validMachineTabs = ['machine'];
+    const allValidTabs = [...validTimeStatsTabs, ...validMachineTabs];
+    
+    // Only set default if activeTab is completely invalid
+    if (!allValidTabs.includes(activeTab)) {
+      if ($timeStats.data && $timeStats.data.length > 0) {
+        activeTab = 'spins';
+      } else if ($machineAnalytics.data && $machineAnalytics.data.length > 0) {
+        activeTab = 'machine';
+      }
+    }
+    
+    // If current tab is invalid based on available data, switch to a valid one
+    if (validTimeStatsTabs.includes(activeTab) && (!$timeStats.data || $timeStats.data.length === 0)) {
+      if ($machineAnalytics.data && $machineAnalytics.data.length > 0) {
+        activeTab = 'machine';
+      }
+    } else if (validMachineTabs.includes(activeTab) && (!$machineAnalytics.data || $machineAnalytics.data.length === 0)) {
+      if ($timeStats.data && $timeStats.data.length > 0) {
+        activeTab = 'spins';
+      }
     }
   }
 
@@ -91,6 +130,7 @@
     isRefreshing = true;
     try {
       await hovStatsStore.refreshTimeStats('day', 30);
+      await hovStatsStore.refreshMachineAnalytics();
     } finally {
       isRefreshing = false;
     }
@@ -112,6 +152,10 @@
     if (playersChart) {
       playersChart.destroy();
       playersChart = null;
+    }
+    if (machineAnalyticsChart) {
+      machineAnalyticsChart.destroy();
+      machineAnalyticsChart = null;
     }
   }
 
@@ -491,6 +535,178 @@
       });
     }
   }
+
+  function updateMachineAnalyticsChart() {
+    if (!$machineAnalytics.data || $machineAnalytics.data.length === 0) {
+      console.log('No machine analytics data available for chart');
+      return;
+    }
+
+    // Wait for canvas element to be available
+    if (!machineAnalyticsChartCanvas) {
+      console.log('Machine analytics canvas element not yet available');
+      return;
+    }
+
+    console.log('Updating machine analytics chart with', $machineAnalytics.data.length, 'data points');
+
+    // Sort data by day to ensure chronological order
+    const sortedData = [...$machineAnalytics.data].sort((a, b) => 
+      new Date(a.day).getTime() - new Date(b.day).getTime()
+    );
+
+    const labels = sortedData.map(item => 
+      new Date(item.day).toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+      })
+    );
+
+    // Destroy existing chart before creating new one
+    if (machineAnalyticsChart) {
+      machineAnalyticsChart.destroy();
+      machineAnalyticsChart = null;
+    }
+
+    // Create Machine Analytics Chart (dual-axis)
+    if (machineAnalyticsChartCanvas) {
+      machineAnalyticsChart = new Chart(machineAnalyticsChartCanvas, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Daily P/L (VOI)',
+              data: sortedData.map(item => Number(item.total_house_pl) / 1_000_000),
+              backgroundColor: sortedData.map(item => 
+                Number(item.total_house_pl) >= 0 ? colors.primary : 'rgba(239, 68, 68, 0.8)' // green for profit, red for loss
+              ),
+              borderColor: sortedData.map(item => 
+                Number(item.total_house_pl) >= 0 ? colors.primary : '#ef4444' // solid red for loss borders
+              ),
+              borderWidth: 1,
+              yAxisID: 'y'
+            },
+            {
+              label: 'Trailing APR (%)',
+              data: sortedData.map(item => item.trailing_apr_percent),
+              type: 'line',
+              borderColor: colors.secondary,
+              backgroundColor: 'rgba(96, 165, 250, 0.1)',
+              fill: false,
+              tension: 0.4,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top',
+              labels: {
+                color: colors.text,
+                usePointStyle: true
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(15, 23, 42, 0.95)',
+              titleColor: colors.text,
+              bodyColor: colors.text,
+              borderColor: colors.primary,
+              borderWidth: 2,
+              cornerRadius: 8,
+              displayColors: true,
+              callbacks: {
+                title: (context) => {
+                  const date = new Date(sortedData[context[0].dataIndex].day);
+                  return date.toLocaleDateString('en-US', { 
+                    weekday: 'long',
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  });
+                },
+                label: (context) => {
+                  const dataPoint = sortedData[context.dataIndex];
+                  if (context.dataset.label === 'Daily P/L (VOI)') {
+                    return [
+                      `Daily P/L: ${formatVOI(Number(dataPoint.total_house_pl))} VOI`,
+                      `Daily APR: ${dataPoint.daily_apr_percent.toFixed(1)}%`,
+                      `Volume: ${formatVOI(Number(dataPoint.total_bets))} VOI`,
+                    ];
+                  } else {
+                    return [
+                      `Trailing APR: ${dataPoint.trailing_apr_percent.toFixed(1)}%`,
+                      `Total Return: ${dataPoint.total_return_percent.toFixed(2)}%`,
+                      `House Balance: ${formatVOI(Number(dataPoint.escrow_balance))} VOI`
+                    ];
+                  }
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                color: colors.grid,
+                drawBorder: false
+              },
+              ticks: {
+                color: colors.text,
+                maxTicksLimit: 7
+              }
+            },
+            y: {
+              type: 'linear',
+              position: 'left',
+              grid: {
+                color: colors.grid,
+                drawBorder: false
+              },
+              ticks: {
+                color: colors.text,
+                callback: function(value) {
+                  return formatVOI(Number(value) * 1_000_000) + ' VOI';
+                }
+              },
+              title: {
+                display: true,
+                text: 'Daily P/L (VOI)',
+                color: colors.text
+              }
+            },
+            y1: {
+              type: 'linear',
+              position: 'right',
+              grid: {
+                drawOnChartArea: false,
+              },
+              ticks: {
+                color: colors.text,
+                callback: function(value) {
+                  return Number(value).toFixed(1) + '%';
+                }
+              },
+              title: {
+                display: true,
+                text: 'Trailing APR (%)',
+                color: colors.text
+              }
+            }
+          }
+        }
+      });
+    }
+  }
 </script>
 
 <div class="card p-4 sm:p-6">
@@ -502,88 +718,109 @@
     <button 
       class="btn-refresh" 
       on:click={refreshData} 
-      disabled={isRefreshing || $timeStats.loading}
+      disabled={isRefreshing || $timeStats.loading || $machineAnalytics.loading}
       title="Refresh chart data"
     >
-      <RefreshCw class="w-4 h-4 {isRefreshing || $timeStats.loading ? 'animate-spin' : ''}" />
+      <RefreshCw class="w-4 h-4 {isRefreshing || $timeStats.loading || $machineAnalytics.loading ? 'animate-spin' : ''}" />
     </button>
   </div>
 
   <!-- Loading State -->
-  {#if $timeStats.loading}
+  {#if $timeStats.loading || $machineAnalytics.loading}
     <div class="flex items-center justify-center py-12">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-voi-400"></div>
     </div>
-  {:else if $timeStats.error}
-    <!-- Error State -->
+  {:else if $timeStats.error && $machineAnalytics.error}
+    <!-- Error State - only show if both failed -->
     <div class="text-red-400 text-center py-12">
       Failed to load chart data: {$timeStats.error}
     </div>
-  {:else if !$timeStats.available}
-    <!-- Service Unavailable State -->
+  {:else if !$timeStats.available && !$machineAnalytics.available}
+    <!-- Service Unavailable State - only show if both unavailable -->
     <div class="text-amber-400 text-center py-12">
       <BarChart3 class="w-12 h-12 mx-auto mb-4 text-amber-600" />
       <p class="mb-2">Chart data service unavailable</p>
       <p class="text-sm text-slate-400">Using fallback data for platform statistics</p>
     </div>
-  {:else if $timeStats.data && $timeStats.data.length > 0}
+  {:else if ($timeStats.data && $timeStats.data.length > 0) || ($machineAnalytics.data && $machineAnalytics.data.length > 0)}
     <!-- Tab Navigation -->
     <div class="flex flex-wrap gap-2 mb-4 sm:mb-6">
-      <button 
-        class="chart-tab-button {activeTab === 'spins' ? 'active' : ''}" 
-        on:click={() => activeTab = 'spins'}
-      >
-        <TrendingUp class="w-4 h-4" />
-        <span class="hidden sm:inline">Daily Spins</span>
-        <span class="sm:hidden">Spins</span>
-      </button>
-      <button 
-        class="chart-tab-button {activeTab === 'volume' ? 'active' : ''}" 
-        on:click={() => activeTab = 'volume'}
-      >
-        <Coins class="w-4 h-4" />
-        <span class="hidden sm:inline">Volume</span>
-        <span class="sm:hidden">Volume</span>
-      </button>
-      <button 
-        class="chart-tab-button {activeTab === 'winrate' ? 'active' : ''}" 
-        on:click={() => activeTab = 'winrate'}
-      >
-        <BarChart3 class="w-4 h-4" />
-        <span class="hidden sm:inline">Win Rate</span>
-        <span class="sm:hidden">Win Rate</span>
-      </button>
-      <button 
-        class="chart-tab-button {activeTab === 'players' ? 'active' : ''}" 
-        on:click={() => activeTab = 'players'}
-      >
-        <Users class="w-4 h-4" />
-        <span class="hidden sm:inline">Players</span>
-        <span class="sm:hidden">Players</span>
-      </button>
+      {#if $timeStats.data && $timeStats.data.length > 0}
+        <button 
+          class="chart-tab-button {activeTab === 'spins' ? 'active' : ''}" 
+          on:click={() => activeTab = 'spins'}
+        >
+          <TrendingUp class="w-4 h-4" />
+          <span class="hidden sm:inline">Daily Spins</span>
+          <span class="sm:hidden">Spins</span>
+        </button>
+        <button 
+          class="chart-tab-button {activeTab === 'volume' ? 'active' : ''}" 
+          on:click={() => activeTab = 'volume'}
+        >
+          <Coins class="w-4 h-4" />
+          <span class="hidden sm:inline">Volume</span>
+          <span class="sm:hidden">Volume</span>
+        </button>
+        <button 
+          class="chart-tab-button {activeTab === 'winrate' ? 'active' : ''}" 
+          on:click={() => activeTab = 'winrate'}
+        >
+          <BarChart3 class="w-4 h-4" />
+          <span class="hidden sm:inline">Win Rate</span>
+          <span class="sm:hidden">Win Rate</span>
+        </button>
+        <button 
+          class="chart-tab-button {activeTab === 'players' ? 'active' : ''}" 
+          on:click={() => activeTab = 'players'}
+        >
+          <Users class="w-4 h-4" />
+          <span class="hidden sm:inline">Players</span>
+          <span class="sm:hidden">Players</span>
+        </button>
+      {/if}
+      {#if $machineAnalytics.data && $machineAnalytics.data.length > 0}
+        <button 
+          class="chart-tab-button {activeTab === 'machine' ? 'active' : ''}" 
+          on:click={() => activeTab = 'machine'}
+        >
+          <Activity class="w-4 h-4" />
+          <span class="hidden sm:inline">Machine Performance</span>
+          <span class="sm:hidden">Machine</span>
+        </button>
+      {/if}
     </div>
 
     <!-- Chart Content -->
     <div class="chart-container">
-      <!-- Spins Chart -->
-      <div class:hidden={activeTab !== 'spins'} class="chart-wrapper">
-        <canvas bind:this={spinsChartCanvas} class="chart-canvas"></canvas>
-      </div>
+      {#if $timeStats.data && $timeStats.data.length > 0}
+        <!-- Spins Chart -->
+        <div class:hidden={activeTab !== 'spins'} class="chart-wrapper">
+          <canvas bind:this={spinsChartCanvas} class="chart-canvas"></canvas>
+        </div>
 
-      <!-- Volume Chart -->
-      <div class:hidden={activeTab !== 'volume'} class="chart-wrapper">
-        <canvas bind:this={volumeChartCanvas} class="chart-canvas"></canvas>
-      </div>
+        <!-- Volume Chart -->
+        <div class:hidden={activeTab !== 'volume'} class="chart-wrapper">
+          <canvas bind:this={volumeChartCanvas} class="chart-canvas"></canvas>
+        </div>
 
-      <!-- Win Rate Chart -->
-      <div class:hidden={activeTab !== 'winrate'} class="chart-wrapper">
-        <canvas bind:this={winRateChartCanvas} class="chart-canvas"></canvas>
-      </div>
+        <!-- Win Rate Chart -->
+        <div class:hidden={activeTab !== 'winrate'} class="chart-wrapper">
+          <canvas bind:this={winRateChartCanvas} class="chart-canvas"></canvas>
+        </div>
 
-      <!-- Players Chart -->
-      <div class:hidden={activeTab !== 'players'} class="chart-wrapper">
-        <canvas bind:this={playersChartCanvas} class="chart-canvas"></canvas>
-      </div>
+        <!-- Players Chart -->
+        <div class:hidden={activeTab !== 'players'} class="chart-wrapper">
+          <canvas bind:this={playersChartCanvas} class="chart-canvas"></canvas>
+        </div>
+      {/if}
+
+      {#if $machineAnalytics.data && $machineAnalytics.data.length > 0}
+        <!-- Machine Analytics Chart -->
+        <div class:hidden={activeTab !== 'machine'} class="chart-wrapper">
+          <canvas bind:this={machineAnalyticsChartCanvas} class="chart-canvas"></canvas>
+        </div>
+      {/if}
     </div>
   {:else}
     <!-- No Data State -->

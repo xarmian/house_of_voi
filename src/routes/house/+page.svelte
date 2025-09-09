@@ -1,15 +1,18 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { browser } from '$app/environment';
   import { selectedWallet, connectedWallets } from 'avm-wallet-svelte';
   import { ybtStore } from '$lib/stores/ybt';
   import { ybtService } from '$lib/services/ybt';
   import { walletStore, isWalletConnected } from '$lib/stores/wallet';
+  import { walletService } from '$lib/services/wallet';
   import { NETWORK_CONFIG } from '$lib/constants/network';
   import { houseBalanceService } from '$lib/services/houseBalance';
   import { houseBalanceManager } from '$lib/stores/houseBalance';
   import YBTDashboard from '$lib/components/house/YBTDashboard.svelte';
   import YBTStats from '$lib/components/house/YBTStats.svelte';
   import WalletSourceSelector from '$lib/components/house/WalletSourceSelector.svelte';
+  import MachineHistory from '$lib/components/house/MachineHistory.svelte';
   import ContractSelector from '$lib/components/contract/ContractSelector.svelte';
   import ContractSwitcher from '$lib/components/contract/ContractSwitcher.svelte';
   // import OddsAnalysis from '$lib/components/analytics/OddsAnalysis.svelte';
@@ -19,7 +22,7 @@
   import algosdk from 'algosdk';
   import { hovStatsStore, platformStats, connectionStatus, timeStats } from '$lib/stores/hovStats';
   import { formatVOI } from '$lib/constants/betting';
-  import { BarChart3, TrendingUp, Users, Coins, Target, Zap, Clock, Crown, Wallet, Trophy, PieChart, AlertTriangle } from 'lucide-svelte';
+  import { BarChart3, TrendingUp, Users, Coins, Target, Zap, Clock, Crown, Wallet, Trophy, PieChart, AlertTriangle, History } from 'lucide-svelte';
   import { PUBLIC_WALLETCONNECT_PROJECT_ID } from '$env/static/public';
   import { isMaintenanceMode, maintenanceModeMessage } from '$lib/stores/maintenanceMode';
   import { 
@@ -29,6 +32,7 @@
     initializeMultiContractStores
   } from '$lib/stores/multiContract';
   import type { ContractPair } from '$lib/types/multiContract';
+  import { themeStore } from '$lib/stores/theme';
 
   let isLoaded = false;
   let algodClient: algosdk.Algodv2;
@@ -37,6 +41,9 @@
   let activeTab = 'portfolio';
   let selectedWalletSource: 'gaming' | 'external' = 'external';
   let isSelectedWalletLocked = false;
+  $: viewingAddress = selectedWalletSource === 'external' 
+    ? ($selectedWallet?.address || null)
+    : ($walletStore.account?.address || (isSelectedWalletLocked ? (browser && walletService.hasStoredWallet() ? walletService.getStoredWalletAddress() : null) : null));
   let refreshDebounceTimer: NodeJS.Timeout | null = null;
   let isYBTRefreshing = false;
   
@@ -145,7 +152,7 @@
   $: anyWalletConnected = stableWalletState;
   
   // Handle wallet source changes with debouncing
-  async function handleWalletSourceChange(event) {
+  async function handleWalletSourceChange(event: CustomEvent<{ source: 'gaming' | 'external'; isLocked: boolean }>) {
     const { source, isLocked } = event.detail;
     const previousSource = selectedWalletSource;
     const previousLocked = isSelectedWalletLocked;
@@ -298,6 +305,14 @@
                   <span class="sm:hidden text-xs">Leaders</span>
                 </button>
                 <button 
+                  class="tab-button {activeTab === 'history' ? 'active' : ''}" 
+                  on:click={() => activeTab = 'history'}
+                >
+                  <History class="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span class="hidden sm:inline">History</span>
+                  <span class="sm:hidden text-xs">Wins</span>
+                </button>
+                <button 
                   class="tab-button {activeTab === 'analytics' ? 'active' : ''}" 
                   on:click={() => activeTab = 'analytics'}
                 >
@@ -341,6 +356,7 @@
                   isGamingWalletLocked={selectedWalletSource === 'gaming' && isSelectedWalletLocked}
                   showConnectedView={true}
                   hasWalletConnected={anyWalletConnected}
+                  viewingAddress={viewingAddress}
                 />
                 
                 <!-- Public YBT Dashboard - show when no wallet connected -->
@@ -489,7 +505,17 @@
                     <Crown class="w-5 h-5 text-yellow-400" />
                     <h2 class="text-lg font-bold text-theme">Top Players</h2>
                   </div>
-                  <Leaderboard maxHeight="700px" showPlayerHighlight={anyWalletConnected} contractId={BigInt($selectedContract?.slotMachineAppId || 0)} />
+                  <Leaderboard compact={false} showPlayerHighlight={anyWalletConnected} contractId={$selectedContract?.slotMachineAppId ? BigInt($selectedContract.slotMachineAppId) : 0n} />
+                </div>
+              </div>
+              
+              <!-- History Tab -->
+              <div class:hidden={activeTab !== 'history'}>
+                <div class="card p-4">
+                  <MachineHistory 
+                    appId={$selectedContract?.slotMachineAppId ? BigInt($selectedContract.slotMachineAppId) : 0n} 
+                    compact={false}
+                  />
                 </div>
               </div>
               

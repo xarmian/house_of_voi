@@ -82,7 +82,25 @@ export class QueueProcessor {
   }
 
   private async submitSpin(spin: QueuedSpin) {
+    // Check if we need to wait for retry delay (3 seconds as requested)
+    const retryDelay = 3000; // 3 seconds
+    const lastRetry = spin.lastRetry || 0;
+    const currentTime = Date.now();
+    const timeSinceLastRetry = currentTime - lastRetry;
+    
+    // If this is a retry attempt and not enough time has passed, skip for now
+    if (spin.retryCount && spin.retryCount > 0 && timeSinceLastRetry < retryDelay) {
+      const remainingWait = Math.ceil((retryDelay - timeSinceLastRetry) / 1000);
+      console.log(`⏳ Waiting ${remainingWait}s before retry attempt ${spin.retryCount} for spin ${spin.id.slice(-8)}`);
+      return;
+    }
+    
     try {
+      // Log retry attempt if applicable
+      if (spin.retryCount && spin.retryCount > 0) {
+        console.log(`🔄 Executing retry attempt ${spin.retryCount}/3 for spin ${spin.id.slice(-8)}`);
+      }
+      
       await blockchainService.submitSpin(spin);
     } catch (error) {
       console.error(`Error submitting spin ${spin.id}:`, error);
@@ -281,14 +299,40 @@ export class QueueProcessor {
 
   private handleSpinError(spin: QueuedSpin, error: any) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const currentRetryCount = spin.retryCount || 0;
+    const maxRetries = 3;
     
-    queueStore.updateSpin({
-      id: spin.id,
-      status: SpinStatus.FAILED,
-      data: {
-        error: errorMessage
+    // Only retry for submission failures (PENDING/SUBMITTING status)
+    const isSubmissionFailure = [SpinStatus.PENDING, SpinStatus.SUBMITTING].includes(spin.status);
+    
+    if (isSubmissionFailure && currentRetryCount < maxRetries) {
+      // Retry the spin - increment count and reset to PENDING with delay tracking
+      const newRetryCount = currentRetryCount + 1;
+      console.log(`🔄 Retrying spin ${spin.id.slice(-8)} (attempt ${newRetryCount}/${maxRetries}) after error: ${errorMessage}`);
+      
+      queueStore.updateSpin({
+        id: spin.id,
+        status: SpinStatus.PENDING, // Reset to pending for retry
+        data: {
+          retryCount: newRetryCount,
+          lastRetry: Date.now(),
+          error: `Retry ${newRetryCount}/${maxRetries}: ${errorMessage}` // Keep error history
+        }
+      });
+    } else {
+      // Max retries exhausted or not a submission failure - mark as failed
+      if (isSubmissionFailure) {
+        console.log(`❌ Spin ${spin.id.slice(-8)} failed after ${currentRetryCount} retry attempts: ${errorMessage}`);
       }
-    });
+      
+      queueStore.updateSpin({
+        id: spin.id,
+        status: SpinStatus.FAILED,
+        data: {
+          error: errorMessage
+        }
+      });
+    }
   }
 
   /**

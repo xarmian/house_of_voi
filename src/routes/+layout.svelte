@@ -11,6 +11,8 @@
   import { checkForPurchaseResult, clearPurchaseParams, showPurchaseNotification } from '$lib/utils/voiPurchase';
   import { updateDetector } from '$lib/services/updateDetector';
   import { winFeedStore } from '$lib/stores/winFeed';
+  import { supabaseService } from '$lib/services/supabase';
+  import { themeStore } from '$lib/stores/theme';
   
   export let data;
   
@@ -38,17 +40,22 @@
     // Start the update detector
     updateDetector.start();
     
-    // Initialize win feed store
-    winFeedStore.initialize().catch(error => {
-      console.error('Failed to initialize win feed store:', error);
+    // Initialize Supabase service (needed for real-time subscriptions) but keep win feed disabled
+    supabaseService.initialize().catch(error => {
+      console.error('Failed to initialize Supabase service:', error);
     });
+    
+    // Initialize win feed store - DISABLED: only enable when viewing MachineHistory
+    // winFeedStore.initialize().catch(error => {
+    //   console.error('Failed to initialize win feed store:', error);
+    // });
     
     return () => {
       // Clean up update detector on component destroy
       updateDetector.stop();
       
-      // Clean up win feed store
-      winFeedStore.destroy();
+      // Clean up win feed store - DISABLED: only enable when viewing MachineHistory
+      // winFeedStore.destroy();
     };
   });
 </script>

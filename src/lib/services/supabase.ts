@@ -110,6 +110,30 @@ export interface Database {
         };
         Returns: unknown;
       };
+      get_user_ybt_transfers: {
+        Args: {
+          p_user_addr: string;
+          p_machine_app_id: string;
+          p_ybt_app_id: string;
+          p_limit?: number;
+          p_offset?: number;
+        };
+        Returns: {
+          transactions: Array<{
+            round: number;
+            intra: number;
+            ts: string;
+            txid: string;
+            direction: 'in' | 'out';
+            amount: string;
+          }>;
+          totals: {
+            in: string;
+            out: string;
+            net: string;
+          };
+        };
+      };
       // ... add other function definitions as needed
     };
   };

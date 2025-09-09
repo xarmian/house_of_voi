@@ -17,6 +17,7 @@ import type {
   WhalePlayer,
   PaylineAnalysis,
   ScanEventResult,
+  MachineAnalytics,
   GetBalanceHistoryParams,
   GetPlatformStatsParams,
   GetLeaderboardParams,
@@ -26,6 +27,7 @@ import type {
   GetTimeStatsParams,
   GetHotColdPlayersParams,
   GetWhalesParams,
+  GetMachineAnalyticsParams,
   ScanEventsParams,
   HovStatsError,
   HovStatsServiceConfig
@@ -60,15 +62,16 @@ const DEFAULT_CONFIG: HovStatsServiceConfig = {
   supabaseKey: '',
   defaultAppId: getDefaultSlotMachineAppId(),
   cache: {
-    platformStats: { ttl: 60000, maxSize: 5 }, // 1 minute, reduced size
+    platformStats: { ttl: 300000, maxSize: 5 }, // 5 minute, reduced size
     leaderboard: { ttl: 300000, maxSize: 20 }, // 5 minutes, reduced size
-    playerStats: { ttl: 120000, maxSize: 50 }, // 2 minutes, reduced size
-    timeStats: { ttl: 600000, maxSize: 10 } // 10 minutes, reduced size
+    playerStats: { ttl: 300000, maxSize: 50 }, // 5 minutes, reduced size
+    timeStats: { ttl: 600000, maxSize: 10 }, // 10 minutes, reduced size
+    machineAnalytics: { ttl: 600000, maxSize: 10 } // 10 minutes, reduced size
   },
   fallbackToLocal: true,
   retryConfig: {
     maxAttempts: 3,
-    backoffMs: 1000
+    backoffMs: 5000
   }
 };
 
@@ -123,6 +126,7 @@ class HovStatsService {
     leaderboard: SimpleCache<LeaderboardEntry[]>;
     playerStats: SimpleCache<PlayerStats>;
     timeStats: SimpleCache<TimeStats[]>;
+    machineAnalytics: SimpleCache<MachineAnalytics[]>;
   };
 
   constructor(config: Partial<HovStatsServiceConfig> = {}) {
@@ -143,6 +147,10 @@ class HovStatsService {
       timeStats: new SimpleCache<TimeStats[]>(
         this.config.cache.timeStats.ttl,
         this.config.cache.timeStats.maxSize
+      ),
+      machineAnalytics: new SimpleCache<MachineAnalytics[]>(
+        this.config.cache.machineAnalytics.ttl,
+        this.config.cache.machineAnalytics.maxSize
       )
     };
   }
@@ -331,7 +339,8 @@ class HovStatsService {
       first_bet_round: BigInt(Math.floor(Number(row.first_bet_round || 0))),
       last_bet_round: BigInt(Math.floor(Number(row.last_bet_round || 0))),
       days_active: Number(row.days_active || 0),
-      profit_per_spin: Number(row.profit_per_spin || 0)
+      profit_per_spin: Number(row.profit_per_spin || 0),
+      rtp: Number(Number(row.total_amount_won) / Number(row.total_amount_bet) * 100 || 0)
     };
 
     // Parse machines array if present (when appId is null)
@@ -350,7 +359,8 @@ class HovStatsService {
         last_bet_round: Number(machine.last_bet_round || 0),
         days_active: Number(machine.days_active || 0),
         profit_per_spin: Number(machine.profit_per_spin || 0),
-        highest_multiple: Number(machine.highest_multiple || 0)
+        highest_multiple: Number(machine.highest_multiple || 0),
+        rtp: Number(Number(machine.total_amount_won) / Number(machine.total_amount_bet) * 100 || 0)
       }));
     }
 
@@ -390,6 +400,111 @@ class HovStatsService {
         claim_round: BigInt(row.claim_round),
         created_at: new Date(row.created_at)
       }));
+    });
+  }
+
+  /**
+   * Get machine events (wins) with pagination and search
+   */
+  async getMachineEvents(appId: bigint, limit = 50, offset = 0, searchTerm?: string): Promise<{ events: PlayerSpin[], hasMore: boolean, total?: number }> {
+    return this.withErrorHandling('getMachineEvents', async () => {
+      // Ensure service is initialized
+      if (!supabaseService.isReady()) {
+        await supabaseService.initialize();
+      }
+      const client = supabaseService.getClient();
+      
+      // Build query for hov_events table with search support
+      let query = client
+        .from('hov_events')
+        .select('*', { count: 'exact' })
+        .eq('app_id', appId.toString())
+        .gt('payout', 0);
+
+      // Add search filters if search term provided
+      if (searchTerm && searchTerm.trim()) {
+        const term = searchTerm.trim();
+        
+        // Build search conditions
+        const searchConditions = [
+          `who.ilike.%${term}%`,
+          `txid.ilike.%${term}%`
+        ];
+        
+        // Try to convert transaction ID for database search (database stores as hex-encoded ASCII)
+        try {
+          // If it looks like a base32 transaction ID, convert to hex-encoded ASCII for database search
+          if (/^[A-Z2-7]{52}$/.test(term.toUpperCase())) {
+            // Convert base32 string to hex-encoded ASCII bytes
+            const hexTxid = Array.from(term.toUpperCase())
+              .map(char => char.charCodeAt(0).toString(16).padStart(2, '0'))
+              .join('').toUpperCase();
+            searchConditions.push(`txid.ilike.%${hexTxid}%`);
+          }
+          // For partial base32 searches, convert each character to hex
+          else if (/^[A-Z2-7]+$/.test(term.toUpperCase()) && term.length >= 3) {
+            const hexTxid = Array.from(term.toUpperCase())
+              .map(char => char.charCodeAt(0).toString(16).padStart(2, '0'))
+              .join('').toUpperCase();
+            searchConditions.push(`txid.ilike.%${hexTxid}%`);
+          }
+        } catch (e) {
+          // If any conversion fails, just use the original term
+          console.log('Transaction ID conversion failed:', e);
+        }
+        
+        // Search by numeric values (rounds and amounts)
+        if (/^\d+(\.\d+)?$/.test(term)) {
+          const numericValue = parseFloat(term);
+          
+          // Search by round (if it's a whole number)
+          if (Number.isInteger(numericValue)) {
+            searchConditions.push(`round.eq.${Math.floor(numericValue)}`);
+          }
+          
+          // Search by amount in microVOI (convert VOI to microVOI)
+          const amountInMicroVoi = Math.floor(numericValue * 1000000);
+          searchConditions.push(`amount.eq.${amountInMicroVoi}`);
+          searchConditions.push(`payout.eq.${amountInMicroVoi}`);
+        }
+        
+        console.log('Search conditions:', searchConditions);
+        query = query.or(searchConditions.join(','));
+      }
+
+      // Apply ordering and pagination
+      query = query
+        .order('round', { ascending: false })
+        .order('intra', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      const { data, error, count } = await query;
+
+      if (error) throw error;
+
+      const events = (data || []).map(row => ({
+        round: BigInt(row.round),
+        intra: row.intra,
+        txid: row.txid,
+        bet_amount_per_line: BigInt(row.amount), // amount is the bet amount
+        paylines_count: Number(row.max_payline_index) + 1, // max_payline_index is 0-based
+        total_bet_amount: BigInt(row.amount * (Number(row.max_payline_index) + 1)),
+        payout: BigInt(row.payout || 0),
+        net_result: BigInt((row.payout || 0) - (row.amount * (Number(row.max_payline_index) + 1))),
+        is_win: (row.payout || 0) > 0,
+        claim_round: BigInt(row.claim_round),
+        created_at: new Date(row.created_at),
+        who: row.who // Add the player address
+      }));
+
+      // Determine if there are more results
+      const hasMore = events.length === limit && (count === null || offset + limit < count);
+
+      return {
+        events,
+        hasMore,
+        total: count || undefined
+      };
     });
   }
 
@@ -626,6 +741,55 @@ class HovStatsService {
   }
 
   /**
+   * Get machine analytics
+   */
+  async getMachineAnalytics(params: GetMachineAnalyticsParams): Promise<MachineAnalytics[]> {
+    const cacheKey = `machine_analytics_${params.p_machine_app_id}_${params.p_ybt_app_id}`;
+    
+    // Check cache first
+    const cached = this.caches.machineAnalytics.get(cacheKey);
+    if (cached) return cached;
+
+    return this.withErrorHandling('getMachineAnalytics', async () => {
+      // Ensure service is initialized
+      if (!supabaseService.isReady()) {
+        await supabaseService.initialize();
+      }
+      const client = supabaseService.getClient();
+      const { data, error } = await client.rpc('get_machine_analytics', {
+        p_machine_app_id: params.p_machine_app_id.toString(),
+        p_ybt_app_id: params.p_ybt_app_id.toString()
+      });
+
+      if (error) throw error;
+
+      // The RPC returns data as a direct array
+      const analyticsData = data || [];
+      
+      const result = analyticsData.map((row: any) => ({
+        day: row.day,
+        total_bets: BigInt(row.total_bets),
+        total_payouts: BigInt(row.total_payouts),
+        total_house_pl: BigInt(row.total_house_pl),
+        unique_users: Number(row.unique_users),
+        daily_net_flow: BigInt(row.daily_net_flow),
+        escrow_balance: BigInt(row.escrow_balance),
+        daily_apr_percent: Number(row.daily_apr_percent),
+        trailing_apr_percent: Number(row.trailing_apr_percent),
+        days_available: Number(row.days_available),
+        sum_total_house_pl: BigInt(row.sum_total_house_pl),
+        avg_total_balance: Number(row.avg_total_balance),
+        total_return_percent: Number(row.total_return_percent)
+      }));
+
+      // Cache the result
+      this.caches.machineAnalytics.set(cacheKey, result);
+      
+      return result;
+    });
+  }
+
+  /**
    * Refresh materialized views (leaderboard cache)
    */
   async refreshLeaderboard(): Promise<void> {
@@ -668,7 +832,7 @@ class HovStatsService {
   /**
    * Clear specific cache sections
    */
-  clearSpecificCache(section: 'platformStats' | 'leaderboard' | 'playerStats' | 'timeStats'): void {
+  clearSpecificCache(section: 'platformStats' | 'leaderboard' | 'playerStats' | 'timeStats' | 'machineAnalytics'): void {
     this.caches[section].clear();
   }
 

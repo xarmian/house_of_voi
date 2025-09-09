@@ -9,6 +9,7 @@
   import WalletSetupGateway from '../wallet/WalletSetupGateway.svelte';
   import { balanceManager } from '$lib/services/balanceManager';
   import type algosdk from 'algosdk';
+  import { themeStore } from '$lib/stores/theme';
   
   export let selectedSource: 'gaming' | 'external' = 'external';
   export let algodClient: algosdk.Algodv2;

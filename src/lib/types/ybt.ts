@@ -7,6 +7,20 @@ export interface YBTState {
   lastUpdated: number | null;
 }
 
+export interface YBTStateWithTransfers extends YBTState {
+  transfersLoading: boolean;
+  transfersError: string | null;
+  profitLoss: {
+    totalDeposited: bigint;
+    totalWithdrawn: bigint;
+    netDeposited: bigint;
+    currentPortfolioValue: bigint;
+    profitLoss: bigint;
+    profitLossPercentage: number;
+    isProfit: boolean;
+  } | null;
+}
+
 export interface YBTGlobalState {
   totalSupply: bigint;
   name: string;

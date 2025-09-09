@@ -156,16 +156,24 @@ function createQueueStore() {
         const wasReserved = needsReservedFunds(oldStatus);
         const shouldBeReserved = needsReservedFunds(spinUpdate.status);
         
-        // **NO AUTOMATIC RELEASE**: The balance manager will handle releasing funds when balance updates
-        // Only handle reserving funds for new spins
+        // Handle reserved funds for spin status changes
         if (!wasReserved && shouldBeReserved) {
           // Spin now needs reserved funds - reserve them
           const reservedAmount = newSpin.totalBet;
           totalReservedBalance += reservedAmount;
           console.log(`💰 RESERVING funds: ${(reservedAmount / 1000000).toFixed(6)} VOI for spin ${spin.id.slice(-8)}. Total reserved now: ${(totalReservedBalance / 1000000).toFixed(6)} VOI`);
         } else if (wasReserved && !shouldBeReserved) {
-          // Spin no longer needs reserved funds - but let balance manager handle the release
-          console.log(`⏳ Spin ${spin.id.slice(-8)} no longer needs reserved funds (${oldStatus} → ${spinUpdate.status}) - letting balance manager handle release`);
+          // Spin no longer needs reserved funds
+          const releaseAmount = spin.totalBet;
+          
+          // For failed/expired spins, immediately release reserved funds since no blockchain transaction occurred
+          if ([SpinStatus.FAILED, SpinStatus.EXPIRED].includes(spinUpdate.status)) {
+            totalReservedBalance = Math.max(0, totalReservedBalance - releaseAmount);
+            console.log(`💸 RELEASING reserved funds: ${(releaseAmount / 1000000).toFixed(6)} VOI for FAILED/EXPIRED spin ${spin.id.slice(-8)}. Total reserved now: ${(totalReservedBalance / 1000000).toFixed(6)} VOI`);
+          } else {
+            // For other status changes (e.g., WAITING, PROCESSING), let balance manager handle when blockchain deduction occurs
+            console.log(`⏳ Spin ${spin.id.slice(-8)} no longer needs reserved funds (${oldStatus} → ${spinUpdate.status}) - letting balance manager handle release`);
+          }
         }
 
         const newSpins = [...state.spins];
