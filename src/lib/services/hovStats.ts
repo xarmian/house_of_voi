@@ -404,6 +404,111 @@ class HovStatsService {
   }
 
   /**
+   * Get machine events (wins) with pagination and search
+   */
+  async getMachineEvents(appId: bigint, limit = 50, offset = 0, searchTerm?: string): Promise<{ events: PlayerSpin[], hasMore: boolean, total?: number }> {
+    return this.withErrorHandling('getMachineEvents', async () => {
+      // Ensure service is initialized
+      if (!supabaseService.isReady()) {
+        await supabaseService.initialize();
+      }
+      const client = supabaseService.getClient();
+      
+      // Build query for hov_events table with search support
+      let query = client
+        .from('hov_events')
+        .select('*', { count: 'exact' })
+        .eq('app_id', appId.toString())
+        .gt('payout', 0);
+
+      // Add search filters if search term provided
+      if (searchTerm && searchTerm.trim()) {
+        const term = searchTerm.trim();
+        
+        // Build search conditions
+        const searchConditions = [
+          `who.ilike.%${term}%`,
+          `txid.ilike.%${term}%`
+        ];
+        
+        // Try to convert transaction ID for database search (database stores as hex-encoded ASCII)
+        try {
+          // If it looks like a base32 transaction ID, convert to hex-encoded ASCII for database search
+          if (/^[A-Z2-7]{52}$/.test(term.toUpperCase())) {
+            // Convert base32 string to hex-encoded ASCII bytes
+            const hexTxid = Array.from(term.toUpperCase())
+              .map(char => char.charCodeAt(0).toString(16).padStart(2, '0'))
+              .join('').toUpperCase();
+            searchConditions.push(`txid.ilike.%${hexTxid}%`);
+          }
+          // For partial base32 searches, convert each character to hex
+          else if (/^[A-Z2-7]+$/.test(term.toUpperCase()) && term.length >= 3) {
+            const hexTxid = Array.from(term.toUpperCase())
+              .map(char => char.charCodeAt(0).toString(16).padStart(2, '0'))
+              .join('').toUpperCase();
+            searchConditions.push(`txid.ilike.%${hexTxid}%`);
+          }
+        } catch (e) {
+          // If any conversion fails, just use the original term
+          console.log('Transaction ID conversion failed:', e);
+        }
+        
+        // Search by numeric values (rounds and amounts)
+        if (/^\d+(\.\d+)?$/.test(term)) {
+          const numericValue = parseFloat(term);
+          
+          // Search by round (if it's a whole number)
+          if (Number.isInteger(numericValue)) {
+            searchConditions.push(`round.eq.${Math.floor(numericValue)}`);
+          }
+          
+          // Search by amount in microVOI (convert VOI to microVOI)
+          const amountInMicroVoi = Math.floor(numericValue * 1000000);
+          searchConditions.push(`amount.eq.${amountInMicroVoi}`);
+          searchConditions.push(`payout.eq.${amountInMicroVoi}`);
+        }
+        
+        console.log('Search conditions:', searchConditions);
+        query = query.or(searchConditions.join(','));
+      }
+
+      // Apply ordering and pagination
+      query = query
+        .order('round', { ascending: false })
+        .order('intra', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      const { data, error, count } = await query;
+
+      if (error) throw error;
+
+      const events = (data || []).map(row => ({
+        round: BigInt(row.round),
+        intra: row.intra,
+        txid: row.txid,
+        bet_amount_per_line: BigInt(row.amount), // amount is the bet amount
+        paylines_count: Number(row.max_payline_index) + 1, // max_payline_index is 0-based
+        total_bet_amount: BigInt(row.amount * (Number(row.max_payline_index) + 1)),
+        payout: BigInt(row.payout || 0),
+        net_result: BigInt((row.payout || 0) - (row.amount * (Number(row.max_payline_index) + 1))),
+        is_win: (row.payout || 0) > 0,
+        claim_round: BigInt(row.claim_round),
+        created_at: new Date(row.created_at),
+        who: row.who // Add the player address
+      }));
+
+      // Determine if there are more results
+      const hasMore = events.length === limit && (count === null || offset + limit < count);
+
+      return {
+        events,
+        hasMore,
+        total: count || undefined
+      };
+    });
+  }
+
+  /**
    * Get player rank
    */
   async getPlayerRank(params: GetPlayerRankParams): Promise<PlayerRank> {

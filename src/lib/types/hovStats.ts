@@ -109,6 +109,7 @@ export interface PlayerSpin {
   is_win: boolean;
   claim_round: bigint;
   created_at: Date;
+  who?: string; // Algorand address - optional for backwards compatibility
 }
 
 export interface PlayerRank {

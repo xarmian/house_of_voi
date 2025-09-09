@@ -12,6 +12,7 @@
   import YBTDashboard from '$lib/components/house/YBTDashboard.svelte';
   import YBTStats from '$lib/components/house/YBTStats.svelte';
   import WalletSourceSelector from '$lib/components/house/WalletSourceSelector.svelte';
+  import MachineHistory from '$lib/components/house/MachineHistory.svelte';
   import ContractSelector from '$lib/components/contract/ContractSelector.svelte';
   import ContractSwitcher from '$lib/components/contract/ContractSwitcher.svelte';
   // import OddsAnalysis from '$lib/components/analytics/OddsAnalysis.svelte';
@@ -21,7 +22,7 @@
   import algosdk from 'algosdk';
   import { hovStatsStore, platformStats, connectionStatus, timeStats } from '$lib/stores/hovStats';
   import { formatVOI } from '$lib/constants/betting';
-  import { BarChart3, TrendingUp, Users, Coins, Target, Zap, Clock, Crown, Wallet, Trophy, PieChart, AlertTriangle } from 'lucide-svelte';
+  import { BarChart3, TrendingUp, Users, Coins, Target, Zap, Clock, Crown, Wallet, Trophy, PieChart, AlertTriangle, History } from 'lucide-svelte';
   import { PUBLIC_WALLETCONNECT_PROJECT_ID } from '$env/static/public';
   import { isMaintenanceMode, maintenanceModeMessage } from '$lib/stores/maintenanceMode';
   import { 
@@ -304,6 +305,14 @@
                   <span class="sm:hidden text-xs">Leaders</span>
                 </button>
                 <button 
+                  class="tab-button {activeTab === 'history' ? 'active' : ''}" 
+                  on:click={() => activeTab = 'history'}
+                >
+                  <History class="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span class="hidden sm:inline">History</span>
+                  <span class="sm:hidden text-xs">Wins</span>
+                </button>
+                <button 
                   class="tab-button {activeTab === 'analytics' ? 'active' : ''}" 
                   on:click={() => activeTab = 'analytics'}
                 >
@@ -496,7 +505,17 @@
                     <Crown class="w-5 h-5 text-yellow-400" />
                     <h2 class="text-lg font-bold text-theme">Top Players</h2>
                   </div>
-                  <Leaderboard compact={false} showPlayerHighlight={anyWalletConnected} contractId={BigInt($selectedContract?.slotMachineAppId || 0)} />
+                  <Leaderboard compact={false} showPlayerHighlight={anyWalletConnected} contractId={$selectedContract?.slotMachineAppId ? BigInt($selectedContract.slotMachineAppId) : 0n} />
+                </div>
+              </div>
+              
+              <!-- History Tab -->
+              <div class:hidden={activeTab !== 'history'}>
+                <div class="card p-4">
+                  <MachineHistory 
+                    appId={$selectedContract?.slotMachineAppId ? BigInt($selectedContract.slotMachineAppId) : 0n} 
+                    compact={false}
+                  />
                 </div>
               </div>
               
