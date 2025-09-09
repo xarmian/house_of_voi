@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, createEventDispatcher } from 'svelte';
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { fly, fade } from 'svelte/transition';
   import { 
     History,
@@ -15,6 +15,7 @@
     Users
   } from 'lucide-svelte';
   import { hovStatsService } from '$lib/services/hovStats';
+  import { supabaseService } from '$lib/services/supabase';
   import { BLOCKCHAIN_CONFIG } from '$lib/constants/network';
   import { formatVOI } from '$lib/constants/betting';
   import { ensureBase32TxId, formatTxIdForDisplay } from '$lib/utils/transactionUtils';
@@ -39,6 +40,9 @@
   let totalEvents = 0;
   let searchTimeout: NodeJS.Timeout | null = null;
   let pageInputValue = '1';
+  let realtimeUnsubscribe: (() => void) | null = null;
+  let isInitialized = false;
+  let highlightedTxids = new Set<string>(); // Track highlighted rows
 
   // Computed values  
   $: totalPages = totalEvents ? Math.ceil(totalEvents / pageSize) : 0;
@@ -48,18 +52,23 @@
   // Update page input when currentPage changes
   $: pageInputValue = (currentPage + 1).toString();
 
-  // Search handling with debouncing
-  $: if (searchTerm !== undefined) {
+  // Search handling with debouncing - only after initialization
+  let lastSearchTerm: string | undefined = undefined;
+  $: if (isInitialized && searchTerm !== lastSearchTerm) {
+    lastSearchTerm = searchTerm;
     handleSearchChange(searchTerm);
   }
 
-  // Reload when page changes
-  $: if (currentPage !== undefined && appId && appId > 0n) {
+  // Reload when page changes - only after initialization and when page actually changes
+  let lastCurrentPage: number | null = null;
+  $: if (isInitialized && currentPage !== lastCurrentPage && currentPage !== 0 && appId && appId > 0n) {
+    lastCurrentPage = currentPage;
     loadEventsForPageChange();
   }
 
   async function loadEventsForPageChange() {
     if (loading) return; // Prevent duplicate calls
+    
     try {
       loading = true;
       await loadEvents();
@@ -76,17 +85,141 @@
   $: biggestWin = events.length > 0 ? Math.max(...events.map(e => Number(e.payout))) : 0;
   $: averageWin = totalWins > 0 ? totalPayouts / totalWins : 0;
 
-  onMount(() => {
+  onMount(async () => {
     if (appId && appId > 0n) {
-      loadInitialData();
+      // Initialize tracking variables to current state to prevent reactive triggers
+      lastSearchTerm = searchTerm;
+      lastCurrentPage = currentPage;
+      lastAppId = appId;
+      
+      await loadInitialData();
+      setupRealtimeSubscription();
     }
+    // Mark as initialized AFTER initial load completes to prevent reactive statement cascades
+    isInitialized = true;
   });
 
-  // Reload when app ID changes
+  onDestroy(() => {
+    cleanupRealtimeSubscription();
+  });
+
+  // Reload when app ID changes - only after initialization and when app actually changes
   let lastAppId: bigint | null = null;
-  $: if (appId !== lastAppId && appId && appId > 0n) {
+  $: if (isInitialized && appId !== lastAppId && appId && appId > 0n) {
     lastAppId = appId;
+    // Reset state for new app
+    currentPage = 0;
+    lastCurrentPage = 0; // Reset page tracking too
+    events = [];
+    totalEvents = 0;
+    error = null;
+    highlightedTxids.clear(); // Clear highlights when switching apps
+    // Load data and setup subscription for new app ID
     loadInitialData();
+    cleanupRealtimeSubscription();
+    setupRealtimeSubscription();
+  }
+
+  async function setupRealtimeSubscription() {
+    if (!appId || appId === 0n) return;
+    
+    try {
+      // Ensure Supabase is properly initialized (this was previously done by winFeedStore)
+      if (!supabaseService.isReady()) {
+        console.log('Initializing Supabase service for real-time subscription...');
+        await supabaseService.initialize();
+      }
+
+      // Add a small delay to ensure the connection is fully established
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Subscribe to real-time events for this specific app - receive ALL wins (payout > 0) regardless of amount
+      realtimeUnsubscribe = supabaseService.subscribe(
+        'hov_events',
+        (payload) => {
+          if (payload.eventType === 'UPDATE' && payload.new && payload.new.payout > 0) {
+            handleRealtimeWinEvent(payload.new);
+          }
+        },
+        `app_id=eq.${appId.toString()}`
+      );
+
+      console.log(`✅ Real-time subscription setup for app ${appId}`);
+    } catch (error) {
+      console.error('Failed to setup real-time subscription:', error);
+    }
+  }
+
+  function cleanupRealtimeSubscription() {
+    if (realtimeUnsubscribe) {
+      realtimeUnsubscribe();
+      realtimeUnsubscribe = null;
+      console.log('Real-time subscription cleaned up');
+    }
+  }
+
+  function handleRealtimeWinEvent(eventData: any) {
+    try {
+      // Convert raw event data to PlayerSpin format
+      const newEvent: PlayerSpin = {
+        round: BigInt(eventData.round || 0),
+        intra: eventData.intra || 0,
+        txid: eventData.txid || '',
+        bet_amount_per_line: BigInt(eventData.amount || 0),
+        paylines_count: Number(eventData.max_payline_index || 0) + 1,
+        total_bet_amount: BigInt((eventData.amount || 0) * (Number(eventData.max_payline_index || 0) + 1)),
+        payout: BigInt(eventData.payout || 0),
+        net_result: BigInt((eventData.payout || 0) - ((eventData.amount || 0) * (Number(eventData.max_payline_index || 0) + 1))),
+        is_win: (eventData.payout || 0) > 0,
+        claim_round: BigInt(eventData.claim_round || 0),
+        created_at: new Date(eventData.created_at || eventData.updated_at || Date.now()),
+        who: eventData.who || ''
+      };
+
+      // Only add if it matches current search term (if any)
+      if (searchTerm && searchTerm.trim()) {
+        const term = searchTerm.trim().toLowerCase();
+        const matchesSearch = 
+          newEvent.who.toLowerCase().includes(term) ||
+          newEvent.txid.toLowerCase().includes(term) ||
+          newEvent.round.toString().includes(term) ||
+          (Number(newEvent.payout) / 1000000).toString().includes(term);
+        
+        if (!matchesSearch) return;
+      }
+
+      // Only add to current page if we're on the first page
+      if (currentPage === 0) {
+        // Check if event already exists (prevent duplicates)
+        const existsIndex = events.findIndex(e => e.txid === newEvent.txid);
+        if (existsIndex === -1) {
+          // Add to beginning of events array (newest first)
+          events = [newEvent, ...events].slice(0, pageSize);
+          totalEvents = totalEvents + 1;
+          
+          // Highlight the new row
+          highlightedTxids.add(newEvent.txid);
+          highlightedTxids = highlightedTxids; // Trigger reactivity
+          
+          // Remove highlight after 4 seconds
+          setTimeout(() => {
+            highlightedTxids.delete(newEvent.txid);
+            highlightedTxids = highlightedTxids; // Trigger reactivity
+          }, 4000);
+          
+          console.log('New win event added:', {
+            txid: newEvent.txid,
+            payout: Number(newEvent.payout) / 1000000,
+            who: newEvent.who
+          });
+        }
+      } else {
+        // Just update the total count if not on first page
+        totalEvents = totalEvents + 1;
+      }
+    } catch (error) {
+      console.error('Error handling real-time win event:', error);
+    }
   }
 
   async function loadInitialData() {
@@ -120,6 +253,9 @@
   }
 
   function handleSearchChange(newSearchTerm: string) {
+    // Don't trigger on initial empty search term
+    if (!isInitialized) return;
+    
     if (searchTimeout) {
       clearTimeout(searchTimeout);
     }
@@ -364,8 +500,8 @@
           {:else}
             {#each events as event, i (event.txid)}
             <div 
-              class="event-item" 
-              transition:fly={{ y: 20, duration: 300, delay: i * 50 }}
+              class="event-item {highlightedTxids.has(event.txid) ? 'highlighted-new' : ''}" 
+              transition:fly={{ y: -30, duration: 400, delay: highlightedTxids.has(event.txid) ? 0 : i * 50 }}
             >
               <!-- Mobile layout -->
               <div class="mobile-event-item md:hidden">
@@ -633,6 +769,26 @@
 
   .event-item {
     @apply bg-slate-700/30 rounded-lg p-4 border border-slate-600/50 hover:bg-slate-700/50 transition-colors;
+  }
+
+  .highlighted-new {
+    @apply bg-gradient-to-r from-green-500/20 to-voi-500/20 border-green-400/60 shadow-lg;
+    animation: highlightPulse 4s ease-out forwards;
+  }
+
+  @keyframes highlightPulse {
+    0% {
+      @apply bg-gradient-to-r from-green-400/40 to-voi-400/40 border-green-400 shadow-xl;
+      transform: scale(1.02);
+    }
+    15% {
+      @apply bg-gradient-to-r from-green-400/30 to-voi-400/30 border-green-400/80;
+      transform: scale(1.01);
+    }
+    100% {
+      @apply bg-slate-700/30 border-slate-600/50;
+      transform: scale(1);
+    }
   }
 
   .mobile-event-item {

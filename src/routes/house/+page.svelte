@@ -41,6 +41,15 @@
   let activeTab = 'portfolio';
   let selectedWalletSource: 'gaming' | 'external' = 'external';
   let isSelectedWalletLocked = false;
+  
+  // Lazy loading flags for tabs
+  let historyTabViewed = false;
+  let leaderboardTabViewed = false;
+  
+  // Track when tabs are viewed for lazy loading
+  $: if (activeTab === 'history') historyTabViewed = true;
+  $: if (activeTab === 'leaderboard') leaderboardTabViewed = true;
+  
   $: viewingAddress = selectedWalletSource === 'external' 
     ? ($selectedWallet?.address || null)
     : ($walletStore.account?.address || (isSelectedWalletLocked ? (browser && walletService.hasStoredWallet() ? walletService.getStoredWalletAddress() : null) : null));
@@ -498,24 +507,42 @@
                 </div>
               </div>
               
-              <!-- Public Leaderboard -->
+              <!-- Public Leaderboard - Lazy Loaded -->
               <div class:hidden={activeTab !== 'leaderboard'}>
                 <div class="card p-4">
                   <div class="flex items-center gap-2 mb-4">
                     <Crown class="w-5 h-5 text-yellow-400" />
                     <h2 class="text-lg font-bold text-theme">Top Players</h2>
                   </div>
-                  <Leaderboard compact={false} showPlayerHighlight={anyWalletConnected} contractId={$selectedContract?.slotMachineAppId ? BigInt($selectedContract.slotMachineAppId) : 0n} />
+                  {#if leaderboardTabViewed}
+                    <Leaderboard compact={false} showPlayerHighlight={anyWalletConnected} contractId={$selectedContract?.slotMachineAppId ? BigInt($selectedContract.slotMachineAppId) : 0n} />
+                  {:else}
+                    <div class="flex items-center justify-center py-8">
+                      <div class="text-center">
+                        <Crown class="w-8 h-8 text-gray-500 mx-auto mb-2" />
+                        <p class="text-gray-400">Loading leaderboard...</p>
+                      </div>
+                    </div>
+                  {/if}
                 </div>
               </div>
               
-              <!-- History Tab -->
+              <!-- History Tab - Lazy Loaded -->
               <div class:hidden={activeTab !== 'history'}>
                 <div class="card p-4">
-                  <MachineHistory 
-                    appId={$selectedContract?.slotMachineAppId ? BigInt($selectedContract.slotMachineAppId) : 0n} 
-                    compact={false}
-                  />
+                  {#if historyTabViewed}
+                    <MachineHistory 
+                      appId={$selectedContract?.slotMachineAppId ? BigInt($selectedContract.slotMachineAppId) : 0n} 
+                      compact={false}
+                    />
+                  {:else}
+                    <div class="flex items-center justify-center py-8">
+                      <div class="text-center">
+                        <History class="w-8 h-8 text-gray-500 mx-auto mb-2" />
+                        <p class="text-gray-400">Loading machine history...</p>
+                      </div>
+                    </div>
+                  {/if}
                 </div>
               </div>
               
