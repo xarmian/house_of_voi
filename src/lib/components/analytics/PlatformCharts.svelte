@@ -588,8 +588,8 @@
               yAxisID: 'y'
             },
             {
-              label: 'Trailing APY (%)',
-              data: sortedData.map(item => item.trailing_apy_percent),
+              label: 'Trailing APR (%)',
+              data: sortedData.map(item => item.trailing_apr_percent),
               type: 'line',
               borderColor: colors.secondary,
               backgroundColor: 'rgba(96, 165, 250, 0.1)',
@@ -640,12 +640,12 @@
                   if (context.dataset.label === 'Daily P/L (VOI)') {
                     return [
                       `Daily P/L: ${formatVOI(Number(dataPoint.total_house_pl))} VOI`,
-                      `Daily APY: ${dataPoint.daily_apy_percent.toFixed(1)}%`,
+                      `Daily APR: ${dataPoint.daily_apr_percent.toFixed(1)}%`,
                       `Volume: ${formatVOI(Number(dataPoint.total_bets))} VOI`,
                     ];
                   } else {
                     return [
-                      `Trailing APY: ${dataPoint.trailing_apy_percent.toFixed(1)}%`,
+                      `Trailing APR: ${dataPoint.trailing_apr_percent.toFixed(1)}%`,
                       `Total Return: ${dataPoint.total_return_percent.toFixed(2)}%`,
                       `House Balance: ${formatVOI(Number(dataPoint.escrow_balance))} VOI`
                     ];
@@ -698,7 +698,7 @@
               },
               title: {
                 display: true,
-                text: 'Trailing APY (%)',
+                text: 'Trailing APR (%)',
                 color: colors.text
               }
             }

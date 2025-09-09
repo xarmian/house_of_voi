@@ -259,8 +259,8 @@ export interface MachineAnalytics {
   unique_users: number;
   daily_net_flow: bigint;
   escrow_balance: bigint;
-  daily_apy_percent: number;
-  trailing_apy_percent: number;
+  daily_apr_percent: number;
+  trailing_apr_percent: number;
   days_available: number;
   sum_total_house_pl: bigint;
   avg_total_balance: number;
