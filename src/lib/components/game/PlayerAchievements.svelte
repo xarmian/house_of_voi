@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { Award, Star, Lock, Trophy, Target, Crown, Zap, Medal, Gift, Check, AlertCircle, Loader2 } from 'lucide-svelte';
-	import { achievementsStore, claimingInProgress, achievementsLoading, achievementsError } from '$lib/stores/achievements';
+	import { achievementsStore, claimingInProgress, achievementsLoading, achievementsError, nextAchievementProgress } from '$lib/stores/achievements';
+	import { formatProgress, isNearCompletion, getProgressColor, getSeriesCompletionWithProgress } from '$lib/utils/achievementProgress';
 	import type { Achievement, AchievementFilter } from '$lib/types/achievements';
 
 	export let playerAddress: string;
@@ -146,8 +147,8 @@
 
 	function getSeriesCompletionRate(achievements: Achievement[]): number {
 		if (achievements.length === 0) return 0;
-		const ownedCount = achievements.filter(a => a.owned).length;
-		return Math.round((ownedCount / achievements.length) * 100);
+		const completionRate = getSeriesCompletionWithProgress(achievements);
+		return Math.round(completionRate * 100);
 	}
 
 	function getAchievementIcon(achievement: Achievement) {
@@ -378,6 +379,7 @@
 					{@const seriesName = achievements[0]?.display?.series || 'Standalone Achievements'}
 					{@const progress = getTierProgress(achievements)}
 					{@const completionRate = getSeriesCompletionRate(achievements)}
+					{@const nextProgressInfo = $nextAchievementProgress.get(seriesKey)}
 					
 					<div class="series-track">
 						<div class="series-header">
@@ -395,6 +397,25 @@
 								</div>
 							</div>
 						</div>
+
+						<!-- Next Achievement Highlight -->
+						{#if nextProgressInfo}
+							<div class="next-achievement-highlight">
+								<div class="next-achievement-label">
+									<Target class="w-4 h-4" />
+									Next Achievement: {nextProgressInfo.achievement.name}
+								</div>
+								<div class="next-achievement-progress">
+									<span class="next-progress-text">{formatProgress(nextProgressInfo.progress)} complete</span>
+									<div class="next-progress-bar">
+										<div 
+											class="next-progress-fill" 
+											style="width: {nextProgressInfo.progress * 100}%; background-color: {getProgressColor(nextProgressInfo.progress)}"
+										></div>
+									</div>
+								</div>
+							</div>
+						{/if}
 						
 						<div class="achievement-path">
 							<div class="progression-line"></div>
@@ -402,13 +423,44 @@
 								{@const IconComponent = getAchievementIcon(achievement)}
 								{@const rarityColor = getRarityColor(achievement.display?.rarity)}
 								{@const isNextToEarn = !achievement.owned && (index === 0 || achievements[index - 1]?.owned)}
-				{@const isEligible = achievement.eligible && !achievement.owned}
+								{@const isEligible = achievement.eligible && !achievement.owned}
+								{@const isNextEligible = nextProgressInfo?.achievement.id === achievement.id}
+								{@const hasProgress = isNextEligible && typeof achievement.progress === 'number' && achievement.progress > 0}
+								{@const progressPercentage = hasProgress ? achievement.progress * 100 : 0}
+								{@const progressColor = hasProgress ? getProgressColor(achievement.progress) : '#6b7280'}
 								
 								<div class="achievement-milestone" class:owned={achievement.owned} class:next-to-earn={isNextToEarn} class:eligible={isEligible}>
 									<div class="milestone-connector" class:completed={achievement.owned}></div>
 									
 									<div class="milestone-achievement">
 										<div class="achievement-badge" role="button" tabindex="0" on:click={() => showAchievementModal(achievement)} on:keydown={(e) => e.key === 'Enter' && showAchievementModal(achievement)}>
+											<!-- Progress Ring for achievements with progress -->
+											{#if hasProgress && !achievement.owned}
+												<svg class="progress-ring" viewBox="0 0 100 100">
+													<circle
+														cx="50"
+														cy="50"
+														r="40"
+														stroke="rgba(255, 255, 255, 0.2)"
+														stroke-width="6"
+														fill="none"
+													/>
+													<circle
+														cx="50"
+														cy="50"
+														r="40"
+														stroke={progressColor}
+														stroke-width="6"
+														fill="none"
+														stroke-dasharray="251.33"
+														stroke-dashoffset={251.33 - (progressPercentage / 100) * 251.33}
+														transform="rotate(-90 50 50)"
+														class="progress-circle"
+														class:near-complete={isNearCompletion(achievement.progress)}
+													/>
+												</svg>
+											{/if}
+											
 											{#if achievement.imageUrl}
 												<img 
 													src={achievement.imageUrl} 
@@ -442,8 +494,15 @@
 										
 										<div class="achievement-details">
 											<h3 class="milestone-name">{achievement.name}</h3>
-											<p class="milestone-description">{achievement.description}</p>
 											
+											{#if hasProgress && !achievement.owned && !achievement.eligible}
+												<div class="progress-text" style="color: {progressColor}">
+													{formatProgress(achievement.progress)} complete
+												</div>
+											{/if}
+
+											<p class="milestone-description">{achievement.description}</p>
+
 											{#if achievement.display?.tags && achievement.display.tags.length > 0}
 												<div class="milestone-tags">
 													{#each achievement.display.tags.slice(0, 2) as tag}
@@ -569,6 +628,14 @@
 								{/if}
 								Claim Achievement
 							</button>
+						{:else if Array.from($nextAchievementProgress.values()).some(p => p.achievement.id === selectedAchievement.id) && typeof selectedAchievement.progress === 'number' && selectedAchievement.progress > 0}
+							<span class="status-progress">📈 {formatProgress(selectedAchievement.progress)} Complete</span>
+							<div class="modal-progress-bar">
+								<div 
+									class="modal-progress-fill" 
+									style="width: {selectedAchievement.progress * 100}%; background-color: {getProgressColor(selectedAchievement.progress)}"
+								></div>
+							</div>
 						{:else}
 							<span class="status-locked">🔒 Not Yet Earned</span>
 						{/if}
@@ -900,6 +967,58 @@
 		transition: width 0.5s ease;
 	}
 
+	/* Next Achievement Highlight */
+	.next-achievement-highlight {
+		background: rgba(168, 85, 247, 0.1);
+		border: 1px solid rgba(168, 85, 247, 0.3);
+		border-radius: 12px;
+		padding: 1rem;
+		margin: 1.5rem 0;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.next-achievement-label {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		color: #a855f7;
+		font-weight: 600;
+		font-size: 0.9rem;
+	}
+
+	.next-achievement-progress {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		flex: 1;
+		justify-content: flex-end;
+	}
+
+	.next-progress-text {
+		color: #e2e8f0;
+		font-size: 0.85rem;
+		font-weight: 500;
+		min-width: 80px;
+		text-align: right;
+	}
+
+	.next-progress-bar {
+		width: 120px;
+		height: 6px;
+		background: rgba(255, 255, 255, 0.1);
+		border-radius: 3px;
+		overflow: hidden;
+	}
+
+	.next-progress-fill {
+		height: 100%;
+		border-radius: 3px;
+		transition: width 0.5s ease;
+	}
+
 	/* Achievement Progression Path */
 	.achievement-path {
 		position: relative;
@@ -1009,6 +1128,41 @@
 		transform: scale(1.02);
 	}
 
+	/* Progress Ring Styles */
+	.progress-ring {
+		position: absolute;
+		top: -6px;
+		left: -6px;
+		width: calc(100% + 12px);
+		height: calc(100% + 12px);
+		z-index: 5;
+		pointer-events: none;
+	}
+
+	.progress-circle {
+		transition: stroke-dashoffset 0.5s ease, stroke 0.3s ease;
+	}
+
+	.progress-circle.near-complete {
+		animation: progress-pulse 2s infinite;
+	}
+
+	@keyframes progress-pulse {
+		0%, 100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.7;
+		}
+	}
+
+	.progress-text {
+		font-size: 0.65rem;
+		font-weight: 600;
+		text-align: center;
+		margin-bottom: 0.25rem;
+		letter-spacing: 0.025em;
+	}
 
 	.achievement-milestone.owned .achievement-badge {
 		filter: none;
@@ -1723,6 +1877,22 @@
 			width: 100%;
 		}
 
+		/* Next achievement highlight responsive */
+		.next-achievement-highlight {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0.75rem;
+		}
+
+		.next-achievement-progress {
+			justify-content: flex-start;
+			gap: 0.75rem;
+		}
+
+		.next-progress-bar {
+			flex: 1;
+		}
+
 		.achievement-path {
 			gap: 1rem;
 			padding: 1rem 0.5rem 2rem 0.5rem;
@@ -2095,6 +2265,28 @@
 		font-size: 1.1rem;
 		display: block;
 		margin-bottom: 1rem;
+	}
+
+	.status-progress {
+		color: #10b981;
+		font-weight: 600;
+		font-size: 1.1rem;
+		display: block;
+		margin-bottom: 1rem;
+	}
+
+	.modal-progress-bar {
+		width: 100%;
+		height: 8px;
+		background: rgba(255, 255, 255, 0.1);
+		border-radius: 4px;
+		overflow: hidden;
+	}
+
+	.modal-progress-fill {
+		height: 100%;
+		border-radius: 4px;
+		transition: width 0.5s ease;
 	}
 
 	.modal-claim-button {

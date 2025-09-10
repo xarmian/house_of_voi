@@ -8,6 +8,7 @@ export interface Achievement {
   game?: string;
   owned?: boolean;
   eligible?: boolean;
+  progress?: number;
   display?: {
     category?: string;
     series?: string;
@@ -67,6 +68,13 @@ export interface AchievementFilter {
   owned?: boolean;
   game?: string;
   seriesKey?: string;
+}
+
+export interface NextAchievementProgress {
+  achievement: Achievement;
+  progress: number;
+  category: string;
+  seriesKey: string;
 }
 
 export interface AchievementState {

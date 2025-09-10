@@ -1,12 +1,14 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
 import { achievementsService } from '$lib/services/achievements';
+import { getNextAchievementProgress } from '$lib/utils/achievementProgress';
 import type { 
   Achievement, 
   PlayerAchievement, 
   AchievementState, 
   AchievementFilter,
-  ClaimResult 
+  ClaimResult,
+  NextAchievementProgress
 } from '$lib/types/achievements';
 
 interface AchievementsStoreState extends AchievementState {
@@ -317,5 +319,13 @@ export const achievementsByCategory = derived(
     });
     
     return categories;
+  }
+);
+
+// Next achievement progress derived store
+export const nextAchievementProgress = derived(
+  achievementsStore,
+  $store => {
+    return getNextAchievementProgress($store.allAchievements);
   }
 );
