@@ -145,7 +145,7 @@
           <div class="text-sm">
             <p class="text-red-400 font-medium mb-1">Important Notice</p>
             <p class="text-red-300 leading-relaxed">
-              Auto Spin will automatically place bets using your current settings. You can stop auto spin at any time by clicking the "Stop Auto" button. Please gamble responsibly.
+              Auto Spin will automatically place bets using your current settings. You can stop auto spin at any time by clicking the "Stop Auto" button. Please play responsibly.
             </p>
           </div>
         </div>
