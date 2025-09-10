@@ -35,17 +35,17 @@
 
   let spinsChartCanvas: HTMLCanvasElement;
   let volumeChartCanvas: HTMLCanvasElement;
-  let winRateChartCanvas: HTMLCanvasElement;
+  let rtpChartCanvas: HTMLCanvasElement;
   let playersChartCanvas: HTMLCanvasElement;
   let machineAnalyticsChartCanvas: HTMLCanvasElement;
   
   let spinsChart: Chart | null = null;
   let volumeChart: Chart | null = null;
-  let winRateChart: Chart | null = null;
+  let rtpChart: Chart | null = null;
   let playersChart: Chart | null = null;
   let machineAnalyticsChart: Chart | null = null;
 
-  let activeTab: 'spins' | 'volume' | 'winrate' | 'players' | 'machine' = 'spins';
+  let activeTab: 'spins' | 'volume' | 'rtp' | 'players' | 'machine' = 'spins';
   let isRefreshing = false;
   let chartsInitialized = false;
 
@@ -82,7 +82,7 @@
 
   // Handle default tab selection based on available data
   $: {
-    const validTimeStatsTabs = ['spins', 'volume', 'winrate', 'players'];
+    const validTimeStatsTabs = ['spins', 'volume', 'rtp', 'players'];
     const validMachineTabs = ['machine'];
     const allValidTabs = [...validTimeStatsTabs, ...validMachineTabs];
     
@@ -145,9 +145,9 @@
       volumeChart.destroy();
       volumeChart = null;
     }
-    if (winRateChart) {
-      winRateChart.destroy();
-      winRateChart = null;
+    if (rtpChart) {
+      rtpChart.destroy();
+      rtpChart = null;
     }
     if (playersChart) {
       playersChart.destroy();
@@ -166,7 +166,7 @@
     }
 
     // Wait for canvas elements to be available
-    if (!spinsChartCanvas || !volumeChartCanvas || !winRateChartCanvas || !playersChartCanvas) {
+    if (!spinsChartCanvas || !volumeChartCanvas || !rtpChartCanvas || !playersChartCanvas) {
       console.log('Canvas elements not yet available');
       return;
     }
@@ -363,15 +363,19 @@
       });
     }
 
-    // Create Win Rate Chart
-    if (winRateChartCanvas) {
-      winRateChart = new Chart(winRateChartCanvas, {
+    // Create RTP Chart
+    if (rtpChartCanvas) {
+      rtpChart = new Chart(rtpChartCanvas, {
         type: 'line',
         data: {
           labels,
           datasets: [{
-            label: 'Win Rate (%)',
-            data: sortedData.map(item => Number(item.win_rate)),
+            label: 'RTP (%)',
+            data: sortedData.map(item => {
+              const totalBet = Number(item.total_amount_bet);
+              const totalWon = Number(item.total_amount_won);
+              return totalBet > 0 ? (totalWon / totalBet) * 100 : 0;
+            }),
             borderColor: colors.tertiary,
             backgroundColor: 'rgba(167, 139, 250, 0.1)',
             fill: true,
@@ -411,8 +415,11 @@
                 },
                 label: (context) => {
                   const dataPoint = sortedData[context.dataIndex];
+                  const totalBet = Number(dataPoint.total_amount_bet);
+                  const totalWon = Number(dataPoint.total_amount_won);
+                  const rtp = totalBet > 0 ? (totalWon / totalBet) * 100 : 0;
                   return [
-                    `Win Rate: ${context.parsed.y.toFixed(1)}%`,
+                    `RTP: ${rtp.toFixed(1)}%`,
                     `House Edge: ${Number(dataPoint.house_edge).toFixed(1)}%`,
                     `Total Spins: ${Number(dataPoint.total_bets).toLocaleString()}`,
                     `Volume: ${formatVOI(Number(dataPoint.total_amount_bet))} VOI`
@@ -443,8 +450,8 @@
                   return Number(value).toFixed(1) + '%';
                 }
               },
-              suggestedMin: 0,
-              suggestedMax: 100
+              suggestedMin: 80,
+              suggestedMax: 110
             }
           }
         }
@@ -763,12 +770,12 @@
           <span class="sm:hidden">Volume</span>
         </button>
         <button 
-          class="chart-tab-button {activeTab === 'winrate' ? 'active' : ''}" 
-          on:click={() => activeTab = 'winrate'}
+          class="chart-tab-button {activeTab === 'rtp' ? 'active' : ''}" 
+          on:click={() => activeTab = 'rtp'}
         >
           <BarChart3 class="w-4 h-4" />
-          <span class="hidden sm:inline">Win Rate</span>
-          <span class="sm:hidden">Win Rate</span>
+          <span class="hidden sm:inline">RTP %</span>
+          <span class="sm:hidden">RTP %</span>
         </button>
         <button 
           class="chart-tab-button {activeTab === 'players' ? 'active' : ''}" 
@@ -804,9 +811,9 @@
           <canvas bind:this={volumeChartCanvas} class="chart-canvas"></canvas>
         </div>
 
-        <!-- Win Rate Chart -->
-        <div class:hidden={activeTab !== 'winrate'} class="chart-wrapper">
-          <canvas bind:this={winRateChartCanvas} class="chart-canvas"></canvas>
+        <!-- RTP Chart -->
+        <div class:hidden={activeTab !== 'rtp'} class="chart-wrapper">
+          <canvas bind:this={rtpChartCanvas} class="chart-canvas"></canvas>
         </div>
 
         <!-- Players Chart -->
