@@ -339,6 +339,8 @@ class HovStatsService {
       first_bet_round: BigInt(Math.floor(Number(row.first_bet_round || 0))),
       last_bet_round: BigInt(Math.floor(Number(row.last_bet_round || 0))),
       days_active: Number(row.days_active || 0),
+      longest_streak_days: Number(row.longest_streak_days || 0),
+      current_streak_days: Number(row.current_streak_days || 0),
       profit_per_spin: Number(row.profit_per_spin || 0),
       rtp: Number(Number(row.total_amount_won) / Number(row.total_amount_bet) * 100 || 0)
     };

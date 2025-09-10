@@ -759,10 +759,12 @@ RETURNS TABLE(
     first_bet_round BIGINT,
     last_bet_round BIGINT,
     days_active INTEGER,
+    longest_streak INTEGER,
     profit_per_spin NUMERIC(20,2)
 ) AS $$
 DECLARE
     streak_data RECORD;
+    longest_streak_val INTEGER := 0;
 BEGIN
     -- Calculate winning and losing streaks
     WITH ordered_bets AS (
@@ -796,6 +798,24 @@ BEGIN
     INTO streak_data
     FROM max_streaks;
     
+    -- Calculate longest consecutive-day (UTC) activity streak
+    WITH active_days AS (
+        SELECT DISTINCT (date_trunc('day', bh.realtime AT TIME ZONE 'UTC'))::date AS day
+        FROM hov_events he
+        JOIN block_header bh ON he.round = bh.round
+        WHERE he.app_id = p_app_id AND he.who = p_player_address
+    ),
+    grouped AS (
+        SELECT day, (day - (ROW_NUMBER() OVER (ORDER BY day))::int) AS grp
+        FROM active_days
+    )
+    SELECT COALESCE(MAX(cnt), 0) INTO longest_streak_val
+    FROM (
+        SELECT COUNT(*) AS cnt
+        FROM grouped
+        GROUP BY grp
+    ) s;
+    
     RETURN QUERY
     SELECT 
         COUNT(*)::BIGINT as total_spins,
@@ -822,6 +842,7 @@ BEGIN
         MAX(round)::BIGINT as last_bet_round,
         -- Approximate days active (based on rounds, not actual days)
         GREATEST(1, (MAX(round) - MIN(round)) / 86400)::INTEGER as days_active,
+        longest_streak_val::INTEGER as longest_streak,
         ROUND(
             CASE WHEN COUNT(*) > 0 THEN 
                 SUM(COALESCE(payout, 0) - (amount * (max_payline_index + 1)))::NUMERIC / COUNT(*)::NUMERIC 

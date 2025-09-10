@@ -83,6 +83,7 @@
 		biggestWin: Number(stats.largest_single_win),
 		avgBetSize: stats.average_bet_size,
 		daysActive: stats.days_active,
+		currentStreakDays: stats.current_streak_days,
 		longestWinStreak: stats.longest_winning_streak,
 		rank: rank ? Number(rank.player_rank) : null,
 		percentile: rank?.percentile || null
@@ -384,9 +385,9 @@
 									</div>
 									<div class="quick-stat">
 										<div class="stat-value text-yellow-400">
-											{playerCardData.daysActive}d
+											{playerCardData.currentStreakDays}d
 										</div>
-										<div class="stat-label">Active</div>
+										<div class="stat-label">Current Streak</div>
 									</div>
 								</div>
 							{/if}

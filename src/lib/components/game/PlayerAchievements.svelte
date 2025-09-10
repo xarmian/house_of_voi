@@ -139,7 +139,7 @@
 	function getTierProgress(achievements: Achievement[]): {current: number, total: number} {
 		if (achievements.length === 0) return {current: 0, total: 0};
 		
-		const ownedCount = achievements.filter(a => a.owned).length;
+		const ownedCount = achievements.filter(a => a.eligible).length;
 		const totalTiers = achievements[0]?.display?.tiersTotal || achievements.length;
 		
 		return {current: ownedCount, total: totalTiers};
@@ -422,7 +422,7 @@
 							{#each achievements as achievement, index (achievement.id)}
 								{@const IconComponent = getAchievementIcon(achievement)}
 								{@const rarityColor = getRarityColor(achievement.display?.rarity)}
-								{@const isNextToEarn = !achievement.owned && (index === 0 || achievements[index - 1]?.owned)}
+								{@const isNextToEarn = !achievement.eligible && (index === 0 || achievements[index - 1]?.eligible)}
 								{@const isEligible = achievement.eligible && !achievement.owned}
 								{@const isNextEligible = nextProgressInfo?.achievement.id === achievement.id}
 								{@const hasProgress = isNextEligible && typeof achievement.progress === 'number' && achievement.progress > 0}
@@ -495,7 +495,7 @@
 										<div class="achievement-details">
 											<h3 class="milestone-name">{achievement.name}</h3>
 											
-											{#if hasProgress && !achievement.owned && !achievement.eligible}
+											{#if hasProgress && !achievement.eligible}
 												<div class="progress-text" style="color: {progressColor}">
 													{formatProgress(achievement.progress)} complete
 												</div>

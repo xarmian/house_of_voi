@@ -114,7 +114,7 @@
       icon: BarChart3,
       color: 'text-indigo-400',
       format: (value: number) => formatVOI(value) + ' VOI'
-    }
+    },
   ];
 
   onMount(() => {
@@ -393,6 +393,16 @@
               </div>
               <div class="text-sm text-gray-400">
                 Total played
+              </div>
+            </div>
+
+            <div class="advanced-stat-card">
+              <div class="flex items-center gap-2 mb-2">
+                <Zap class="w-5 h-5 text-yellow-400" />
+                <span class="text-sm font-medium text-gray-300">Longest Streak</span>
+              </div>
+              <div class="text-xl font-bold text-yellow-400">
+                {stats.longest_streak_days} days
               </div>
             </div>
 

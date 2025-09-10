@@ -93,6 +93,8 @@ export interface PlayerStats {
   first_bet_round: bigint;
   last_bet_round: bigint;
   days_active: number;
+  longest_streak_days: number;
+  current_streak_days: number;
   profit_per_spin: number;
   machines?: PlayerMachineStats[]; // New property for machine-specific stats
 }

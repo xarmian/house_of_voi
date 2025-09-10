@@ -20,7 +20,7 @@ export function findNextAchievementInSeries(achievements: Achievement[]): Achiev
 
   // Find the first unowned achievement with progress
   for (const achievement of sortedAchievements) {
-    if (!achievement.owned && typeof achievement.progress === 'number' && achievement.progress > 0) {
+    if (!achievement.eligible && typeof achievement.progress === 'number' && achievement.progress > 0) {
       return achievement;
     }
   }
@@ -102,7 +102,7 @@ export function getSeriesCompletionWithProgress(achievements: Achievement[]): nu
 
   let totalProgress = 0;
   for (const achievement of achievements) {
-    if (achievement.owned) {
+    if (achievement.eligible) {
       totalProgress += 1; // Complete achievements count as 1
     } else if (typeof achievement.progress === 'number') {
       totalProgress += achievement.progress; // Partial progress
