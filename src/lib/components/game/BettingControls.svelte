@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from 'svelte';
-  import { Plus, Minus, Zap, DollarSign, BarChart3, Lock, Edit3 } from 'lucide-svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { Plus, Minus, Zap, DollarSign, BarChart3, Lock, Edit3, RotateCcw, Square } from 'lucide-svelte';
   import { bettingStore, betPerLineVOI, totalBetVOI, canAffordBet } from '$lib/stores/betting';
   import { walletStore, walletBalance, isWalletConnected, isWalletGuest, walletAddress, isNewUser, hasExistingWallet } from '$lib/stores/wallet';
   import { walletActions } from '$lib/stores/walletActions';
@@ -9,6 +9,7 @@
   import BalanceBreakdown from '$lib/components/wallet/BalanceBreakdown.svelte';
   import PaylinePayoutModal from '$lib/components/game/PaylinePayoutModal.svelte';
   import UserPreferencesModal from '$lib/components/ui/UserPreferencesModal.svelte';
+  import AutoSpinModal from '$lib/components/game/AutoSpinModal.svelte';
   import { BETTING_CONSTANTS, formatVOI } from '$lib/constants/betting';
   import { 
     animationPreferences, 
@@ -33,12 +34,19 @@
   let showAddFundsModal = false;
   let showPaylinePayouts = false;
   let showPreferencesModal = false;
+  let showAutoSpinModal = false;
 
   // Password overlay state for locked wallets
   let password = '';
   let showPassword = false;
   let passwordError = '';
   let unlocking = false;
+
+  // Auto Spin state
+  let autoSpinActive = false;
+  let autoSpinCount: number | 'unlimited' = 0;
+  let autoSpinInterval: NodeJS.Timeout | null = null;
+  let autoSpinDelay = 5000; // 5 seconds between spins
 
   // Subscribe to animation preferences
   $: preferences = $animationPreferences;
@@ -240,6 +248,67 @@
       showPassword = false;
     }
   }
+
+  // Auto Spin functions
+  function handleAutoSpinClick() {
+    if (autoSpinActive) {
+      stopAutoSpin();
+    } else {
+      showAutoSpinModal = true;
+    }
+  }
+
+  function startAutoSpin(count: number | 'unlimited') {
+    autoSpinActive = true;
+    autoSpinCount = count;
+    
+    // Execute first spin immediately
+    executeAutoSpin();
+    
+    // Start the interval for subsequent spins
+    autoSpinInterval = setInterval(() => {
+      executeAutoSpin();
+    }, autoSpinDelay);
+  }
+
+  function stopAutoSpin() {
+    autoSpinActive = false;
+    autoSpinCount = 0;
+    if (autoSpinInterval) {
+      clearInterval(autoSpinInterval);
+      autoSpinInterval = null;
+    }
+  }
+
+  function executeAutoSpin() {
+    // Check if we should continue auto spinning
+    if (!autoSpinActive || !$canAffordBet || !$isWalletConnected || !$bettingStore.isValidBet || disabled || !$isSlotMachineOperational) {
+      stopAutoSpin();
+      return;
+    }
+
+    // Check if we've reached the spin limit before executing
+    if (autoSpinCount !== 'unlimited') {
+      if (autoSpinCount <= 0) {
+        stopAutoSpin();
+        return;
+      }
+      // Decrement count after confirming we can spin
+      autoSpinCount--;
+    }
+
+    // Execute the spin
+    handleSpin();
+  }
+
+  function handleAutoSpinConfirm(event: CustomEvent<{ count: number | 'unlimited' }>) {
+    startAutoSpin(event.detail.count);
+  }
+
+  // Cleanup on component destroy
+  onDestroy(() => {
+    stopAutoSpin();
+  });
   
   $: spinButtonDisabled = disabled || !$canAffordBet || !$isWalletConnected || !$bettingStore.isValidBet || !$isSlotMachineOperational;
   $: spinButtonText = $isSpinning ? 'Queue Spin' : 
@@ -248,6 +317,9 @@
                      !$canAffordBet ? 'Insufficient Balance' :
                      !$bettingStore.isValidBet ? 'Invalid Bet' :
                      'Spin';
+  $: autoSpinButtonDisabled = disabled || !$isWalletConnected || !$bettingStore.isValidBet || !$isSlotMachineOperational;
+  $: autoSpinButtonText = autoSpinActive ? 'Stop Auto' : 'Auto Spin';
+  $: autoSpinCountDisplay = autoSpinActive ? (autoSpinCount === 'unlimited' ? '∞' : autoSpinCount) : '';
 </script>
 
 <div class="betting-controls relative" class:compact={compact}>
@@ -386,6 +458,27 @@
             </div>
           {/if}
         </button>
+        
+        <!-- Auto Spin Button -->
+        <button
+          on:click={handleAutoSpinClick}
+          disabled={autoSpinButtonDisabled}
+          class="auto-spin-button"
+          class:active={autoSpinActive}
+        >
+          <div class="flex items-center justify-center gap-2">
+            {#if autoSpinActive}
+              <Square class="w-5 h-5" />
+              <span class="text-lg font-bold">{autoSpinButtonText}</span>
+              {#if autoSpinCountDisplay}
+                <span class="text-sm opacity-80">({autoSpinCountDisplay})</span>
+              {/if}
+            {:else}
+              <RotateCcw class="w-5 h-5" />
+              <span class="text-lg font-bold">{autoSpinButtonText}</span>
+            {/if}
+          </div>
+        </button>
       </div>
 
       <!-- Right: Total & Credits -->
@@ -437,6 +530,27 @@
               <span class="text-xl font-bold">SPIN</span>
             </div>
           {/if}
+        </button>
+        
+        <!-- Mobile Auto Spin Button -->
+        <button
+          on:click={handleAutoSpinClick}
+          disabled={autoSpinButtonDisabled}
+          class="mobile-auto-spin-button"
+          class:active={autoSpinActive}
+        >
+          <div class="flex items-center justify-center gap-2">
+            {#if autoSpinActive}
+              <Square class="w-5 h-5" />
+              <span class="text-base font-bold">{autoSpinButtonText}</span>
+              {#if autoSpinCountDisplay}
+                <span class="text-sm opacity-80">({autoSpinCountDisplay})</span>
+              {/if}
+            {:else}
+              <RotateCcw class="w-5 h-5" />
+              <span class="text-base font-bold">{autoSpinButtonText}</span>
+            {/if}
+          </div>
         </button>
       </div>
 
@@ -673,6 +787,14 @@
   on:close={() => showPreferencesModal = false}
 />
 
+<!-- Auto Spin Modal -->
+{#if showAutoSpinModal}
+  <AutoSpinModal
+    on:close={() => showAutoSpinModal = false}
+    on:confirm={handleAutoSpinConfirm}
+  />
+{/if}
+
 <style lang="postcss">
   /* Base betting controls */
   .betting-controls {
@@ -754,7 +876,7 @@
   
   /* Center Section: Responsive Spin Button */
   .spin-section {
-    @apply flex-1 flex justify-center items-center;
+    @apply flex-1 flex flex-col justify-center items-center gap-3;
     min-width: 0; /* Allow flex shrinking */
   }
   
@@ -820,7 +942,7 @@
   
   /* Mobile Spin Section */
   .mobile-spin-section {
-    @apply w-full;
+    @apply w-full space-y-3;
   }
   
   .mobile-large-spin {
@@ -1138,5 +1260,131 @@
   .betting-controls.relative {
     position: relative;
     isolation: isolate;
+  }
+
+  /* Auto Spin Button Styles */
+  .auto-spin-button {
+    @apply w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl disabled:shadow-none;
+    height: 3.5rem; /* 56px - about 60% of the main spin button */
+    width: clamp(180px, 100%, 320px);
+    max-width: 100%;
+  }
+
+  .auto-spin-button:not(:disabled):hover {
+    transform: scale(1.02);
+  }
+
+  .auto-spin-button.active {
+    @apply from-red-600 to-red-700 hover:from-red-700 hover:to-red-800;
+    animation: auto-spin-pulse 2s ease-in-out infinite;
+  }
+
+  /* Mobile Auto Spin Button */
+  .mobile-auto-spin-button {
+    @apply w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl disabled:shadow-none;
+    height: 3rem; /* 48px */
+    min-height: 48px;
+    touch-action: manipulation;
+  }
+
+  .mobile-auto-spin-button:not(:disabled):active {
+    transform: scale(0.98);
+  }
+
+  .mobile-auto-spin-button.active {
+    @apply from-red-600 to-red-700 hover:from-red-700 hover:to-red-800;
+    animation: mobile-auto-spin-pulse 2s ease-in-out infinite;
+  }
+
+  /* Auto Spin Animation Keyframes */
+  @keyframes auto-spin-pulse {
+    0%, 100% { 
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+    }
+    50% { 
+      box-shadow: 0 0 30px rgba(239, 68, 68, 0.6);
+    }
+  }
+
+  @keyframes mobile-auto-spin-pulse {
+    0%, 100% { 
+      box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+    }
+    50% { 
+      box-shadow: 0 0 25px rgba(239, 68, 68, 0.6);
+    }
+  }
+
+  /* Auto Spin Responsive Adjustments */
+  @media (max-width: 1200px) {
+    .auto-spin-button {
+      @apply h-12;
+      width: clamp(160px, 100%, 280px);
+      font-size: 1rem;
+    }
+  }
+
+  @media (max-width: 1024px) {
+    .auto-spin-button {
+      @apply h-10;
+      width: clamp(140px, 100%, 240px);
+      font-size: 0.9rem;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .auto-spin-button {
+      @apply h-12;
+      width: clamp(200px, 60%, 300px);
+    }
+  }
+
+  @media (max-width: 768px) {
+    .mobile-auto-spin-button {
+      height: 2.75rem; /* 44px */
+      min-height: 44px;
+      font-size: 0.9rem;
+    }
+  }
+
+  /* Touch device optimizations for Auto Spin */
+  @media (hover: none) and (pointer: coarse) {
+    .auto-spin-button:hover,
+    .mobile-auto-spin-button:hover {
+      transform: none;
+    }
+    
+    .auto-spin-button:not(:disabled):active,
+    .mobile-auto-spin-button:not(:disabled):active {
+      transform: scale(0.98);
+    }
+  }
+
+  /* Reduced motion support for Auto Spin */
+  @media (prefers-reduced-motion: reduce) {
+    .auto-spin-button,
+    .mobile-auto-spin-button {
+      animation: none !important;
+      transition: opacity 0.2s ease !important;
+    }
+    
+    .auto-spin-button.active,
+    .mobile-auto-spin-button.active {
+      animation: none !important;
+      background: #dc2626;
+    }
+  }
+
+  /* High contrast mode for Auto Spin */
+  @media (prefers-contrast: high) {
+    .auto-spin-button,
+    .mobile-auto-spin-button {
+      border: 3px solid #f59e0b;
+    }
+    
+    .auto-spin-button.active,
+    .mobile-auto-spin-button.active {
+      border-color: #dc2626;
+    }
   }
 </style>
