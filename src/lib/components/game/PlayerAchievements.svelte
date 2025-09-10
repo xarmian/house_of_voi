@@ -4,6 +4,7 @@
 	import { achievementsStore, claimingInProgress, achievementsLoading, achievementsError, nextAchievementProgress } from '$lib/stores/achievements';
 	import { formatProgress, isNearCompletion, getProgressColor, getSeriesCompletionWithProgress } from '$lib/utils/achievementProgress';
 	import type { Achievement, AchievementFilter } from '$lib/types/achievements';
+	import { browser } from '$app/environment';
 
 	export let playerAddress: string;
 
@@ -16,10 +17,19 @@
 	let claimSuccessMessage: string = '';
 	let claimErrorMessage: string = '';
 	let selectedAchievement: Achievement | null = null;
+	let modalContainer: HTMLElement | null = null;
 
 	const fallbackAchievementImage: string = '/symbols/star.svg';
 
 	function handleAchievementImageError(event: Event) {
+		const img = event.currentTarget as HTMLImageElement | null;
+		if (!img) return;
+		// Prevent potential error loops if the fallback also fails
+		img.onerror = null;
+		img.src = fallbackAchievementImage;
+	}
+
+	function handleModalImageError(event: Event) {
 		const img = event.currentTarget as HTMLImageElement | null;
 		if (!img) return;
 		// Prevent potential error loops if the fallback also fails
@@ -45,8 +55,19 @@
 		achievementsStore.setPlayerAddress(playerAddress);
 	}
 
+	onMount(() => {
+		if (browser) {
+			modalContainer = document.createElement('div');
+			modalContainer.id = 'achievement-modal-portal';
+			document.body.appendChild(modalContainer);
+		}
+	});
+
 	onDestroy(() => {
 		achievementsStore.stopAutoRefresh();
+		if (browser && modalContainer) {
+			document.body.removeChild(modalContainer);
+		}
 	});
 
 	function groupAchievementsBySeries(
@@ -258,10 +279,39 @@
 
 	function showAchievementModal(achievement: Achievement) {
 		selectedAchievement = achievement;
+		// Focus the close button for better accessibility
+		setTimeout(() => {
+			const closeButton = document.querySelector('.modal-close');
+			if (closeButton instanceof HTMLElement) {
+				closeButton.focus();
+			}
+		}, 50);
 	}
 
 	function closeAchievementModal() {
 		selectedAchievement = null;
+	}
+
+	function handleKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape' && selectedAchievement) {
+			closeAchievementModal();
+		}
+	}
+
+	// Portal component for rendering modal to document.body
+	function portal(node: HTMLElement, target: HTMLElement | null = null) {
+		if (!target || !browser) return;
+		
+		const targetContainer = target;
+		targetContainer.appendChild(node);
+
+		return {
+			destroy() {
+				if (node.parentNode === targetContainer) {
+					targetContainer.removeChild(node);
+				}
+			}
+		};
 	}
 </script>
 
@@ -548,10 +598,12 @@
 	{/if}
 </div>
 
-<!-- Achievement Modal -->
-{#if selectedAchievement}
-	<div class="modal-overlay" on:click={closeAchievementModal}>
-		<div class="modal-content" on:click|stopPropagation>
+<!-- Achievement Modal Portal -->
+{#if selectedAchievement && modalContainer}
+	{@const IconComponent = getAchievementIcon(selectedAchievement)}
+	{@const rarityColor = getRarityColor(selectedAchievement.display?.rarity)}
+	<div use:portal={modalContainer} class="modal-overlay" on:keydown={handleKeydown} on:click={closeAchievementModal}>
+		<div class="modal-content" on:click|stopPropagation tabindex="-1" role="dialog" aria-labelledby="modal-title" aria-modal="true">
 			<button class="modal-close" on:click={closeAchievementModal}>
 				<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -559,89 +611,85 @@
 			</button>
 			
 			<div class="modal-achievement">
-				{#if selectedAchievement}
-					{@const IconComponent = getAchievementIcon(selectedAchievement)}
-					{@const rarityColor = getRarityColor(selectedAchievement.display?.rarity)}
-					
-					<div class="modal-badge" class:owned={selectedAchievement.owned}>
-					{#if selectedAchievement.imageUrl}
-						<img 
-							src={selectedAchievement.imageUrl} 
-							alt={selectedAchievement.name}
-							on:error={handleAchievementImageError}
-							class="modal-image"
-							class:locked={!selectedAchievement.owned}
-						/>
-					{:else}
-						<div class="modal-icon" style="border-color: {rarityColor}" class:locked={!selectedAchievement.owned}>
-							<svelte:component this={IconComponent} class="w-16 h-16" style="color: {rarityColor}" />
-						</div>
-					{/if}
-					
-					{#if selectedAchievement.owned}
-						<div class="modal-completion-indicator">
-							<Check class="w-8 h-8" />
-						</div>
-					{/if}
-					
-					{#if selectedAchievement.display?.tier}
-						<div class="modal-tier-label">{selectedAchievement.display.tier}</div>
-					{/if}
-				</div>
 				
-				<div class="modal-details">
-					<h2 class="modal-title">{selectedAchievement.name}</h2>
-					<p class="modal-description">{selectedAchievement.description}</p>
-					
-					{#if selectedAchievement.display?.series}
-						<div class="modal-series">Series: {selectedAchievement.display.series}</div>
-					{/if}
-					
-					{#if selectedAchievement.display?.tags && selectedAchievement.display.tags.length > 0}
-						<div class="modal-tags">
-							{#each selectedAchievement.display.tags as tag}
-								<span class="modal-tag">{tag}</span>
-							{/each}
-						</div>
-					{/if}
-					
-					{#if selectedAchievement.display?.rarity}
-						<div class="modal-rarity" style="color: {rarityColor}">
-							{selectedAchievement.display.rarity}
-						</div>
-					{/if}
-					
-					<div class="modal-status">
-						{#if selectedAchievement.owned}
-							<span class="status-completed">✓ Completed</span>
-						{:else if selectedAchievement.eligible}
-							<span class="status-eligible">🎁 Ready to Claim</span>
-							<button 
-								class="modal-claim-button"
-								on:click={() => claimSingleAchievement(selectedAchievement.id)}
-								disabled={$claimingInProgress}
-							>
-								{#if $claimingInProgress}
-									<Loader2 class="w-4 h-4 animate-spin" />
-								{:else}
-									<Gift class="w-4 h-4" />
-								{/if}
-								Claim Achievement
-							</button>
-						{:else if Array.from($nextAchievementProgress.values()).some(p => p.achievement.id === selectedAchievement.id) && typeof selectedAchievement.progress === 'number' && selectedAchievement.progress > 0}
-							<span class="status-progress">📈 {formatProgress(selectedAchievement.progress)} Complete</span>
-							<div class="modal-progress-bar">
-								<div 
-									class="modal-progress-fill" 
-									style="width: {selectedAchievement.progress * 100}%; background-color: {getProgressColor(selectedAchievement.progress)}"
-								></div>
-							</div>
-						{:else}
-							<span class="status-locked">🔒 Not Yet Earned</span>
-						{/if}
+				<div class="modal-badge" class:owned={selectedAchievement.owned}>
+				{#if selectedAchievement.imageUrl}
+					<img 
+						src={selectedAchievement.imageUrl} 
+						alt={selectedAchievement.name}
+						on:error={handleModalImageError}
+						class="modal-image"
+						class:locked={!selectedAchievement.owned}
+					/>
+				{:else}
+					<div class="modal-icon" style="border-color: {rarityColor}" class:locked={!selectedAchievement.owned}>
+						<svelte:component this={IconComponent} class="w-16 h-16" style="color: {rarityColor}" />
 					</div>
-				</div>
 				{/if}
+				
+				{#if selectedAchievement.owned}
+					<div class="modal-completion-indicator">
+						<Check class="w-8 h-8" />
+					</div>
+				{/if}
+				
+				{#if selectedAchievement.display?.tier}
+					<div class="modal-tier-label">{selectedAchievement.display.tier}</div>
+				{/if}
+				</div>
+			</div>
+			
+			<div class="modal-details">
+				<h2 class="modal-title" id="modal-title">{selectedAchievement.name}</h2>
+				<p class="modal-description">{selectedAchievement.description}</p>
+				
+				{#if selectedAchievement.display?.series}
+					<div class="modal-series">Series: {selectedAchievement.display.series}</div>
+				{/if}
+				
+				{#if selectedAchievement.display?.tags && selectedAchievement.display.tags.length > 0}
+					<div class="modal-tags">
+						{#each selectedAchievement.display.tags as tag}
+							<span class="modal-tag">{tag}</span>
+						{/each}
+					</div>
+				{/if}
+				
+				{#if selectedAchievement.display?.rarity}
+					<div class="modal-rarity" style="color: {rarityColor}">
+						{selectedAchievement.display.rarity}
+					</div>
+				{/if}
+				
+				<div class="modal-status">
+					{#if selectedAchievement.owned}
+						<span class="status-completed">✓ Completed</span>
+					{:else if selectedAchievement.eligible}
+						<span class="status-eligible">🎁 Ready to Claim</span>
+						<button 
+							class="modal-claim-button"
+							on:click={() => claimSingleAchievement(selectedAchievement.id)}
+							disabled={$claimingInProgress}
+						>
+							{#if $claimingInProgress}
+								<Loader2 class="w-4 h-4 animate-spin" />
+							{:else}
+								<Gift class="w-4 h-4" />
+							{/if}
+							Claim Achievement
+						</button>
+					{:else if Array.from($nextAchievementProgress.values()).some(p => p.achievement.id === selectedAchievement.id) && typeof selectedAchievement.progress === 'number' && selectedAchievement.progress > 0}
+						<span class="status-progress">📈 {formatProgress(selectedAchievement.progress)} Complete</span>
+						<div class="modal-progress-bar">
+							<div 
+								class="modal-progress-fill" 
+								style="width: {selectedAchievement.progress * 100}%; background-color: {getProgressColor(selectedAchievement.progress)}"
+							></div>
+						</div>
+					{:else}
+						<span class="status-locked">🔒 Not Yet Earned</span>
+					{/if}
+				</div>
 			</div>
 		</div>
 	</div>
@@ -2059,8 +2107,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		z-index: 1000;
+		z-index: 9999;
 		backdrop-filter: blur(4px);
+		overflow-y: auto;
 	}
 
 	.modal-content {
