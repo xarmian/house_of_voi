@@ -140,7 +140,8 @@
   
   function calculateUserPortfolioValue(): bigint {
     if (!houseBalance) return BigInt(0);
-    const contractValue = BigInt(houseBalance.total);
+    // Convert to integer first to handle decimal values that can't be converted to BigInt
+    const contractValue = BigInt(Math.floor(houseBalance.total));
     // Use latest store values, but allow zero shares case; P/L calc handles it
     return ybtService.calculateUserPortfolioValue($userShares, $totalSupply, contractValue);
   }
