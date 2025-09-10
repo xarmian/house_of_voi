@@ -2153,6 +2153,7 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 2rem;
+		margin-bottom: 1rem;
 	}
 
 	.modal-badge {
