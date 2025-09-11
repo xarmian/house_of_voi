@@ -3,16 +3,19 @@
   import { Home, Gamepad2, Building, User } from 'lucide-svelte';
   import UserPreferencesButton from '$lib/components/ui/UserPreferencesButton.svelte';
   import { currentTheme } from '$lib/stores/theme';
+  import { walletService } from '$lib/services/wallet';
   
   // Determine current route
   $: currentRoute = $page.route?.id || '/';
   
+  const gamingWalletData = walletService.getPublicWalletData();
+
   const navItems = [
     { href: '/', label: 'Home', icon: Home, exact: true },
     { href: '/app', label: 'Play', icon: Gamepad2, exact: false },
     { href: '/house', label: 'House', icon: Building, exact: false },
-    { href: '/profile', label: 'Profiles', icon: User, exact: false }
-  ];
+    { href: '/profile/' + gamingWalletData?.address || '', label: 'Profiles', icon: User, exact: false }
+  ];  
 </script>
 
 <header class="backdrop-blur-md border-b sticky top-0 z-40" 

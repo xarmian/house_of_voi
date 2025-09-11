@@ -97,7 +97,8 @@ export class BlockchainService {
       // the balance manager can release reserved funds when on-chain debit posts
       try {
         const expectedDebit = spin.estimatedTotalCost || (spin.betPerLine * spin.selectedPaylines + extraPayment);
-        balanceManager.trackPendingTransaction(result.txId, expectedDebit, account.address, 'deduction');
+        const pendingTxId = (result as any).paymentTxId || result.txId; // Track the payment tx for debit detection
+        balanceManager.trackPendingTransaction(pendingTxId, expectedDebit, account.address, 'deduction');
       } catch (e) {
         console.warn('Failed to track pending deduction:', e);
       }
@@ -107,7 +108,9 @@ export class BlockchainService {
         id: spin.id,
         status: SpinStatus.WAITING,
         data: {
-          txId: result.txId,
+          txId: result.txId, // app call tx id for linking and verification
+          groupTxId: (result as any).groupTxId,
+          paymentTxId: (result as any).paymentTxId,
           betKey: result.betKey,
           commitmentRound: result.round
         }

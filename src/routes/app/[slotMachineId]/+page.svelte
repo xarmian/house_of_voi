@@ -5,12 +5,12 @@
   import { contractDataCache } from '$lib/services/contractDataCache';
   import { balanceManager } from '$lib/services/balanceManager';
   import { currentTheme } from '$lib/stores/theme';
-  import { isMasterSoundEnabled } from '$lib/stores/sound';
+  
   import { contractSelectionStore, initializeMultiContractStores } from '$lib/stores/multiContract';
   import WalletManager from '$lib/components/wallet/WalletManager.svelte';
   import SlotMachine from '$lib/components/game/SlotMachine.svelte';
   import GameQueue from '$lib/components/game/GameQueue.svelte';
-  import VoiRadioPlayer from '$lib/components/app/VoiRadioPlayer.svelte';
+  
   // MEMORY OPTIMIZATION: Lazy load heavy components to reduce initial bundle size
   // import Leaderboard from '$lib/components/game/Leaderboard.svelte';
   // import PlayerStats from '$lib/components/game/PlayerStats.svelte';
@@ -494,10 +494,7 @@
     </div>
   </div>
   
-  <!-- VOI Radio Player -->
-  {#if $isMasterSoundEnabled}
-    <VoiRadioPlayer />
-  {/if}
+  
 </main>
 
 <style>

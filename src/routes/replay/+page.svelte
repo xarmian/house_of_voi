@@ -39,41 +39,31 @@
     }
     return grid;
   }
+  
+  // Helper: derive bet details (bet amount and paylines) from bet key when not provided
+  function parseBetDetailsFromKey(betKeyHex: string): { betAmount: number; paylines: number } | null {
+    try {
+      if (!betKeyHex || betKeyHex.length !== 112 || !/^[0-9a-fA-F]+$/.test(betKeyHex)) return null;
+      const bytes = new Uint8Array(betKeyHex.match(/.{2}/g)!.map((b) => parseInt(b, 16)));
+      // Bytes 32-39: bet amount (uint64 BE)
+      const betAmount = Number(new DataView(bytes.slice(32, 40).buffer).getBigUint64(0, false));
+      // Bytes 40-47: max payline index (uint64 BE) -> count = index + 1
+      const maxPaylineIndex = Number(new DataView(bytes.slice(40, 48).buffer).getBigUint64(0, false));
+      const paylines = maxPaylineIndex + 1;
+      return { betAmount, paylines };
+    } catch (e) {
+      console.warn('Failed to parse bet details from key:', e);
+      return null;
+    }
+  }
 
+  // Compute winnings using the same utility as SpinDetails for consistency
   async function computeWinningsFromGrid(outcome: string[][], totalBetAtomic: number, selectedPaylines: number): Promise<number> {
     try {
-      const { algorandService } = await import('$lib/services/algorand');
-      const paylines = await algorandService.getPaylines('');
+      const { detectWinningPaylines } = await import('$lib/utils/winLineDetection');
       const betPerLine = selectedPaylines > 0 ? Math.floor(totalBetAtomic / selectedPaylines) : 0;
-      let winnings = 0;
-
-      // Flatten grid to string in column-major order
-      let gridString = '';
-      for (let col = 0; col < 5; col++) {
-        for (let row = 0; row < 3; row++) {
-          gridString += outcome[col][row];
-        }
-      }
-
-      for (let line = 0; line < Math.min(selectedPaylines, paylines.length); line++) {
-        const payline = paylines[line];
-        const counts: Record<string, number> = { A: 0, B: 0, C: 0, D: 0 };
-        for (let col = 0; col < 5; col++) {
-          const pos = col * 3 + payline[col];
-          const sym = gridString[pos];
-          if (counts[sym] !== undefined) counts[sym]++;
-        }
-        let bestSymbol = '';
-        let bestCount = 0;
-        for (const s of ['A','B','C','D']) {
-          if (counts[s] >= 3 && counts[s] > bestCount) { bestSymbol = s; bestCount = counts[s]; }
-        }
-        if (bestCount >= 3) {
-          const mult = await algorandService.getPayoutMultiplier(bestSymbol, bestCount, '');
-          winnings += betPerLine * mult;
-        }
-      }
-      return winnings;
+      const lines = await detectWinningPaylines(outcome, betPerLine, selectedPaylines);
+      return lines.reduce((sum, l) => sum + l.winAmount, 0);
     } catch (e) {
       console.warn('Failed to compute winnings from grid:', e);
       return 0;
@@ -246,15 +236,27 @@
         }
         const gridString = await algorandService.getBetGridDeterministic(betKey, round, userAddress);
         const outcome = gridStringToOutcome(gridString);
-        const paylinesCount = initialPaylines || 20;
-        const betAtomic = initialBetAmount || 0;
-        const winnings = await computeWinningsFromGrid(outcome, betAtomic, paylinesCount);
+        // Derive bet-per-line and paylines from params or fall back to bet key
+        let paylinesCount = initialPaylines ?? undefined;
+        let betPerLineAtomic = initialBetAmount ?? undefined;
+        if (paylinesCount == null || betPerLineAtomic == null) {
+          const derived = parseBetDetailsFromKey(betKey);
+          if (derived) {
+            paylinesCount = paylinesCount ?? derived.paylines;
+            betPerLineAtomic = betPerLineAtomic ?? derived.betAmount; // bet amount in key = per-line
+          }
+        }
+        // Final fallbacks
+        paylinesCount = paylinesCount ?? 20;
+        betPerLineAtomic = betPerLineAtomic ?? 0;
+        const totalBetAtomic = betPerLineAtomic * paylinesCount;
+        const winnings = await computeWinningsFromGrid(outcome, totalBetAtomic, paylinesCount);
 
         // Assemble replay data using computed winnings
         const computedReplay = {
           outcome,
           winnings,
-          betAmount: betAtomic,
+          betAmount: totalBetAtomic,
           paylines: paylinesCount,
           timestamp: initialTimestamp,
           contractId: contractId || multiContractStore.getSelectedContractId?.() || undefined,

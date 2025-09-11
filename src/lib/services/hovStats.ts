@@ -425,53 +425,82 @@ class HovStatsService {
 
       // Add search filters if search term provided
       if (searchTerm && searchTerm.trim()) {
-        const term = searchTerm.trim();
-        
-        // Build search conditions
-        const searchConditions = [
-          `who.ilike.%${term}%`,
-          `txid.ilike.%${term}%`
-        ];
-        
-        // Try to convert transaction ID for database search (database stores as hex-encoded ASCII)
-        try {
-          // If it looks like a base32 transaction ID, convert to hex-encoded ASCII for database search
-          if (/^[A-Z2-7]{52}$/.test(term.toUpperCase())) {
-            // Convert base32 string to hex-encoded ASCII bytes
-            const hexTxid = Array.from(term.toUpperCase())
-              .map(char => char.charCodeAt(0).toString(16).padStart(2, '0'))
-              .join('').toUpperCase();
-            searchConditions.push(`txid.ilike.%${hexTxid}%`);
-          }
-          // For partial base32 searches, convert each character to hex
-          else if (/^[A-Z2-7]+$/.test(term.toUpperCase()) && term.length >= 3) {
-            const hexTxid = Array.from(term.toUpperCase())
-              .map(char => char.charCodeAt(0).toString(16).padStart(2, '0'))
-              .join('').toUpperCase();
-            searchConditions.push(`txid.ilike.%${hexTxid}%`);
-          }
-        } catch (e) {
-          // If any conversion fails, just use the original term
-          console.log('Transaction ID conversion failed:', e);
-        }
-        
-        // Search by numeric values (rounds and amounts)
-        if (/^\d+(\.\d+)?$/.test(term)) {
-          const numericValue = parseFloat(term);
+        const raw = searchTerm.trim();
+        const term = raw;
+
+        // Support operator-based amount searches like ">1000", ">= 1000", "< 500", "= 250"
+        const opMatch = raw.match(/^([<>]=?|=)\s*(\d+(?:\.\d+)?)$/);
+        if (opMatch) {
+          const op = opMatch[1];
+          const value = parseFloat(opMatch[2]);
+          const micro = Math.floor(value * 1_000_000);
+
+          const mapOp = (o: string) => {
+            switch (o) {
+              case '>': return 'gt';
+              case '>=': return 'gte';
+              case '<': return 'lt';
+              case '<=': return 'lte';
+              case '=':
+              case '==': return 'eq';
+              default: return 'eq';
+            }
+          };
+
+          const sop = mapOp(op);
+          const operatorConditions = [
+            `payout.${sop}.${micro}`,
+            `amount.${sop}.${micro}`
+          ];
+
+          query = query.or(operatorConditions.join(','));
+        } else {
+          // Build search conditions
+          const searchConditions = [
+            `who.ilike.%${term}%`,
+            `txid.ilike.%${term}%`
+          ];
           
-          // Search by round (if it's a whole number)
-          if (Number.isInteger(numericValue)) {
-            searchConditions.push(`round.eq.${Math.floor(numericValue)}`);
+          // Try to convert transaction ID for database search (database stores as hex-encoded ASCII)
+          try {
+            // If it looks like a base32 transaction ID, convert to hex-encoded ASCII for database search
+            if (/^[A-Z2-7]{52}$/.test(term.toUpperCase())) {
+              // Convert base32 string to hex-encoded ASCII bytes
+              const hexTxid = Array.from(term.toUpperCase())
+                .map(char => char.charCodeAt(0).toString(16).padStart(2, '0'))
+                .join('').toUpperCase();
+              searchConditions.push(`txid.ilike.%${hexTxid}%`);
+            }
+            // For partial base32 searches, convert each character to hex
+            else if (/^[A-Z2-7]+$/.test(term.toUpperCase()) && term.length >= 3) {
+              const hexTxid = Array.from(term.toUpperCase())
+                .map(char => char.charCodeAt(0).toString(16).padStart(2, '0'))
+                .join('').toUpperCase();
+              searchConditions.push(`txid.ilike.%${hexTxid}%`);
+            }
+          } catch (e) {
+            // If any conversion fails, just use the original term
+            console.log('Transaction ID conversion failed:', e);
           }
           
-          // Search by amount in microVOI (convert VOI to microVOI)
-          const amountInMicroVoi = Math.floor(numericValue * 1000000);
-          searchConditions.push(`amount.eq.${amountInMicroVoi}`);
-          searchConditions.push(`payout.eq.${amountInMicroVoi}`);
+          // Search by numeric values (rounds and equality amounts)
+          if (/^\d+(\.\d+)?$/.test(term)) {
+            const numericValue = parseFloat(term);
+            
+            // Search by round (if it's a whole number)
+            if (Number.isInteger(numericValue)) {
+              searchConditions.push(`round.eq.${Math.floor(numericValue)}`);
+            }
+            
+            // Search by amount in microVOI (convert VOI to microVOI)
+            const amountInMicroVoi = Math.floor(numericValue * 1000000);
+            searchConditions.push(`amount.eq.${amountInMicroVoi}`);
+            searchConditions.push(`payout.eq.${amountInMicroVoi}`);
+          }
+          
+          console.log('Search conditions:', searchConditions);
+          query = query.or(searchConditions.join(','));
         }
-        
-        console.log('Search conditions:', searchConditions);
-        query = query.or(searchConditions.join(','));
       }
 
       // Apply ordering and pagination
@@ -507,6 +536,67 @@ class HovStatsService {
         hasMore,
         total: count || undefined
       };
+    });
+  }
+
+  /**
+   * Search distinct player addresses by partial match on hov_events.who
+   * Returns unique addresses containing the term, case-insensitive
+   */
+  async searchPlayersByWho(term: string, limit = 20): Promise<string[]> {
+    return this.withErrorHandling('searchPlayersByWho', async () => {
+      const trimmed = (term || '').trim();
+      if (trimmed.length < 3) return [];
+
+      // Ensure service is initialized
+      if (!supabaseService.isReady()) {
+        await supabaseService.initialize();
+      }
+      const client = supabaseService.getClient();
+
+      // Prefer server-side distinct via RPC (add this SQL function in DB)
+      // create or replace function public.search_distinct_who(p_term text, p_limit int)
+      // returns setof text as $$
+      //   select distinct who from public.hov_events
+      //   where who ilike '%' || p_term || '%'
+      //   order by who asc
+      //   limit p_limit;
+      // $$ language sql stable;
+      try {
+        const { data, error } = await client.rpc('search_distinct_who', {
+          p_term: trimmed,
+          p_limit: limit
+        });
+        if (error) throw error;
+        // Handle either array<string> or array<{ who: string }>
+        const list: string[] = Array.isArray(data)
+          ? data.map((row: any) => (typeof row === 'string' ? row : row?.who)).filter(Boolean)
+          : [];
+        if (list.length > 0) return list.slice(0, limit);
+      } catch (e) {
+        // Fall through to generic query if RPC not available
+      }
+
+      // Fallback: query and dedupe minimal client-side (limited scan)
+      const { data, error } = await client
+        .from('hov_events')
+        .select('who')
+        .ilike('who', `%${trimmed}%`)
+        .order('who', { ascending: true })
+        .limit(Math.max(limit, 50));
+
+      if (error) throw error;
+      const seen = new Set<string>();
+      const results: string[] = [];
+      for (const r of data || []) {
+        const who = (r as any).who as string;
+        if (who && !seen.has(who)) {
+          seen.add(who);
+          results.push(who);
+          if (results.length >= limit) break;
+        }
+      }
+      return results;
     });
   }
 

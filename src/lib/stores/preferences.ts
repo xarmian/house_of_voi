@@ -45,7 +45,8 @@ const defaultSoundPreferences: SoundPreferences = {
   uiSoundsEnabled: true,
   uiVolume: 0.5,
   backgroundEnabled: false,
-  backgroundVolume: 0.3
+  backgroundVolume: 0.3,
+  voiRadioEnabled: true
 };
 
 const defaultThemePreferences: ThemePreferences = {

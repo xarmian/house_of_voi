@@ -17,7 +17,7 @@
   const claimRound: number | null = data.claimRound || null;
   const txId: string | null = data.txId || null;
   const contractId: string | null = data.contractId || null;
-  const initialBetAmount: number | null = data.initialBetAmount || null;
+  const initialBetAmount: number | null = data.initialBetAmount || null; // per-line bet from chain (may be per line)
   const initialPaylines: number | null = data.initialPaylines || null;
   const initialTimestamp: number = data.initialTimestamp || Date.now();
   const slotAppId: number | null = data.slotAppId || null;
@@ -91,8 +91,12 @@
       };
     } else if (betKey && claimRound) {
       // For bet key mode, create a minimal spin object
+      // Compute total bet = per-line bet * number of lines
+      const totalBetComputed = (initialBetAmount && initialPaylines)
+        ? initialBetAmount * initialPaylines
+        : (initialBetAmount || 0);
       return {
-        totalBet: initialBetAmount || 0,
+        totalBet: totalBetComputed,
         selectedPaylines: initialPaylines || 20,
         winnings: 0, // Will be computed by SpinDetails component
         timestamp: initialTimestamp,
@@ -212,7 +216,7 @@
             </p>
           {:else if detailSpin}
             <p class="page-subtitle">
-              {initialBetAmount ? formatVOI(initialBetAmount) : '—'} VOI bet • {initialPaylines || '—'} paylines
+              {detailSpin?.totalBet ? formatVOI(detailSpin.totalBet) : '—'} VOI bet • {initialPaylines || '—'} paylines
             </p>
           {/if}
         </div>

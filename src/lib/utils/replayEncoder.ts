@@ -1,5 +1,6 @@
 // Replay data encoder/decoder for shareable links
-// Encodes spin replay data into compact URL-safe strings
+// NOTE: Most encoding functions are LEGACY and kept only for backward compatibility
+// New links should use transaction IDs directly (?tx=) for shortest, most reliable URLs
 
 interface DecodedReplayData {
   outcome: string[][];
@@ -76,6 +77,7 @@ function generateHash(data: string): string {
   return Math.abs(hash).toString(36).substring(0, 4);
 }
 
+// LEGACY: Use transaction ID (?tx=) for new links instead
 export function encodeReplayData(spin: {
   outcome?: string[][];
   winnings?: number;
@@ -116,6 +118,7 @@ export function encodeReplayData(spin: {
   return encoded;
 }
 
+// LEGACY: Kept for backward compatibility with ?d= URLs
 export function decodeReplayData(encodedData: string): DecodedReplayData | null {
   try {    
     // Split by delimiter
@@ -165,7 +168,7 @@ export function decodeReplayData(encodedData: string): DecodedReplayData | null 
   }
 }
 
-// Utility to validate replay data makes sense
+// LEGACY: Validate legacy replay data format
 export function validateReplayData(data: DecodedReplayData): boolean {
   // Check outcome grid is 5x3
   if (!data.outcome || data.outcome.length !== 5) {
@@ -199,7 +202,9 @@ export function validateReplayData(data: DecodedReplayData): boolean {
   return true;
 }
 
-// --- BetKey replay encoder (short URL) ---
+// --- BetKey replay encoder (legacy medium-length URLs) ---
+// NOTE: Still used for backward compatibility with ?r= URLs
+// New links should prefer transaction ID (?tx=) instead
 
 function hexToBytes(hex: string): Uint8Array {
   const clean = hex.replace(/\s/g, '');

@@ -26,6 +26,7 @@
 	import { hovStatsStore, connectionStatus } from '$lib/stores/hovStats';
 	import { hovStatsService } from '$lib/services/hovStats';
 	import { MULTI_CONTRACT_CONFIG } from '$lib/constants/network';
+  import AddressSearch from '$lib/components/ui/AddressSearch.svelte';
 
 	// Get the default slot machine app ID from multi-contract config
 	function getDefaultSlotMachineAppId(): bigint {
@@ -52,6 +53,7 @@
 	import { BLOCKCHAIN_CONFIG } from '$lib/constants/network';
 	import { ensureBase32TxId } from '$lib/utils/transactionUtils';
 	import type { PlayerStats as PlayerStatsType, PlayerRank, BiggestWin } from '$lib/types/hovStats';
+	import { toastStore } from '$lib/stores/toast';
 
 	export let address: string;
 
@@ -151,9 +153,10 @@
 	async function copyAddress() {
 		try {
 			await navigator.clipboard.writeText(address);
-			// Could show toast notification here
+			toastStore.success('Address copied', 'Wallet address copied to clipboard', 3000);
 		} catch (err) {
 			console.error('Failed to copy address:', err);
+			toastStore.error('Copy failed', 'Unable to copy address');
 		}
 	}
 
@@ -176,29 +179,10 @@
 	}
 
 	function goBack() {
-		goto('/app');
+		goto('/profile');
 	}
 
-	function handleSearch() {
-		if (!searchAddress.trim()) return;
-		const address = searchAddress.trim();
-		
-		// Clear and collapse search
-		searchAddress = '';
-		showSearch = false;
-		
-		goto(`/profile/${address}`);
-	}
-
-	function handleSearchKeyPress(event: KeyboardEvent) {
-		if (event.key === 'Enter') {
-			handleSearch();
-		}
-		if (event.key === 'Escape') {
-			showSearch = false;
-			searchAddress = '';
-		}
-	}
+  // Search handled by AddressSearch popover in header actions
 
 	function formatAddress(addr: string, showFull: boolean = false): string {
 		if (showFull) return addr;
@@ -397,7 +381,7 @@
 
 					<!-- Header actions - positioned between profile and biggest wins -->
 					<div class="header-actions">
-						<button on:click={() => showSearch = true} class="action-btn" title="Go to profile">
+						<button on:click={() => showSearch = true} class="action-btn" title="Search player">
 							<Search class="w-5 h-5" />
 						</button>
 						<button on:click={shareProfile} class="action-btn" title="Share profile">
@@ -427,20 +411,18 @@
 				</div>
 			</div>
 
-			<!-- Search overlay -->
+			<!-- Full-screen search overlay with dropdown suggestions -->
 			{#if showSearch}
-				<div class="search-overlay" transition:fade={{ duration: 200 }}>
+				<div class="search-overlay" transition:fade={{ duration: 150 }}>
 					<div class="search-box">
-						<input
-							type="text"
-							bind:value={searchAddress}
-							on:keypress={handleSearchKeyPress}
-							placeholder="Enter wallet address..."
-							class="search-overlay-input"
-							autofocus
-						/>
-						<div class="search-actions">
-							<button on:click={handleSearch} class="search-go-btn">Go</button>
+            <AddressSearch 
+              bind:value={searchAddress}
+              autofocus={true}
+              placeholder="Search wallet address..."
+              on:select={(e) => { showSearch = false; searchAddress = ''; goto(`/profile/${e.detail.address}`); }}
+              on:enter={(e) => { const v = e.detail.value.trim(); if (v) { showSearch = false; searchAddress = ''; goto(`/profile/${v}`); } }}
+            />
+						<div class="search-actions mt-3">
 							<button on:click={() => { showSearch = false; searchAddress = ''; }} class="search-cancel-btn">Cancel</button>
 						</div>
 					</div>
@@ -1166,11 +1148,17 @@
 			font-size: 0.8rem;
 		}
 
-		.header-actions {
-			position: absolute;
-			top: 1rem;
-			right: 1rem;
-		}
+	.header-actions {
+		position: absolute;
+		top: 1rem;
+		right: 1rem;
+		/* Anchor for search popover */
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+/* removed inline popover styling */
 
 
 		.back-btn {

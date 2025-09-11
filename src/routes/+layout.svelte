@@ -13,6 +13,8 @@
   import { winFeedStore } from '$lib/stores/winFeed';
   import { supabaseService } from '$lib/services/supabase';
   import { themeStore } from '$lib/stores/theme';
+  import { isMasterSoundEnabled, soundPreferences } from '$lib/stores/sound';
+  import VoiRadioPlayer from '$lib/components/app/VoiRadioPlayer.svelte';
   
   export let data;
   
@@ -88,6 +90,11 @@
     
     <!-- Toast notifications -->
     <ToastContainer />
+
+    <!-- VOI Radio Player mounted globally (respects user preference) -->
+    {#if $isMasterSoundEnabled && $soundPreferences.voiRadioEnabled}
+      <VoiRadioPlayer />
+    {/if}
   </div>
 {:else}
   <!-- Loading screen -->

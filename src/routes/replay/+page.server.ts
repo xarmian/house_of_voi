@@ -1,19 +1,20 @@
 import { decodeReplayData, validateReplayData, decodeBetKeyReplay } from '$lib/utils/replayEncoder';
 import { formatVOI } from '$lib/constants/betting';
+import { extractSpinDataFromTransaction } from '$lib/utils/transactionUtils';
 import type { MetaTagsProps } from 'svelte-meta-tags';
 
 export const load = async ({ url }) => {
   const encodedData = url.searchParams.get('d');
   const betKey = url.searchParams.get('k'); // hex bet key (Bytes56)
   const claimRoundParam = url.searchParams.get('cr'); // numeric round (claim round)
-  const txId = url.searchParams.get('tx'); // optional: spin tx id
+  const txId = url.searchParams.get('tx'); // transaction ID to extract all data from
   const contractId = url.searchParams.get('cid') || undefined; // optional: multi-contract id
   const betAmount = url.searchParams.get('bet'); // optional: atomic units
   const paylines = url.searchParams.get('lines'); // optional: number of paylines
   const timestamp = url.searchParams.get('ts'); // optional: ms timestamp
   const encodedR = url.searchParams.get('r'); // compact bet-key replay
   
-  if (!encodedData && !betKey && !encodedR) {
+  if (!encodedData && !betKey && !encodedR && !txId) {
     const pageMetaTags = {
       title: 'Invalid Replay - House of Voi',
       description: 'This replay link is invalid or expired. Create your own spins at House of Voi!',
@@ -45,6 +46,37 @@ export const load = async ({ url }) => {
   }
 
   try {
+    // Priority 1: Transaction ID path (shortest and most reliable URLs)
+    if (txId) {
+      const transactionData = await extractSpinDataFromTransaction(txId);
+      if (!transactionData) {
+        return {
+          pageMetaTags: { title: 'Invalid Replay - House of Voi', description: 'Transaction not found or invalid' },
+          error: 'Transaction not found or invalid',
+          replayData: null
+        };
+      }
+
+      const pageMetaTags = {
+        title: 'Spin Replay - House of Voi',
+        description: `Replay spin outcome from transaction ${txId.slice(0, 8)}...`
+      } satisfies MetaTagsProps;
+
+      return {
+        pageMetaTags,
+        replayData: null,
+        error: null,
+        betKey: transactionData.betKey,
+        claimRound: transactionData.claimRound,
+        txId: txId,
+        contractId: null,
+        slotAppId: transactionData.appId,
+        initialBetAmount: transactionData.betAmount ?? null,
+        initialPaylines: transactionData.paylines ?? null,
+        initialTimestamp: transactionData.timestamp
+      };
+    }
+
     // Legacy encoded data path
     if (encodedData) {
       const replayData = decodeReplayData(encodedData);

@@ -443,6 +443,29 @@
                 {/if}
               </div>
             {/each}
+
+            <!-- VOI Radio Player Toggle -->
+            <div class="setting-section">
+              <div class="setting-header">
+                <div class="flex items-center gap-2">
+                  <Music class="w-5 h-5 {soundPrefs.voiRadioEnabled ? 'text-voi-400' : 'text-gray-400'}" />
+                  <div>
+                    <h3 class="setting-title">VOI Radio Player</h3>
+                    <p class="setting-description">Floating VOI Radio mini‑player</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button
+                    class="toggle-button"
+                    class:enabled={soundPrefs.voiRadioEnabled}
+                    on:click={() => preferencesStore.updateSoundPreferences({ voiRadioEnabled: !soundPrefs.voiRadioEnabled })}
+                  >
+                    <span class="toggle-slider"></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
           </div>
 
         {:else if activeTab === 'theme'}

@@ -9,8 +9,6 @@
   import { SpinStatus } from '$lib/types/queue';
   import type { QueuedSpin } from '$lib/types/queue';
   import { playButtonClick } from '$lib/services/soundService';
-  import { encodeReplayData, encodeBetKeyReplay } from '$lib/utils/replayEncoder';
-  import { multiContractStore } from '$lib/stores/multiContract';
   import SpinDetailsModal from '$lib/components/modals/SpinDetailsModal.svelte';
   
   export let maxHeight = '400px';
@@ -231,42 +229,13 @@
       sharingSpinId = spin.id;
 
       let url: string;
-      // Prefer new compact relay link if we have a bet key and commitment round
-      if (spin.betKey && (spin.commitmentRound || spin.outcomeRound)) {
-        const claimRound = (spin.commitmentRound || ((spin.outcomeRound || 0) - 1)) + 1;
-        // Encode into compact single param
-        // Prefer app id over contract id for shorter URL
-        let slotAppId: number | undefined = undefined;
-        if (spin.contractId) {
-          const c = multiContractStore.getContract(spin.contractId);
-          if (c?.slotMachineAppId) slotAppId = c.slotMachineAppId;
-        }
-        const r = encodeBetKeyReplay({
-          betKeyHex: spin.betKey,
-          claimRound,
-          betAmount: spin.totalBet,
-          paylines: spin.selectedPaylines,
-          // omit timestamp for shorter URL; it's optional in replay
-          contractId: slotAppId ? undefined : spin.contractId,
-          slotAppId
-        });
-        url = `${window.location.origin}/replay?r=${encodeURIComponent(r)}`;
+      // Use transaction ID if available (shortest and most reliable)
+      if (spin.txId) {
+        url = `${window.location.origin}/replay?tx=${encodeURIComponent(spin.txId)}`;
       } else {
-        // Fallback to legacy encoded format when minimal fields are missing
-        if (!spin.outcome || typeof spin.winnings !== 'number') {
-          console.warn('Cannot share spin without outcome data and no bet key/round available');
-          return;
-        }
-        const encoded = encodeReplayData({
-          outcome: spin.outcome,
-          winnings: spin.winnings,
-          totalBet: spin.totalBet,
-          selectedPaylines: spin.selectedPaylines,
-          timestamp: spin.timestamp,
-          contractId: spin.contractId,
-          txId: spin.txId
-        });
-        url = `${window.location.origin}/replay?d=${encoded}`;
+        // Fallback when transaction ID is not available
+        console.warn('Cannot share spin without transaction ID');
+        return;
       }
 
       await navigator.clipboard.writeText(url);

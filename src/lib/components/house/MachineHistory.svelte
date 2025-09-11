@@ -183,13 +183,41 @@
 
       // Only add if it matches current search term (if any)
       if (searchTerm && searchTerm.trim()) {
-        const term = searchTerm.trim().toLowerCase();
-        const matchesSearch = 
-          newEvent.who.toLowerCase().includes(term) ||
-          newEvent.txid.toLowerCase().includes(term) ||
-          newEvent.round.toString().includes(term) ||
-          (Number(newEvent.payout) / 1000000).toString().includes(term);
-        
+        const raw = searchTerm.trim();
+        const term = raw.toLowerCase();
+        let matchesSearch = false;
+
+        // Support operator-based numeric searches like ">1000", ">= 1000", "< 500"
+        const opMatch = raw.match(/^([<>]=?|=)\s*(\d+(?:\.\d+)?)$/);
+        if (opMatch) {
+          const op = opMatch[1];
+          const value = parseFloat(opMatch[2]);
+          const payoutVoi = Number(newEvent.payout) / 1_000_000;
+          const amountVoi = Number(newEvent.bet_amount_per_line) / 1_000_000;
+
+          const compare = (a: number, b: number) => {
+            switch (op) {
+              case '>': return a > b;
+              case '>=': return a >= b;
+              case '<': return a < b;
+              case '<=': return a <= b;
+              case '=':
+              case '==': return a === b;
+              default: return false;
+            }
+          };
+
+          // Match if either payout or bet amount per line satisfies the condition
+          matchesSearch = compare(payoutVoi, value) || compare(amountVoi, value);
+        } else {
+          // Fallback to substring-based search
+          matchesSearch =
+            newEvent.who.toLowerCase().includes(term) ||
+            newEvent.txid.toLowerCase().includes(term) ||
+            newEvent.round.toString().includes(term) ||
+            (Number(newEvent.payout) / 1000000).toString().includes(term);
+        }
+
         if (!matchesSearch) return;
       }
 
@@ -344,128 +372,11 @@
     return formatTxIdForDisplay(txid, 8);
   }
 
-  // Build and copy compact replay URL for a given event (spin)
+  // Copy simple transaction ID replay URL
   async function copyReplayLink(spin: PlayerSpin) {
     try {
-      const { algorandService } = await import('$lib/services/algorand');
-      const { encodeBetKeyReplay } = await import('$lib/utils/replayEncoder');
-      const { supabaseService } = await import('$lib/services/supabase');
       const { toastStore } = await import('$lib/stores/toast');
-
-      const indexer = algorandService.getIndexer();
-      const base32TxId = ensureBase32TxId(spin.txid);
-      const tx = await indexer.lookupTransactionByID(base32TxId).do();
-      // Identify the app call transaction in the group if needed
-      let appTxn: any = (tx?.transaction?.['tx-type'] === 'appl') ? tx.transaction : null;
-      const groupId = tx?.transaction?.group;
-      if (!appTxn && groupId) {
-        try {
-          const grp = await indexer.searchForTransactions().group(groupId).do();
-          const appl = grp?.transactions?.find((t: any) => t['tx-type'] === 'appl');
-          if (appl) appTxn = appl;
-        } catch {}
-      }
-      const appIdNum = Number(appId || 0n) || (appTxn?.['application-index'] || tx?.transaction?.['application-index'] || 0);
-      const logs: string[] = appTxn?.logs || tx?.transaction?.logs || [];
-
-      let betKeyHex: string | null = null;
-      for (const b64 of logs) {
-        try {
-          const bin = typeof atob !== 'undefined' ? atob(b64) : Buffer.from(b64, 'base64').toString('binary');
-          const bytes = new Uint8Array(bin.length);
-          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-          const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-          if (hex.length === 112) { betKeyHex = hex; break; }
-        } catch {}
-      }
-
-      if (!betKeyHex) {
-        // Prefer hov_events values (amount, max_payline_index, index_value)
-        try {
-          if (!supabaseService.isReady()) {
-            await supabaseService.initialize();
-          }
-          const client = supabaseService.getClient();
-          const { data: ev } = await client
-            .from('hov_events')
-            .select('amount,max_payline_index,index_value')
-            .eq('txid', spin.txid)
-            .limit(1)
-            .maybeSingle();
-          if (ev) {
-            const amount = Number(ev.amount || 0);
-            const maxIdx = Number(ev.max_payline_index || 0);
-            const idxVal = Number(ev.index_value || 0);
-            if (amount > 0) {
-              const algosdk = (await import('algosdk')).default;
-              const senderAddr = (appTxn?.sender) || (tx?.transaction?.sender) || (spin as any)?.who || '';
-              const senderBytes = algosdk.decodeAddress(senderAddr).publicKey;
-              const u64be = (val: number | bigint) => { const buf = new Uint8Array(8); new DataView(buf.buffer).setBigUint64(0, BigInt(val), false); return buf; };
-              const keyBytes = new Uint8Array(32 + 8 + 8 + 8);
-              keyBytes.set(senderBytes, 0);
-              keyBytes.set(u64be(amount), 32);
-              keyBytes.set(u64be(maxIdx), 40);
-              keyBytes.set(u64be(idxVal), 48);
-              betKeyHex = Array.from(keyBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-            }
-          }
-        } catch {}
-      }
-
-      if (!betKeyHex) {
-        // Reconstruct from transaction args
-        try {
-          const algosdk = (await import('algosdk')).default;
-          const senderAddr = (appTxn?.sender) || (tx?.transaction?.sender) || (spin as any)?.who || '';
-          const senderBytes = algosdk.decodeAddress(senderAddr).publicKey; // 32 bytes
-          const appArgs = appTxn?.['application-args'] || [];
-
-          const toBytes = (b64: string) => (typeof atob !== 'undefined' ? Uint8Array.from(atob(b64), c=>c.charCodeAt(0)) : new Uint8Array(Buffer.from(b64, 'base64')));
-          const readU64BE = (bytes: Uint8Array): number => Number(new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getBigUint64(0, false));
-          const u64be = (val: number | bigint) => { const buf = new Uint8Array(8); new DataView(buf.buffer).setBigUint64(0, BigInt(val), false); return buf; };
-
-          let betPerLine = Number(spin.bet_amount_per_line || 0n);
-          let maxPaylineIndex = Number(spin.paylines_count || 0) - 1;
-          let indexVal = 0;
-          if (appArgs.length >= 4) {
-            const betArg = toBytes(appArgs[1]);
-            const maxArg = toBytes(appArgs[2]);
-            const idxArg = toBytes(appArgs[3]);
-            if (betArg.length >= 8) betPerLine = readU64BE(betArg.slice(-8));
-            if (maxArg.length >= 8) maxPaylineIndex = readU64BE(maxArg.slice(-8));
-            if (idxArg.length >= 8) {
-              const last8 = idxArg.slice(-8);
-              const first8 = idxArg.slice(0,8);
-              const idxLast = readU64BE(last8);
-              const idxFirst = readU64BE(first8);
-              indexVal = idxLast || idxFirst || 0;
-            }
-          }
-
-          const keyBytes = new Uint8Array(32 + 8 + 8 + 8);
-          keyBytes.set(senderBytes, 0);
-          keyBytes.set(u64be(betPerLine), 32);
-          keyBytes.set(u64be(maxPaylineIndex), 40);
-          keyBytes.set(u64be(indexVal), 48);
-          betKeyHex = Array.from(keyBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-        } catch (e) {
-          console.warn('Bet key not found in logs and failed to reconstruct from app args', e);
-          return;
-        }
-      }
-
-      const claimRound = Number(spin.claim_round || 0n);
-      const totalBet = Number(spin.total_bet_amount || 0n);
-      const lines = Number(spin.paylines_count || 0);
-
-      const r = encodeBetKeyReplay({
-        betKeyHex,
-        claimRound,
-        betAmount: totalBet,
-        paylines: lines,
-        slotAppId: appIdNum || undefined,
-      });
-      const url = `${window.location.origin}/replay?r=${encodeURIComponent(r)}`;
+      const url = `${window.location.origin}/replay?tx=${encodeURIComponent(spin.txid)}`;
       await navigator.clipboard.writeText(url);
       toastStore.success('Replay link copied', 'Share it with your community!', 3000);
       dispatch('copied', { type: 'replay', value: url });
@@ -476,124 +387,7 @@
 
   async function openReplayLink(spin: PlayerSpin) {
     try {
-      const { algorandService } = await import('$lib/services/algorand');
-      const { encodeBetKeyReplay } = await import('$lib/utils/replayEncoder');
-      const { supabaseService } = await import('$lib/services/supabase');
-
-      const indexer = algorandService.getIndexer();
-      const base32TxId = ensureBase32TxId(spin.txid);
-      const tx = await indexer.lookupTransactionByID(base32TxId).do();
-      // Identify the app call transaction in the group if needed
-      let appTxn: any = (tx?.transaction?.['tx-type'] === 'appl') ? tx.transaction : null;
-      const groupId = tx?.transaction?.group;
-      if (!appTxn && groupId) {
-        try {
-          const grp = await indexer.searchForTransactions().group(groupId).do();
-          const appl = grp?.transactions?.find((t: any) => t['tx-type'] === 'appl');
-          if (appl) appTxn = appl;
-        } catch {}
-      }
-      const appIdNum = Number(appId || 0n) || (appTxn?.['application-index'] || tx?.transaction?.['application-index'] || 0);
-      const logs: string[] = appTxn?.logs || tx?.transaction?.logs || [];
-
-      let betKeyHex: string | null = null;
-      for (const b64 of logs) {
-        try {
-          const bin = typeof atob !== 'undefined' ? atob(b64) : Buffer.from(b64, 'base64').toString('binary');
-          const bytes = new Uint8Array(bin.length);
-          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-          const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-          if (hex.length === 112) { betKeyHex = hex; break; }
-        } catch {}
-      }
-
-      if (!betKeyHex) {
-        // Prefer hov_events values (amount, max_payline_index, index_value)
-        try {
-          if (!supabaseService.isReady()) {
-            await supabaseService.initialize();
-          }
-          const client = supabaseService.getClient();
-          const { data: ev } = await client
-            .from('hov_events')
-            .select('amount,max_payline_index,index_value')
-            .eq('txid', spin.txid)
-            .limit(1)
-            .maybeSingle();
-          if (ev) {
-            const amount = Number(ev.amount || 0);
-            const maxIdx = Number(ev.max_payline_index || 0);
-            const idxVal = Number(ev.index_value || 0);
-            if (amount > 0) {
-              const algosdk = (await import('algosdk')).default;
-              const senderAddr = (appTxn?.sender) || (tx?.transaction?.sender) || (spin as any)?.who || '';
-              const senderBytes = algosdk.decodeAddress(senderAddr).publicKey;
-              const u64be = (val: number | bigint) => { const buf = new Uint8Array(8); new DataView(buf.buffer).setBigUint64(0, BigInt(val), false); return buf; };
-              const keyBytes = new Uint8Array(32 + 8 + 8 + 8);
-              keyBytes.set(senderBytes, 0);
-              keyBytes.set(u64be(amount), 32);
-              keyBytes.set(u64be(maxIdx), 40);
-              keyBytes.set(u64be(idxVal), 48);
-              betKeyHex = Array.from(keyBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-            }
-          }
-        } catch {}
-      }
-
-      if (!betKeyHex) {
-        // Reconstruct from transaction args
-        try {
-          const algosdk = (await import('algosdk')).default;
-          const senderAddr = (appTxn?.sender) || (tx?.transaction?.sender) || (spin as any)?.who || '';
-          const senderBytes = algosdk.decodeAddress(senderAddr).publicKey; // 32 bytes
-          const appArgs = appTxn?.['application-args'] || [];
-
-          const toBytes = (b64: string) => (typeof atob !== 'undefined' ? Uint8Array.from(atob(b64), c=>c.charCodeAt(0)) : new Uint8Array(Buffer.from(b64, 'base64')));
-          const readU64BE = (bytes: Uint8Array): number => Number(new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getBigUint64(0, false));
-          const u64be = (val: number | bigint) => { const buf = new Uint8Array(8); new DataView(buf.buffer).setBigUint64(0, BigInt(val), false); return buf; };
-
-          let betPerLine = Number(spin.bet_amount_per_line || 0n);
-          let maxPaylineIndex = Number(spin.paylines_count || 0) - 1;
-          let indexVal = 0;
-          if (appArgs.length >= 4) {
-            const betArg = toBytes(appArgs[1]);
-            const maxArg = toBytes(appArgs[2]);
-            const idxArg = toBytes(appArgs[3]);
-            if (betArg.length >= 8) betPerLine = readU64BE(betArg.slice(-8));
-            if (maxArg.length >= 8) maxPaylineIndex = readU64BE(maxArg.slice(-8));
-            if (idxArg.length >= 8) {
-              const last8 = idxArg.slice(-8);
-              const first8 = idxArg.slice(0,8);
-              const idxLast = readU64BE(last8);
-              const idxFirst = readU64BE(first8);
-              indexVal = idxLast || idxFirst || 0;
-            }
-          }
-
-          const keyBytes = new Uint8Array(32 + 8 + 8 + 8);
-          keyBytes.set(senderBytes, 0);
-          keyBytes.set(u64be(betPerLine), 32);
-          keyBytes.set(u64be(maxPaylineIndex), 40);
-          keyBytes.set(u64be(indexVal), 48);
-          betKeyHex = Array.from(keyBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-        } catch (e) {
-          console.warn('Bet key not found in logs and failed to reconstruct from app args', e);
-          return;
-        }
-      }
-
-      const claimRound = Number(spin.claim_round || 0n);
-      const totalBet = Number(spin.total_bet_amount || 0n);
-      const lines = Number(spin.paylines_count || 0);
-
-      const r = encodeBetKeyReplay({
-        betKeyHex,
-        claimRound,
-        betAmount: totalBet,
-        paylines: lines,
-        slotAppId: appIdNum || undefined,
-      });
-      const url = `${window.location.origin}/replay?r=${encodeURIComponent(r)}`;
+      const url = `${window.location.origin}/replay?tx=${encodeURIComponent(spin.txid)}`;
       window.open(url, '_blank');
       dispatch('opened', { type: 'replay', value: url });
     } catch (err) {
@@ -714,7 +508,7 @@
           <input
             type="text"
             bind:value={searchTerm}
-            placeholder="Search by player address, transaction ID, or amount..."
+            placeholder="Search address, txid, or amount (e.g., >1000, >= 250)"
             class="search-input"
           />
         </div>

@@ -13,6 +13,8 @@ export interface SoundPreferences {
   uiVolume: number; // 0-1
   backgroundEnabled: boolean;
   backgroundVolume: number; // 0-1
+  // Controls whether the floating VOI Radio iframe loads at all
+  voiRadioEnabled: boolean;
 }
 
 export interface SoundState {
@@ -35,7 +37,8 @@ const defaultPreferences: SoundPreferences = {
   uiSoundsEnabled: true,
   uiVolume: 0.5,
   backgroundEnabled: false, // Disabled by default to not be intrusive
-  backgroundVolume: 0.3
+  backgroundVolume: 0.3,
+  voiRadioEnabled: true
 };
 
 // Sound categories for easy management

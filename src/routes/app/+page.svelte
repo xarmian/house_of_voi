@@ -2,12 +2,12 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { currentTheme } from '$lib/stores/theme';
-  import { isMasterSoundEnabled } from '$lib/stores/sound';
+  
   import { initializeMultiContractStores } from '$lib/stores/multiContract';
   import { machineStatsService, MachineStatsService } from '$lib/services/machineStatsService';
   import WalletManager from '$lib/components/wallet/WalletManager.svelte';
   import MachineCard from '$lib/components/game/MachineCard.svelte';
-  import VoiRadioPlayer from '$lib/components/app/VoiRadioPlayer.svelte';
+  
   import { Search, Filter, Home, Gamepad2, TrendingUp, Users, Loader2 } from 'lucide-svelte';
   import type { ContractPair } from '$lib/types/multiContract';
   import type { PageData } from './$types';
@@ -306,10 +306,7 @@
     </div>
   </div>
   
-  <!-- VOI Radio Player -->
-  {#if $isMasterSoundEnabled}
-    <VoiRadioPlayer />
-  {/if}
+  
 </main>
 
 <style>

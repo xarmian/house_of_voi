@@ -491,14 +491,19 @@ export class AlgorandService {
 
       console.log(`📝 ${signedTxns.length} transactions signed`);
 
-      // txid of the second transaction
-      const appCallTxId = signedTxns[1].txID;
+      // Determine indexes of payment and app call within the group
+      const decodedTypes = decodedTxns.map((txn: any) => txn?.type || txn?.get_obj_for_encoding?.().type || '');
+      const appCallIndex = Math.max(0, decodedTypes.findIndex((t: string) => t === 'appl'));
+      const paymentIndex = Math.max(0, decodedTypes.findIndex((t: string) => t === 'pay'));
+
+      const appCallTxId = signedTxns[appCallIndex]?.txID;
+      const paymentTxId = signedTxns[paymentIndex]?.txID;
 
       // Submit the signed transactions as a group
       const submittedGroup = await this.client.sendRawTransaction(signedTxns.map((stxn: {txID: string, blob: string}) => stxn.blob)).do();
-      const txId = submittedGroup.txId;
+      const groupTxId = submittedGroup.txId;
       
-      console.log('🚀 Transaction group submitted with ID:', txId);
+      console.log('🚀 Transaction group submitted:', { groupTxId, appCallTxId, paymentTxId, order: decodedTypes });
 
       // Wait for confirmation with progress feedback
       console.log('⏳ Waiting for transaction confirmation...');
@@ -526,7 +531,11 @@ export class AlgorandService {
       }
 
       return {
-        txId: txId,
+        // Use the app call transaction ID as the canonical txId for linking and log extraction
+        txId: appCallTxId,
+        // Provide additional identifiers for bookkeeping
+        groupTxId,
+        paymentTxId,
         betKey: actualBetKey,
         round: confirmedTxn['confirmed-round'] || 0,
         transactions: signedTxns.map((stxn: {txID: string, blob: string}) => stxn.blob)
@@ -1074,7 +1083,7 @@ export class AlgorandService {
         slotMachineABI,
         account
       );
-      
+
       // Set fee and enable params like in documentation
       ci.setFee(32000);
       ci.setEnableParamsLastRoundMod(true);
@@ -1082,7 +1091,16 @@ export class AlgorandService {
       
       // Call claim method with bet key as bytes
       const betKeyBytes = this.hexStringToUint8Array(betKey);
-      const claimResult = await ci.claim(betKeyBytes);
+      let claimResult: any;
+
+      for (let i = 0; i < 3; i++) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        claimResult = await ci.claim(betKeyBytes);
+
+        if (claimResult.success) {
+          break;
+        }
+      }
 
       // Check if claim was successful and extract results
       if (!claimResult.success) {

@@ -16,8 +16,6 @@
   import { spinDetailsService, type ReconstructedSpinData } from '$lib/services/spinDetailsService';
   import { formatVOI } from '$lib/constants/betting';
   import { ensureBase32TxId, formatTxIdForDisplay } from '$lib/utils/transactionUtils';
-  import { encodeReplayData, encodeBetKeyReplay } from '$lib/utils/replayEncoder';
-  import { multiContractStore } from '$lib/stores/multiContract';
   import { toastStore } from '$lib/stores/toast';
   import { getSymbolColorScheme } from '$lib/utils/winLineDetection';
   import { getThemeSymbolImagePath, getSymbol } from '$lib/constants/symbols';
@@ -203,67 +201,24 @@
   }
 
   function formatTxId(txId: string): string {
-    return formatTxIdForDisplay(txId, 8);
+    return formatTxIdForDisplay(txId,58);
   }
 
   async function copyDeepLink() {
-    if (!spin || !reconstructedData?.outcome) return;
+    if (!spin) return;
     
     try {
       copyingDeepLink = true;
       
-      let url: string;
-      const { betKey, claimRound } = reconstructedData.outcome;
+      // Use transaction ID (shortest and most reliable)
+      const txId = ('txId' in spin && spin.txId) ? spin.txId : 
+                   ('txid' in spin && spin.txid) ? spin.txid : null;
       
-      // Prefer bet key format for compact URLs
-      if (betKey && claimRound) {
-        let slotAppId: number | undefined = undefined;
-        if ('contractId' in spin && spin.contractId) {
-          const contract = multiContractStore.getContract(spin.contractId);
-          if (contract?.slotMachineAppId) slotAppId = contract.slotMachineAppId;
-        }
-        
-        const totalBet = 'totalBet' in spin ? spin.totalBet : 
-                        'total_bet_amount' in spin ? Number(spin.total_bet_amount) : 0;
-        const paylines = 'selectedPaylines' in spin ? spin.selectedPaylines :
-                        'paylines_count' in spin ? Number(spin.paylines_count) : 20;
-        
-        const r = encodeBetKeyReplay({
-          betKeyHex: betKey,
-          claimRound,
-          betAmount: totalBet,
-          paylines,
-          contractId: slotAppId ? undefined : ('contractId' in spin ? spin.contractId : undefined),
-          slotAppId
-        });
-        url = `${window.location.origin}/detail?r=${encodeURIComponent(r)}`;
-      } else {
-        // Fallback to legacy format
-        const winnings = 'winnings' in spin ? spin.winnings : 
-                        'payout' in spin ? Number(spin.payout) : 0;
-        const totalBet = 'totalBet' in spin ? spin.totalBet : 
-                        'total_bet_amount' in spin ? Number(spin.total_bet_amount) : 0;
-        const paylines = 'selectedPaylines' in spin ? spin.selectedPaylines :
-                        'paylines_count' in spin ? Number(spin.paylines_count) : 20;
-        const timestamp = 'timestamp' in spin ? spin.timestamp : 
-                         'created_at' in spin ? spin.created_at.getTime() : Date.now();
-        
-        if (!reconstructedData.outcome.grid || typeof winnings !== 'number') {
-          throw new Error('Insufficient data for detail link');
-        }
-        
-        const encoded = encodeReplayData({
-          outcome: reconstructedData.outcome.grid,
-          winnings,
-          totalBet,
-          selectedPaylines: paylines,
-          timestamp,
-          contractId: 'contractId' in spin ? spin.contractId : undefined,
-          txId: 'txId' in spin ? spin.txId : 'txid' in spin ? spin.txid : undefined
-        });
-        url = `${window.location.origin}/detail?d=${encoded}`;
+      if (!txId) {
+        throw new Error('Transaction ID not available for this spin');
       }
-
+      
+      const url = `${window.location.origin}/detail?tx=${encodeURIComponent(txId)}`;
       await navigator.clipboard.writeText(url);
       toastStore.success('Detail link copied!', 'Share this link to show spin details', 3000);
     } catch (error) {
@@ -275,63 +230,20 @@
   }
 
   async function shareReplay() {
-    if (!spin || !reconstructedData?.outcome) return;
+    if (!spin) return;
     
     try {
       sharingReplay = true;
       
-      let url: string;
-      const { betKey, claimRound } = reconstructedData.outcome;
+      // Use transaction ID (shortest and most reliable)
+      const txId = ('txId' in spin && spin.txId) ? spin.txId : 
+                   ('txid' in spin && spin.txid) ? spin.txid : null;
       
-      // Prefer bet key replay format for compact URLs
-      if (betKey && claimRound) {
-        let slotAppId: number | undefined = undefined;
-        if ('contractId' in spin && spin.contractId) {
-          const contract = multiContractStore.getContract(spin.contractId);
-          if (contract?.slotMachineAppId) slotAppId = contract.slotMachineAppId;
-        }
-        
-        const totalBet = 'totalBet' in spin ? spin.totalBet : 
-                        'total_bet_amount' in spin ? Number(spin.total_bet_amount) : 0;
-        const paylines = 'selectedPaylines' in spin ? spin.selectedPaylines :
-                        'paylines_count' in spin ? Number(spin.paylines_count) : 20;
-        
-        const r = encodeBetKeyReplay({
-          betKeyHex: betKey,
-          claimRound,
-          betAmount: totalBet,
-          paylines,
-          contractId: slotAppId ? undefined : ('contractId' in spin ? spin.contractId : undefined),
-          slotAppId
-        });
-        url = `${window.location.origin}/replay?r=${encodeURIComponent(r)}`;
-      } else {
-        // Fallback to legacy format
-        const winnings = 'winnings' in spin ? spin.winnings : 
-                        'payout' in spin ? Number(spin.payout) : 0;
-        const totalBet = 'totalBet' in spin ? spin.totalBet : 
-                        'total_bet_amount' in spin ? Number(spin.total_bet_amount) : 0;
-        const paylines = 'selectedPaylines' in spin ? spin.selectedPaylines :
-                        'paylines_count' in spin ? Number(spin.paylines_count) : 20;
-        const timestamp = 'timestamp' in spin ? spin.timestamp : 
-                         'created_at' in spin ? spin.created_at.getTime() : Date.now();
-        
-        if (!reconstructedData.outcome.grid || typeof winnings !== 'number') {
-          throw new Error('Insufficient data for replay link');
-        }
-        
-        const encoded = encodeReplayData({
-          outcome: reconstructedData.outcome.grid,
-          winnings,
-          totalBet,
-          selectedPaylines: paylines,
-          timestamp,
-          contractId: 'contractId' in spin ? spin.contractId : undefined,
-          txId: 'txId' in spin ? spin.txId : 'txid' in spin ? spin.txid : undefined
-        });
-        url = `${window.location.origin}/replay?d=${encoded}`;
+      if (!txId) {
+        throw new Error('Transaction ID not available for this spin');
       }
-
+      
+      const url = `${window.location.origin}/replay?tx=${encodeURIComponent(txId)}`;
       await navigator.clipboard.writeText(url);
       toastStore.success('Replay link copied!', 'Share it with your friends!', 3000);
     } catch (error) {
@@ -343,63 +255,19 @@
   }
 
   async function viewReplay() {
-    if (!spin || !reconstructedData?.outcome) return;
+    if (!spin) return;
     
     try {
-      let url: string;
-      const { betKey, claimRound } = reconstructedData.outcome;
+      // Use transaction ID (shortest and most reliable)
+      const txId = ('txId' in spin && spin.txId) ? spin.txId : 
+                   ('txid' in spin && spin.txid) ? spin.txid : null;
       
-      // Use the same logic as shareReplay to generate URL
-      if (betKey && claimRound) {
-        let slotAppId: number | undefined = undefined;
-        if ('contractId' in spin && spin.contractId) {
-          const contract = multiContractStore.getContract(spin.contractId);
-          if (contract?.slotMachineAppId) slotAppId = contract.slotMachineAppId;
-        }
-        
-        const totalBet = 'totalBet' in spin ? spin.totalBet : 
-                        'total_bet_amount' in spin ? Number(spin.total_bet_amount) : 0;
-        const paylines = 'selectedPaylines' in spin ? spin.selectedPaylines :
-                        'paylines_count' in spin ? Number(spin.paylines_count) : 20;
-        
-        const r = encodeBetKeyReplay({
-          betKeyHex: betKey,
-          claimRound,
-          betAmount: totalBet,
-          paylines,
-          contractId: slotAppId ? undefined : ('contractId' in spin ? spin.contractId : undefined),
-          slotAppId
-        });
-        url = `/replay?r=${encodeURIComponent(r)}`;
-      } else {
-        // Fallback to legacy format
-        const winnings = 'winnings' in spin ? spin.winnings : 
-                        'payout' in spin ? Number(spin.payout) : 0;
-        const totalBet = 'totalBet' in spin ? spin.totalBet : 
-                        'total_bet_amount' in spin ? Number(spin.total_bet_amount) : 0;
-        const paylines = 'selectedPaylines' in spin ? spin.selectedPaylines :
-                        'paylines_count' in spin ? Number(spin.paylines_count) : 20;
-        const timestamp = 'timestamp' in spin ? spin.timestamp : 
-                         'created_at' in spin ? spin.created_at.getTime() : Date.now();
-        
-        if (!reconstructedData.outcome.grid || typeof winnings !== 'number') {
-          throw new Error('Insufficient data for replay link');
-        }
-        
-        const encoded = encodeReplayData({
-          outcome: reconstructedData.outcome.grid,
-          winnings,
-          totalBet,
-          selectedPaylines: paylines,
-          timestamp,
-          contractId: 'contractId' in spin ? spin.contractId : undefined,
-          txId: 'txId' in spin ? spin.txId : 'txid' in spin ? spin.txid : undefined
-        });
-        url = `/replay?d=${encoded}`;
+      if (!txId) {
+        throw new Error('Transaction ID not available for this spin');
       }
-
-      // Navigate to replay page with details modal open
-      goto(url);
+      
+      const url = `/replay?tx=${encodeURIComponent(txId)}`;
+      window.open(url);
     } catch (error) {
       console.error('Failed to navigate to replay:', error);
       toastStore.error('Navigation failed', 'Failed to open replay page');
@@ -493,15 +361,23 @@
             {formatDate('timestamp' in spin ? spin.timestamp : spin.created_at)}
           </span>
         </div>
-        {#if ('winnings' in spin && typeof spin.winnings === 'number') || 'payout' in spin}
+        {#if (('winnings' in spin && typeof spin.winnings === 'number') || 'payout' in spin) || (reconstructedData?.outcome)}
           <div class="detail-item">
             <span class="detail-label">Winnings:</span>
-            <span class="detail-value" 
-              class:text-green-400={('winnings' in spin ? spin.winnings : Number(spin.payout)) > 0} 
-              class:text-red-400={('winnings' in spin ? spin.winnings : Number(spin.payout)) <= 0}>
-              {('winnings' in spin ? spin.winnings : Number(spin.payout)) > 0 ? '+' : ''}
-              {formatVOI('winnings' in spin ? spin.winnings || 0 : Number(spin.payout || 0))} VOI
-            </span>
+            {#if reconstructedData?.outcome}
+              <span class="detail-value"
+                class:text-green-400={reconstructedData.outcome.totalWinnings > 0}
+                class:text-red-400={reconstructedData.outcome.totalWinnings <= 0}>
+                {reconstructedData.outcome.totalWinnings > 0 ? '+' : ''}{formatVOI(reconstructedData.outcome.totalWinnings || 0)} VOI
+              </span>
+            {:else}
+              <span class="detail-value" 
+                class:text-green-400={('winnings' in spin ? spin.winnings : Number(spin.payout)) > 0} 
+                class:text-red-400={('winnings' in spin ? spin.winnings : Number(spin.payout)) <= 0}>
+                {('winnings' in spin ? spin.winnings : Number(spin.payout)) > 0 ? '+' : ''}
+                {formatVOI('winnings' in spin ? spin.winnings || 0 : Number(spin.payout || 0))} VOI
+              </span>
+            {/if}
           </div>
         {/if}
       </div>
