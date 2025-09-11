@@ -13,6 +13,8 @@ interface GameState {
   betPerLine: number;
   currentSpinId: string | null; // Track which spin is currently displayed
   waitingForOutcome: boolean; // True when spinning continuously waiting for outcome
+  isAutoSpinning: boolean; // True when auto spin mode is active
+  autoSpinCount: number | 'unlimited'; // Track remaining auto spins
 }
 
 function createGameStore() {
@@ -36,7 +38,9 @@ function createGameStore() {
     selectedPaylines: 1,
     betPerLine: 1000000, // 1 VOI in microVOI
     currentSpinId: null,
-    waitingForOutcome: false
+    waitingForOutcome: false,
+    isAutoSpinning: false,
+    autoSpinCount: 0
   });
 
   return {
@@ -155,6 +159,39 @@ function createGameStore() {
       }));
     },
 
+    // Start auto spin mode
+    startAutoSpin(count: number | 'unlimited') {
+      update(state => ({
+        ...state,
+        isAutoSpinning: true,
+        autoSpinCount: count
+      }));
+    },
+
+    // Stop auto spin mode
+    stopAutoSpin() {
+      update(state => ({
+        ...state,
+        isAutoSpinning: false,
+        autoSpinCount: 0
+      }));
+    },
+
+    // Decrement auto spin count
+    decrementAutoSpinCount() {
+      update(state => {
+        if (state.autoSpinCount === 'unlimited') {
+          return state;
+        }
+        const newCount = Math.max(0, state.autoSpinCount - 1);
+        return {
+          ...state,
+          autoSpinCount: newCount,
+          isAutoSpinning: newCount > 0
+        };
+      });
+    },
+
     // Reset game state
     reset() {
       update(state => ({
@@ -166,6 +203,22 @@ function createGameStore() {
         paylineHighlights: [],
         lastWin: 0,
         autoPlay: false
+      }));
+    },
+
+    // Force reset everything including auto spin
+    forceReset() {
+      update(state => ({
+        ...state,
+        isSpinning: false,
+        waitingForOutcome: false,
+        currentSpinId: null,
+        spinAnimations: [],
+        paylineHighlights: [],
+        lastWin: 0,
+        autoPlay: false,
+        isAutoSpinning: false,
+        autoSpinCount: 0
       }));
     },
 
@@ -190,3 +243,5 @@ export const currentGrid = derived(gameStore, $game => $game.grid.visibleGrid);
 export const totalBet = derived(gameStore, $game => $game.betPerLine * $game.selectedPaylines);
 export const waitingForOutcome = derived(gameStore, $game => $game.waitingForOutcome);
 export const currentSpinId = derived(gameStore, $game => $game.currentSpinId);
+export const isAutoSpinning = derived(gameStore, $game => $game.isAutoSpinning);
+export const autoSpinCount = derived(gameStore, $game => $game.autoSpinCount);

@@ -10,7 +10,7 @@
     startPerformanceOptimization,
     cleanupAnimations
   } from '$lib/stores/animations';
-  import { currentSpinId } from '$lib/stores/game';
+  import { currentSpinId, isAutoSpinning } from '$lib/stores/game';
   import { currentTheme } from '$lib/stores/theme';
   import { 
     ReelPhysicsEngine,
@@ -135,6 +135,38 @@
            reelDataError === null; // Slot machine not ready if reel data failed to load
   }
 
+  // Force cleanup function for external cleanup calls
+  export function forceCleanup() {
+    console.log('🧹 ReelGrid: Force cleanup called');
+    
+    // Stop all animations
+    stopSpin();
+    
+    // Stop visual updates
+    stopVisualUpdates();
+    
+    // Clear processing IDs
+    processingSpinId = null;
+    lastProcessedSpinId = null;
+    lastProcessedOutcomeSpinId = null;
+    
+    // Force clear all visual effects
+    reelElements.forEach((element, index) => {
+      if (element && reelContainers[index]) {
+        element.style.transition = '';
+        element.style.transform = 'translate3d(0, 0px, 0)';
+        element.style.willChange = '';
+        
+        reelContainers[index].style.filter = '';
+        reelContainers[index].style.perspective = '';
+        reelContainers[index].style.boxShadow = '';
+        reelContainers[index].style.willChange = '';
+      }
+    });
+    
+    console.log('✅ ReelGrid: Force cleanup complete');
+  }
+
   // Direct function that gets called from parent component
   export function startSpin(spinId: string) {
     if (!isMounted || !physicsEngine || !reelElements.length || 
@@ -209,19 +241,38 @@
   }
 
   export function stopSpin() {
-    if (!physicsEngine || !currentlySpinning) return;
+    console.log('🛑 ReelGrid: Stopping spin animation');
     
+    // Reset tracking variables
     currentlySpinning = false;
     processingSpinId = null;
-    physicsEngine.stopAllReels();
+    lastProcessedSpinId = null;
+    lastProcessedOutcomeSpinId = null;
     
-    // Clear any blur effects and reset transforms to clean final state
+    // Stop physics engine
+    if (physicsEngine) {
+      physicsEngine.stopAllReels();
+    }
+    
+    // Clear all visual effects and reset transforms
     reelElements.forEach((element, index) => {
       if (element && reelContainers[index]) {
+        // Clear animations and transitions
+        element.style.transition = '';
+        element.style.willChange = '';
+        
+        // Clear visual effects
         reelContainers[index].style.filter = ''; // Remove blur
         reelContainers[index].style.perspective = ''; // Remove 3D effects
+        reelContainers[index].style.boxShadow = '';
+        reelContainers[index].style.willChange = '';
+        
+        // Reset transform to a clean position
+        element.style.transform = 'translate3d(0, 0px, 0)';
       }
     });
+    
+    console.log('✅ ReelGrid: Spin stop complete');
   }
   
   export function setFinalPositions(finalGrid: string[][], spinId?: string) {
@@ -317,14 +368,19 @@
   // Removed complex updateReelVisuals - now handled directly in handlePhysicsUpdate
   
   function handlePhysicsUpdate(states: ReelAnimationState[]) {
-    // GUARD: Don't update if not currently spinning - prevents background updates
-    if (!currentlySpinning) {
+    // GUARD: Don't update if not currently spinning or if auto spin is stopping - prevents background updates
+    if (!currentlySpinning || (!$isAutoSpinning && processingSpinId && processingSpinId.includes('auto'))) {
+      return;
+    }
+    
+    // Additional guard: Don't update if physics engine is stopped
+    if (!physicsEngine) {
       return;
     }
     
     // Direct DOM updates only during active spinning
     states.forEach((state, index) => {
-      if (reelElements[index] && state.isSpinning) {
+      if (reelElements[index] && state.isSpinning && currentlySpinning) {
         // SAFETY FIX: Validate position before applying transform to prevent visual glitches
         const position = state.currentPosition;
         const maxAllowedPosition = EXTENDED_SYMBOLS * 100; // Total reel height
@@ -335,12 +391,15 @@
         const translateY = -safePosition;
         const transform = `translate3d(0, ${translateY}px, 0)`;
         
-        reelElements[index].style.transform = transform;
-        
-        // Apply visual effects only during spinning with velocity-based blur
-        if (reelContainers[index]) {
-          const blur = Math.min(Math.abs(state.velocity) / 500, 2);
-          reelContainers[index].style.filter = blur > 0.1 ? `blur(${blur}px)` : '';
+        // Double check we're still supposed to be spinning before applying transform
+        if (currentlySpinning) {
+          reelElements[index].style.transform = transform;
+          
+          // Apply visual effects only during spinning with velocity-based blur
+          if (reelContainers[index]) {
+            const blur = Math.min(Math.abs(state.velocity) / 500, 2);
+            reelContainers[index].style.filter = blur > 0.1 ? `blur(${blur}px)` : '';
+          }
         }
         
         // Debug logging for position tracking (only for first reel to avoid spam)

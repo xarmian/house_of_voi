@@ -233,9 +233,15 @@ export class QueueProcessor {
         console.log(`Auto-claim completed for spin ${spin.id} after ${claimRetryCount} attempts. Likely claimed by bot (good!).`);
 
         // Mark as completed since claim failures usually mean someone else claimed it
+        // Preserve the outcome and winnings data that we already know
         queueStore.updateSpin({
           id: spin.id,
-          status: SpinStatus.COMPLETED
+          status: SpinStatus.COMPLETED,
+          data: {
+            // Keep existing outcome and winnings data so UI can display results
+            outcome: spin.outcome,
+            winnings: spin.winnings
+          }
         });
         return;
       }
@@ -270,11 +276,15 @@ export class QueueProcessor {
       if (claimRetryCount + 1 >= 3) {
         console.log(`Auto-claim completed for spin ${spin.id} after ${claimRetryCount + 1} attempts. Likely claimed by bot (good!).`);
         // After 3 failed attempts, just mark as completed - failures usually mean someone else claimed it
+        // Preserve the outcome and winnings data that we already know
         queueStore.updateSpin({
           id: spin.id,
           status: SpinStatus.COMPLETED,
           data: {
-            isAutoClaimInProgress: undefined
+            isAutoClaimInProgress: undefined,
+            // Keep existing outcome and winnings data so UI can display results
+            outcome: spin.outcome,
+            winnings: spin.winnings
           }
         });
       } else {

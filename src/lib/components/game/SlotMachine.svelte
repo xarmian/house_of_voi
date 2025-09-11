@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { fly, fade } from 'svelte/transition';
-  import { gameStore, currentGrid, isSpinning, waitingForOutcome, currentSpinId } from '$lib/stores/game';
+  import { gameStore, currentGrid, isSpinning, waitingForOutcome, currentSpinId, isAutoSpinning } from '$lib/stores/game';
   import { bettingStore } from '$lib/stores/betting';
   import { queueStore, pendingSpins } from '$lib/stores/queue';
   import { queueProcessor } from '$lib/services/queueProcessor';
@@ -131,6 +131,29 @@
   
   // Get current contract for operations - use prop override or global selected contract
   $: currentContract = contractContext || $selectedContract;
+  
+  // Track auto spin changes and handle cleanup of stuck spins
+  let wasAutoSpinning = false;
+  let autoSpinStopTimeout: NodeJS.Timeout | null = null;
+  
+  $: {
+    if (wasAutoSpinning && !$isAutoSpinning) {
+      // Auto spin just stopped - let animations complete naturally, but set a safety timeout
+      console.log('🛑 Auto spin stopped, allowing animations to complete naturally');
+      
+      // Set a timeout to check for stuck spins after auto spin stops
+      autoSpinStopTimeout = setTimeout(() => {
+        checkForStuckSpins();
+      }, 15000); // Wait 15 seconds for remaining spins to complete
+    } else if (!wasAutoSpinning && $isAutoSpinning) {
+      // Auto spin just started - clear any existing timeout
+      if (autoSpinStopTimeout) {
+        clearTimeout(autoSpinStopTimeout);
+        autoSpinStopTimeout = null;
+      }
+    }
+    wasAutoSpinning = $isAutoSpinning;
+  }
   
   // Payline overlay visibility with auto-fade
   let showPaylineOverlay = false;
@@ -288,6 +311,7 @@
     if (lossFeedbackTimeout) clearTimeout(lossFeedbackTimeout);
     if (paylineTimeout) clearTimeout(paylineTimeout);
     if (failureFeedbackTimeout) clearTimeout(failureFeedbackTimeout);
+    if (autoSpinStopTimeout) clearTimeout(autoSpinStopTimeout);
     
     // Clear all replay timeouts
     replayTimeouts.forEach(timeout => clearTimeout(timeout));
@@ -918,6 +942,130 @@
     }, 3000);
   }
 
+  // Emergency cleanup function - only for error recovery or manual cleanup
+  async function forceCleanupAllAnimations() {
+    console.log('🧹 SlotMachine: EMERGENCY cleanup - stopping all animations');
+    
+    // 1. Stop all reel animations
+    callAllReelGrids('stopSpin');
+    callAllReelGrids('forceCleanup');
+    
+    // 2. Clear spinning interval
+    if (spinningInterval) {
+      clearInterval(spinningInterval);
+      spinningInterval = null;
+    }
+    
+    // 3. Force stop spin loop sound with verification
+    try {
+      const soundStopped = await soundService.forceStopWithVerification('spin-loop', 5);
+      if (!soundStopped) {
+        console.warn('⚠️ SlotMachine: Failed to stop spin-loop sound after cleanup');
+        // Force stop all sounds as fallback
+        soundService.stopAllSounds();
+      }
+    } catch (error) {
+      console.error('❌ SlotMachine: Error stopping sounds:', error);
+      soundService.stopAllSounds();
+    }
+    
+    // 4. Clear all timeouts
+    if (lossFeedbackTimeout) {
+      clearTimeout(lossFeedbackTimeout);
+      lossFeedbackTimeout = null;
+    }
+    if (paylineTimeout) {
+      clearTimeout(paylineTimeout);
+      paylineTimeout = null;
+    }
+    if (failureFeedbackTimeout) {
+      clearTimeout(failureFeedbackTimeout);
+      failureFeedbackTimeout = null;
+    }
+    
+    // 5. Clear all replay timeouts
+    replayTimeouts.forEach(timeout => clearTimeout(timeout));
+    replayTimeouts = [];
+    
+    // 6. CAREFULLY clear celebrations - only if they seem stuck
+    activeCelebrations.forEach(celebration => {
+      clearTimeout(celebration.timeout);
+    });
+    activeCelebrations.clear();
+    
+    // 7. Reset all visual states
+    showLossFeedback = false;
+    showFailureFeedback = false;
+    isReplayMode = false;
+    
+    // 8. Force reset game state
+    gameStore.forceReset();
+    
+    // 9. Give reels a moment to clean up, then set to clean positions
+    setTimeout(() => {
+      callAllReelGrids('setFinalPositions', [['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_']], 'force-cleanup');
+    }, 500);
+    
+    console.log('✅ SlotMachine: EMERGENCY cleanup complete');
+  }
+
+  // Gentle cleanup for normal auto spin stopping - only stops spinning-related things
+  async function gentleCleanupSpinning() {
+    console.log('🧹 SlotMachine: Gentle cleanup - stopping spinning only');
+    
+    // Only stop spinning interval - don't touch celebrations or other animations
+    if (spinningInterval) {
+      clearInterval(spinningInterval);
+      spinningInterval = null;
+    }
+    
+    // Only stop spin loop sound - let other sounds continue
+    try {
+      const soundStopped = await soundService.forceStopWithVerification('spin-loop', 3);
+      if (!soundStopped) {
+        console.warn('⚠️ SlotMachine: Failed to stop spin-loop sound');
+      }
+    } catch (error) {
+      console.error('❌ SlotMachine: Error stopping spin sound:', error);
+    }
+    
+    console.log('✅ SlotMachine: Gentle cleanup complete - celebrations allowed to continue');
+  }
+
+  // Check for stuck spins after auto spin stops
+  function checkForStuckSpins() {
+    console.log('🔍 Checking for stuck spins after auto spin stopped...');
+    
+    // Check if we're still spinning but auto spin is off
+    if ($isSpinning && !$isAutoSpinning) {
+      console.log('⚠️ Found stuck spinning state after auto spin stopped');
+      
+      // Check if there are any pending spins in the queue
+      const hasPendingSpins = $pendingSpins && $pendingSpins.length > 0;
+      
+      if (!hasPendingSpins) {
+        // No pending spins but still spinning - this is stuck
+        console.log('🛠️ No pending spins but still spinning - forcing cleanup');
+        gentleCleanupSpinning();
+        callAllReelGrids('stopSpin');
+        gameStore.reset();
+      } else {
+        // There are pending spins - give them more time
+        console.log('⏳ Still have pending spins, waiting longer...');
+        autoSpinStopTimeout = setTimeout(() => {
+          checkForStuckSpins();
+        }, 10000); // Check again in 10 seconds
+      }
+    } else {
+      console.log('✅ No stuck spins detected - all good');
+    }
+  }
+
+  // Export cleanup function for external components
+  export function cleanupAnimations() {
+    return forceCleanupAllAnimations();
+  }
+
 
   async function handleReplaySpin(replayData: { spin: any; outcome: string[][]; winnings: number; betAmount: number }) {
     const replayId = replayData.spin.id;
@@ -1050,12 +1198,11 @@
         }, 500); // Small delay after outcome is shown
         replayTimeouts.push(celebrationTimeout);
         
-        // Cleanup after replay completes
+        // Cleanup after replay completes (preserve final outcome on screen)
         const cleanupTimeout = setTimeout(() => {
-          // Ensure complete cleanup
-          gameStore.reset();
-          callAllReelGrids('stopSpin');
-          callAllReelGrids('setFinalPositions', [['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_']], 'cleanup');
+          // Do NOT reset the reels to blank or initial positions; keep the final outcome visible
+          // Only clear UI highlights/state associated with replay animations
+          try { gameStore.clearHighlights(); } catch {}
           
           // Clear replay mode flag to allow normal operation
           isReplayMode = false;

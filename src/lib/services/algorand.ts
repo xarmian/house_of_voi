@@ -598,30 +598,22 @@ export class AlgorandService {
    * Get bet grid from the smart contract (authoritative source)
    */
   async getBetGrid(betKey: string, address: string): Promise<string> {
-    try {
-      console.log('🎲 Getting bet grid for key:', betKey.slice(0, 16) + '...');
-      
-      // Validate bet key format
-      if (!betKey || betKey.length !== 112) {
-        throw new Error(`Invalid bet key format: expected 112 hex chars, got ${betKey?.length || 0}`);
-      }
-
-      // Validate bet key contains valid hex
-      if (!/^[0-9a-fA-F]+$/.test(betKey)) {
-        throw new Error('Bet key contains non-hex characters');
-      }
-
-      // Get grid directly from contract
-      return await this.getBetGridFromContract(betKey, address);
-
-    } catch (error) {
-      console.warn('⚠️ Contract grid retrieval failed, falling back to local generation:', error);
-      // Fallback to local generation if contract call fails
-      // return await this.getBetGridLocally(betKey, address);
-      
-      // return a blank grid
-      return '';
+    // Deterministically compute the grid without calling get_bet_grid
+    console.log('🎲 Deterministically generating bet grid for key:', betKey.slice(0, 16) + '...');
+    
+    // Validate bet key format
+    if (!betKey || betKey.length !== 112) {
+      throw new Error(`Invalid bet key format: expected 112 hex chars, got ${betKey?.length || 0}`);
     }
+    if (!/^[0-9a-fA-F]+$/.test(betKey)) {
+      throw new Error('Bet key contains non-hex characters');
+    }
+
+    // Get claim round, block seed and compute grid
+    const claimRound = await this.getClaimRoundFromContract(betKey, address);
+    const grid = await this.getBetGridDeterministic(betKey, claimRound, address);
+    console.log('✅ Deterministic grid:', grid);
+    return grid;
   }
 
   /**
@@ -634,6 +626,22 @@ export class AlgorandService {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(`📞 Getting grid from contract (attempt ${attempt}/${maxRetries}) for key:`, betKey.slice(0, 16) + '...');
+        // Kick off claim round fetch and local generation in parallel so we can compare results
+        const claimRoundPromise = this.getClaimRoundFromContract(betKey, address).catch((e) => {
+          console.log('⚠️ Claim round fetch failed:', e?.message || e);
+          return null as unknown as number;
+        });
+        const localGridPromise = claimRoundPromise
+          .then((cr) => {
+            if (typeof cr === 'number' && !Number.isNaN(cr) && cr > 0) {
+              return this.getBetGridDeterministic(betKey, cr, address);
+            }
+            return null as unknown as string;
+          })
+          .catch((e) => {
+            console.log('⚠️ Local grid generation failed:', e?.message || e);
+            return null as unknown as string;
+          });
         
         // Create ulujs CONTRACT instance for readonly call
         const ci = new CONTRACT(
@@ -664,6 +672,16 @@ export class AlgorandService {
         const gridString = gridResult.returnValue;
         
         console.log(`✅ Got grid from contract:`, gridString);
+        // Await the parallel local computation and compare
+        try {
+          const localGrid = await localGridPromise;
+          if (localGrid) {
+            console.log(`🧮 Locally generated grid:`, localGrid);
+            console.log(`🔎 Grids match:`, localGrid === gridString);
+          }
+        } catch (e: any) {
+          console.log('⚠️ Skipping local grid comparison due to error:', e?.message || e);
+        }
         
         // Validate the grid string is 15 characters (5 reels x 3 rows)
         if (gridString.length !== 15) {
@@ -692,7 +710,7 @@ export class AlgorandService {
   /**
    * Get bet grid using cached reel data and block seed (preserved for future refinement)
    */
-  async getBetGridLocally(betKey: string, address: string): Promise<string> {
+  async getBetGridLocally(betKey: string, address: string, claimRound?: number): Promise<string> {
     try {
       console.log('🎲 Getting bet grid locally for key:', betKey.slice(0, 16) + '...');
       
@@ -706,11 +724,20 @@ export class AlgorandService {
         throw new Error('Bet key contains non-hex characters');
       }
 
-      // First get the bet info to get the claim round
-      const betInfo = await this.getBetInfo(betKey);
-      
-      // Get block seed for the claim round (with retry logic for block commitment)
-      const blockSeed = await this.getBlockSeedWithRetry(betInfo.claimRound);
+      // Determine claim round
+      let round = claimRound;
+      if (!round) {
+        try {
+          round = await this.getClaimRoundFromContract(betKey, address);
+        } catch (e: any) {
+          throw new Error(`Unable to determine claim round: ${e?.message || e}`);
+        }
+      }
+      if (!round || Number.isNaN(round)) {
+        throw new Error('Invalid claim round');
+      }
+      // Get block seed for the claim round using robust fallback
+      const blockSeed = await this.getBlockSeedForRound(round);
       
       // Generate grid using cached reel data and the same algorithm as the contract
       const betKeyBytes = this.hexStringToUint8Array(betKey);
@@ -731,6 +758,82 @@ export class AlgorandService {
 
     } catch (error) {
       throw this.handleError(error, 'Failed to get bet grid using local generation');
+    }
+  }
+
+  /**
+   * Fetch claim round for a bet directly from contract (read-only ABI call)
+   */
+  async getClaimRoundFromContract(betKey: string, address: string): Promise<number> {
+    const ci = new CONTRACT(
+      this.appId,
+      this.client,
+      undefined,
+      slotMachineABI,
+      {
+        addr: address,
+        sk: new Uint8Array(64),
+      }
+    );
+    ci.setFee(2000);
+    ci.setEnableParamsLastRoundMod(true);
+    const betKeyBytes = this.hexStringToUint8Array(betKey);
+    const result = await ci.get_bet_claim_round(betKeyBytes);
+    if (!result.success) {
+      throw new Error(result.error || 'get_bet_claim_round failed');
+    }
+    const bn: bigint = result.returnValue;
+    return Number(bn);
+  }
+
+  /**
+   * Deterministically compute bet grid from bet key and claim round
+   */
+  async getBetGridDeterministic(betKey: string, claimRound: number, address: string): Promise<string> {
+    const blockSeed = await this.getBlockSeedForRound(claimRound);
+    const betKeyBytes = this.hexStringToUint8Array(betKey);
+    const combined = new Uint8Array(blockSeed.length + betKeyBytes.length);
+    combined.set(blockSeed);
+    combined.set(betKeyBytes, blockSeed.length);
+    const hashedBytes = await crypto.subtle.digest('SHA-256', combined);
+    const seed = new Uint8Array(hashedBytes);
+    return await this.generateGridFromSeed(seed, address);
+  }
+
+  /**
+   * Fetch block seed last 32 bytes for a given round using algod, then indexer fallback
+   */
+  private async getBlockSeedForRound(round: number): Promise<Uint8Array> {
+    try {
+      const block = await this.client.block(round).do();
+      const blockSeed = block.block.seed;
+      let seedBytes: Uint8Array;
+      if (blockSeed instanceof Uint8Array) {
+        seedBytes = blockSeed;
+      } else if (typeof blockSeed === 'string') {
+        seedBytes = this.base64ToUint8Array(blockSeed);
+      } else if (Array.isArray(blockSeed)) {
+        seedBytes = new Uint8Array(blockSeed);
+      } else {
+        throw new Error(`Unexpected block seed type from algod: ${typeof blockSeed}`);
+      }
+      return new Uint8Array(seedBytes.slice(-32));
+    } catch (eAlgod: any) {
+      console.warn('Algod block seed fetch failed, trying indexer:', eAlgod?.message || eAlgod);
+      const block = await this.indexer.lookupBlock(round).do();
+      const blockSeed = (block as any)?.seed || (block as any)?.block?.seed;
+      if (!blockSeed) throw new Error('Indexer did not return a seed');
+      let seedBytes: Uint8Array;
+      if (blockSeed instanceof Uint8Array) {
+        seedBytes = blockSeed;
+      } else if (typeof blockSeed === 'string') {
+        seedBytes = this.base64ToUint8Array(blockSeed);
+      } else if (Array.isArray(blockSeed)) {
+        seedBytes = new Uint8Array(blockSeed);
+      } else {
+        throw new Error(`Unexpected block seed type from indexer: ${typeof blockSeed}`);
+      }
+      return new Uint8Array(seedBytes.slice(-32));
     }
   }
 
@@ -877,7 +980,7 @@ export class AlgorandService {
    */
   async getGridOutcome(betKey: string, address: string): Promise<GridOutcome> {
     try {
-      // Get the actual grid from the contract
+      // Generate the grid deterministically (replaces contract get_bet_grid)
       const gridString = await this.getBetGrid(betKey, address);
       
       // Convert the 15-character string to a 2D array for compatibility
@@ -891,18 +994,41 @@ export class AlgorandService {
         }
       }
 
-      const betInfo = await this.getBetInfo(betKey);
-
       return {
         grid,
         gridString, // Include the raw 15-character string
         seed: betKey, // Use bet key as seed reference
-        round: betInfo.claimRound
+        round: await this.getClaimRoundFromContract(betKey, address)
       };
 
     } catch (error) {
       throw this.handleError(error, 'Failed to get grid outcome');
     }
+  }
+
+  /**
+   * Wait for the claim round, compute outcome immediately, and submit claim
+   */
+  async autoClaimWhenReady(
+    senderAccount: { address: string; privateKey: string },
+    betKey: string
+  ): Promise<{ gridString: string; round: number; txId: string; payout: number }>{
+    // 1) Fetch claim round
+    const claimRound = await this.getClaimRoundFromContract(betKey, senderAccount.address);
+    console.log(`⏳ Waiting for claim round ${claimRound}...`);
+    // 2) Wait for that block using block endpoint
+    await this.waitForBlock(claimRound);
+    // 3) Compute grid immediately once block is available
+    const gridString = await this.getBetGridDeterministic(betKey, claimRound, senderAccount.address);
+    console.log('🎯 Outcome grid at claim round:', gridString);
+    // 4) Submit claim
+    const claimResult = await this.submitClaim(senderAccount, betKey);
+    return {
+      gridString,
+      round: claimRound,
+      txId: claimResult.txId,
+      payout: claimResult.payout || 0,
+    };
   }
 
   /**
@@ -996,15 +1122,8 @@ export class AlgorandService {
     maxRounds = BLOCKCHAIN_CONFIG.transactionTimeout,
     onProgress?: (currentRound: number, maxRounds: number) => void
   ): Promise<any> {
-    try {
-      // Use algosdk's built-in waitForConfirmation which is optimized
-      const confirmedTxn = await algosdk.waitForConfirmation(this.client, txId, maxRounds);
-      return confirmedTxn;
-    } catch (error: any) {
-      // If algosdk method fails, fall back to custom implementation with faster polling
-      console.warn('algosdk.waitForConfirmation failed, using custom implementation:', error.message);
-      return await this.waitForConfirmationCustom(txId, maxRounds, onProgress);
-    }
+    // Always use custom fast-polling to minimize delay
+    return await this.waitForConfirmationCustom(txId, maxRounds, onProgress);
   }
 
   /**
@@ -1018,7 +1137,7 @@ export class AlgorandService {
     const startTime = Date.now();
     const startRound = (await this.getSuggestedParams()).firstRound;
     let round = startRound;
-    const fastPollInterval = 100; // Poll every 100ms for faster response
+    const fastPollInterval = 1000; // Limit polling to once per second
     
     while (round < startRound + maxRounds) {
       try {
@@ -1050,15 +1169,30 @@ export class AlgorandService {
   }
 
   /**
-   * Wait for specific round
+   * Wait for a specific block to exist by polling the block endpoint directly.
    */
-  async waitForRound(round: number): Promise<void> {
-    let currentRound = await this.getCurrentRound();
-    
-    while (currentRound < round) {
-      await new Promise(resolve => setTimeout(resolve, BLOCKCHAIN_CONFIG.blockTime));
-      currentRound = await this.getCurrentRound();
+  async waitForBlock(targetRound: number, pollMs: number = 1000, timeoutMs: number = 20000): Promise<void> {
+    const start = Date.now();
+    while (true) {
+      try {
+        await this.client.block(targetRound).do();
+        return; // Block found
+      } catch (e: any) {
+        if (Date.now() - start > timeoutMs) {
+          throw new Error(`Timeout waiting for block ${targetRound}: ${e?.message || e}`);
+        }
+        await new Promise((r) => setTimeout(r, pollMs));
+      }
     }
+  }
+
+  /**
+   * Wait for the block after a given round using Algod's statusAfterBlock endpoint.
+   * Returns the node status when it has advanced past the given round.
+   */
+  async waitForBlockAfter(round: number): Promise<number> {
+    const status = await this.client.statusAfterBlock(round).do();
+    return status['last-round'] || round + 1;
   }
 
   /**
@@ -1233,7 +1367,6 @@ try {
     getPayoutMultiplier: async () => { throw new Error('AlgorandService not properly initialized'); },
     submitClaim: async () => { throw new Error('AlgorandService not properly initialized'); },
     waitForConfirmation: async () => { throw new Error('AlgorandService not properly initialized'); },
-    waitForRound: async () => { throw new Error('AlgorandService not properly initialized'); },
     getCurrentRound: async () => { throw new Error('AlgorandService not properly initialized'); },
     getBlockSeed: async () => { throw new Error('AlgorandService not properly initialized'); },
     getTransactionStatus: async () => { throw new Error('AlgorandService not properly initialized'); }

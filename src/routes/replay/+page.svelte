@@ -5,9 +5,10 @@
   import SlotMachine from '$lib/components/game/SlotMachine.svelte';
   import { formatVOI } from '$lib/constants/betting';
   import { bettingStore } from '$lib/stores/betting';
-  import { Play, Home, ExternalLink, RotateCcw } from 'lucide-svelte';
+  import { Play, Home, ExternalLink, RotateCcw, Grid3x3 } from 'lucide-svelte';
   import WarningModal from '$lib/components/ui/WarningModal.svelte';
   import WarningBanner from '$lib/components/ui/WarningBanner.svelte';
+  import SpinDetailsModal from '$lib/components/modals/SpinDetailsModal.svelte';
   import { contractSelectionStore, initializeMultiContractStores, multiContractStore } from '$lib/stores/multiContract';
 
   export let data;
@@ -16,9 +17,93 @@
   $: error = data.error;
   $: isLoading = false; // Server-side loading is already complete
   
+  // New bet-key mode inputs passed from server
+  const betKey: string | null = data.betKey || null;
+  const claimRound: number | null = data.claimRound || null;
+  const txId: string | null = data.txId || null;
+  const contractId: string | null = data.contractId || null;
+  const initialBetAmount: number | null = data.initialBetAmount || null;
+  const initialPaylines: number | null = data.initialPaylines || null;
+  const initialTimestamp: number = data.initialTimestamp || Date.now();
+  const slotAppId: number | null = data.slotAppId || null;
+  
+  // Helper: convert grid string (15 chars) to 5x3 outcome grid
+  function gridStringToOutcome(gridString: string): string[][] {
+    const grid: string[][] = [];
+    for (let col = 0; col < 5; col++) {
+      grid[col] = [];
+      for (let row = 0; row < 3; row++) {
+        const index = col * 3 + row;
+        grid[col][row] = gridString[index];
+      }
+    }
+    return grid;
+  }
+
+  async function computeWinningsFromGrid(outcome: string[][], totalBetAtomic: number, selectedPaylines: number): Promise<number> {
+    try {
+      const { algorandService } = await import('$lib/services/algorand');
+      const paylines = await algorandService.getPaylines('');
+      const betPerLine = selectedPaylines > 0 ? Math.floor(totalBetAtomic / selectedPaylines) : 0;
+      let winnings = 0;
+
+      // Flatten grid to string in column-major order
+      let gridString = '';
+      for (let col = 0; col < 5; col++) {
+        for (let row = 0; row < 3; row++) {
+          gridString += outcome[col][row];
+        }
+      }
+
+      for (let line = 0; line < Math.min(selectedPaylines, paylines.length); line++) {
+        const payline = paylines[line];
+        const counts: Record<string, number> = { A: 0, B: 0, C: 0, D: 0 };
+        for (let col = 0; col < 5; col++) {
+          const pos = col * 3 + payline[col];
+          const sym = gridString[pos];
+          if (counts[sym] !== undefined) counts[sym]++;
+        }
+        let bestSymbol = '';
+        let bestCount = 0;
+        for (const s of ['A','B','C','D']) {
+          if (counts[s] >= 3 && counts[s] > bestCount) { bestSymbol = s; bestCount = counts[s]; }
+        }
+        if (bestCount >= 3) {
+          const mult = await algorandService.getPayoutMultiplier(bestSymbol, bestCount, '');
+          winnings += betPerLine * mult;
+        }
+      }
+      return winnings;
+    } catch (e) {
+      console.warn('Failed to compute winnings from grid:', e);
+      return 0;
+    }
+  }
+  
   // Warning modal state
   let showWarningModal = false;
   const warningMessage = "This is an experimental prototype deployed on Voi Mainnet. It is provided as-is, with no guarantees of reliability, availability, or accuracy. Outcomes are random and for entertainment purposes only. Do not expect consistent performance, returns, or support. Play at your own risk.";
+
+  // Spin details modal state
+  let showSpinDetailsModal = false;
+
+  function openSpinDetails() {
+    showSpinDetailsModal = true;
+  }
+
+
+  // Create spin object for SpinDetailsModal from replay data
+  $: replaySpin = replayData ? {
+    totalBet: replayData.betAmount || 0,
+    selectedPaylines: replayData.paylines || 20,
+    winnings: replayData.winnings || 0,
+    timestamp: replayData.timestamp || Date.now(),
+    txId: replayData.txId || txId,
+    contractId: replayData.contractId,
+    betKey: betKey, // Pass the bet key we already have
+    claimRound: claimRound, // Pass the claim round we already have
+    outcome: replayData.outcome // Pass the outcome grid
+  } : null;
 
   function goHome() {
     goto('/');
@@ -96,24 +181,92 @@
   onMount(async () => {
     // Initialize multi-contract stores
     await initializeMultiContractStores();
-    
-    // If replay data has a contractId, select that contract
-    if (replayData?.contractId) {
+    // Import Algorand service once for use below
+    const { algorandService } = await import('$lib/services/algorand');
+
+    // Priority 1: explicit contractId param in URL
+    if (slotAppId && slotAppId > 0) {
+      // Prefer direct app id when provided for compact links
+      algorandService.updateAppId(slotAppId);
+    } else if (contractId) {
+      try {
+        await contractSelectionStore.selectContract(contractId);
+      } catch (error) {
+        console.warn('Failed to select contract for replay (cid):', contractId, error);
+      }
+    } else if (replayData?.contractId) {
+      // Priority 2: contract from legacy replay data
       try {
         await contractSelectionStore.selectContract(replayData.contractId);
       } catch (error) {
         console.warn('Failed to select contract for replay:', replayData.contractId, error);
-        // Fall back to default contract if the specific contract isn't available
-        const defaultContract = multiContractStore.getDefaultContract();
-        if (defaultContract) {
-          await contractSelectionStore.selectContract(defaultContract.id);
-        }
       }
     } else {
-      // No contractId in replay data, select default contract
+      // Priority 3: default contract
       const defaultContract = multiContractStore.getDefaultContract();
       if (defaultContract) {
         await contractSelectionStore.selectContract(defaultContract.id);
+      }
+    }
+
+    // New: compute replay data client-side from bet key + claim round
+    if (!replayData && betKey) {
+      try {
+        isLoading = true;
+
+        let round = claimRound;
+        if (!round && txId) {
+          // Derive claim round as confirmed round + 1
+          try {
+            const client = algorandService.getClient();
+            const pendingInfo = await client.pendingTransactionInformation(txId).do();
+            const confirmed = pendingInfo['confirmed-round'] || 0;
+            if (confirmed > 0) round = confirmed + 1;
+          } catch (e) {
+            console.warn('Failed to derive round from txId; require claim round param');
+          }
+        }
+
+        if (!round) {
+          error = 'Missing claim round (cr). Provide cr=round or tx=txId in URL.';
+          isLoading = false;
+          return;
+        }
+
+        // Deterministically compute the grid from bet key + claim round
+        const userAddress = '';
+        // Ensure AlgorandService is on the selected app id
+        if (slotAppId && slotAppId > 0) {
+          algorandService.updateAppId(slotAppId);
+        } else if (contractId) {
+          const contract = multiContractStore.getContract(contractId);
+          if (contract?.slotMachineAppId) {
+            algorandService.updateAppId(contract.slotMachineAppId);
+          }
+        }
+        const gridString = await algorandService.getBetGridDeterministic(betKey, round, userAddress);
+        const outcome = gridStringToOutcome(gridString);
+        const paylinesCount = initialPaylines || 20;
+        const betAtomic = initialBetAmount || 0;
+        const winnings = await computeWinningsFromGrid(outcome, betAtomic, paylinesCount);
+
+        // Assemble replay data using computed winnings
+        const computedReplay = {
+          outcome,
+          winnings,
+          betAmount: betAtomic,
+          paylines: paylinesCount,
+          timestamp: initialTimestamp,
+          contractId: contractId || multiContractStore.getSelectedContractId?.() || undefined,
+          txId: txId || undefined
+        };
+        replayData = computedReplay;
+        error = null;
+      } catch (e) {
+        console.error('Failed to compute replay from bet key:', e);
+        error = 'Failed to compute replay from bet key';
+      } finally {
+        isLoading = false;
       }
     }
   });
@@ -184,6 +337,10 @@
           <Play class="w-4 h-4" />
           Play This Game
         </button>
+        <button on:click={openSpinDetails} class="details-button">
+          <Grid3x3 class="w-4 h-4" />
+          View Details
+        </button>
         <button on:click={shareReplay} class="share-button">
           <ExternalLink class="w-4 h-4" />
           Share Replay
@@ -203,6 +360,13 @@
   message={warningMessage}
   showDontAskAgain={true}
   on:dismiss={handleWarningDismiss}
+/>
+
+<!-- Spin Details Modal -->
+<SpinDetailsModal 
+  isVisible={showSpinDetailsModal}
+  spin={replaySpin}
+  on:close={() => showSpinDetailsModal = false}
 />
 
 <style>
@@ -300,6 +464,10 @@
     @apply bg-voi-600 hover:bg-voi-700 text-theme font-semibold px-6 py-3 rounded-lg transition-colors flex items-center gap-2;
   }
 
+  .details-button {
+    @apply bg-slate-600 hover:bg-slate-700 text-theme font-medium px-4 py-3 rounded-lg transition-colors flex items-center gap-2;
+  }
+
   .share-button {
     @apply bg-surface-secondary hover:bg-surface-hover text-theme font-medium px-4 py-3 rounded-lg transition-colors flex items-center gap-2;
   }
@@ -318,6 +486,7 @@
     }
     
     .play-button,
+    .details-button,
     .share-button,
     .home-button {
       @apply w-full justify-center;

@@ -4,7 +4,7 @@
   import { bettingStore, betPerLineVOI, totalBetVOI, canAffordBet } from '$lib/stores/betting';
   import { walletStore, walletBalance, isWalletConnected, isWalletGuest, walletAddress, isNewUser, hasExistingWallet } from '$lib/stores/wallet';
   import { walletActions } from '$lib/stores/walletActions';
-  import { isSpinning } from '$lib/stores/game';
+  import { isSpinning, isAutoSpinning, autoSpinCount, gameStore } from '$lib/stores/game';
   import AddFundsModal from '$lib/components/wallet/AddFundsModal.svelte';
   import BalanceBreakdown from '$lib/components/wallet/BalanceBreakdown.svelte';
   import PaylinePayoutModal from '$lib/components/game/PaylinePayoutModal.svelte';
@@ -42,11 +42,9 @@
   let passwordError = '';
   let unlocking = false;
 
-  // Auto Spin state
-  let autoSpinActive = false;
-  let autoSpinCount: number | 'unlimited' = 0;
+  // Auto Spin state - now using centralized store
   let autoSpinInterval: NodeJS.Timeout | null = null;
-  let autoSpinDelay = 5000; // 5 seconds between spins
+  let autoSpinDelay = 5000; // 5 seconds between spins - intentionally rapid queuing
 
   // Subscribe to animation preferences
   $: preferences = $animationPreferences;
@@ -249,9 +247,9 @@
     }
   }
 
-  // Auto Spin functions
+  // Auto Spin functions - interval-based rapid queuing
   function handleAutoSpinClick() {
-    if (autoSpinActive) {
+    if ($isAutoSpinning) {
       stopAutoSpin();
     } else {
       showAutoSpinModal = true;
@@ -259,46 +257,48 @@
   }
 
   function startAutoSpin(count: number | 'unlimited') {
-    autoSpinActive = true;
-    autoSpinCount = count;
+    // Start auto spin in game store
+    gameStore.startAutoSpin(count);
     
     // Execute first spin immediately
     executeAutoSpin();
     
-    // Start the interval for subsequent spins
+    // Start the interval for subsequent spins - rapid queuing every 5 seconds
     autoSpinInterval = setInterval(() => {
       executeAutoSpin();
     }, autoSpinDelay);
   }
 
-  function stopAutoSpin() {
-    autoSpinActive = false;
-    autoSpinCount = 0;
-    if (autoSpinInterval) {
-      clearInterval(autoSpinInterval);
-      autoSpinInterval = null;
-    }
-  }
-
   function executeAutoSpin() {
     // Check if we should continue auto spinning
-    if (!autoSpinActive || !$canAffordBet || !$isWalletConnected || !$bettingStore.isValidBet || disabled || !$isSlotMachineOperational) {
+    if (!$isAutoSpinning || !$canAffordBet || !$isWalletConnected || !$bettingStore.isValidBet || disabled || !$isSlotMachineOperational) {
       stopAutoSpin();
       return;
     }
 
     // Check if we've reached the spin limit before executing
-    if (autoSpinCount !== 'unlimited') {
-      if (autoSpinCount <= 0) {
+    if ($autoSpinCount !== 'unlimited') {
+      if ($autoSpinCount <= 0) {
         stopAutoSpin();
         return;
       }
       // Decrement count after confirming we can spin
-      autoSpinCount--;
+      gameStore.decrementAutoSpinCount();
     }
 
-    // Execute the spin
+    // Execute the spin - this will queue it even if previous spins are still processing
     handleSpin();
+  }
+
+  function stopAutoSpin() {
+    // Stop auto spin in game store
+    gameStore.stopAutoSpin();
+    
+    // Clear interval
+    if (autoSpinInterval) {
+      clearInterval(autoSpinInterval);
+      autoSpinInterval = null;
+    }
   }
 
   function handleAutoSpinConfirm(event: CustomEvent<{ count: number | 'unlimited' }>) {
@@ -318,8 +318,8 @@
                      !$bettingStore.isValidBet ? 'Invalid Bet' :
                      'Spin';
   $: autoSpinButtonDisabled = disabled || !$isWalletConnected || !$bettingStore.isValidBet || !$isSlotMachineOperational;
-  $: autoSpinButtonText = autoSpinActive ? 'Stop Auto' : 'Auto Spin';
-  $: autoSpinCountDisplay = autoSpinActive ? (autoSpinCount === 'unlimited' ? '∞' : autoSpinCount) : '';
+  $: autoSpinButtonText = $isAutoSpinning ? 'Stop Auto' : 'Auto Spin';
+  $: autoSpinCountDisplay = $isAutoSpinning ? ($autoSpinCount === 'unlimited' ? '∞' : $autoSpinCount) : '';
 </script>
 
 <div class="betting-controls relative" class:compact={compact}>
@@ -464,10 +464,10 @@
           on:click={handleAutoSpinClick}
           disabled={autoSpinButtonDisabled}
           class="auto-spin-button"
-          class:active={autoSpinActive}
+          class:active={$isAutoSpinning}
         >
           <div class="flex items-center justify-center gap-2">
-            {#if autoSpinActive}
+            {#if $isAutoSpinning}
               <Square class="w-5 h-5" />
               <span class="text-lg font-bold">{autoSpinButtonText}</span>
               {#if autoSpinCountDisplay}
@@ -537,10 +537,10 @@
           on:click={handleAutoSpinClick}
           disabled={autoSpinButtonDisabled}
           class="mobile-auto-spin-button"
-          class:active={autoSpinActive}
+          class:active={$isAutoSpinning}
         >
           <div class="flex items-center justify-center gap-2">
-            {#if autoSpinActive}
+            {#if $isAutoSpinning}
               <Square class="w-5 h-5" />
               <span class="text-base font-bold">{autoSpinButtonText}</span>
               {#if autoSpinCountDisplay}

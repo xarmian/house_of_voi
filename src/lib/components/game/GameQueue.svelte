@@ -9,7 +9,9 @@
   import { SpinStatus } from '$lib/types/queue';
   import type { QueuedSpin } from '$lib/types/queue';
   import { playButtonClick } from '$lib/services/soundService';
-  import { encodeReplayData } from '$lib/utils/replayEncoder';
+  import { encodeReplayData, encodeBetKeyReplay } from '$lib/utils/replayEncoder';
+  import { multiContractStore } from '$lib/stores/multiContract';
+  import SpinDetailsModal from '$lib/components/modals/SpinDetailsModal.svelte';
   
   export let maxHeight = '400px';
   
@@ -225,25 +227,48 @@
   }
   
   async function handleShareSpin(spin: QueuedSpin) {
-    if (!spin.outcome || typeof spin.winnings !== 'number') {
-      console.warn('Cannot share spin without outcome data');
-      return;
-    }
-    
     try {
       sharingSpinId = spin.id;
-      
-      const encoded = encodeReplayData({
-        outcome: spin.outcome,
-        winnings: spin.winnings,
-        totalBet: spin.totalBet,
-        selectedPaylines: spin.selectedPaylines,
-        timestamp: spin.timestamp,
-        contractId: spin.contractId,
-        txId: spin.txId
-      });
-      
-      const url = `${window.location.origin}/replay?d=${encoded}`;
+
+      let url: string;
+      // Prefer new compact relay link if we have a bet key and commitment round
+      if (spin.betKey && (spin.commitmentRound || spin.outcomeRound)) {
+        const claimRound = (spin.commitmentRound || ((spin.outcomeRound || 0) - 1)) + 1;
+        // Encode into compact single param
+        // Prefer app id over contract id for shorter URL
+        let slotAppId: number | undefined = undefined;
+        if (spin.contractId) {
+          const c = multiContractStore.getContract(spin.contractId);
+          if (c?.slotMachineAppId) slotAppId = c.slotMachineAppId;
+        }
+        const r = encodeBetKeyReplay({
+          betKeyHex: spin.betKey,
+          claimRound,
+          betAmount: spin.totalBet,
+          paylines: spin.selectedPaylines,
+          // omit timestamp for shorter URL; it's optional in replay
+          contractId: slotAppId ? undefined : spin.contractId,
+          slotAppId
+        });
+        url = `${window.location.origin}/replay?r=${encodeURIComponent(r)}`;
+      } else {
+        // Fallback to legacy encoded format when minimal fields are missing
+        if (!spin.outcome || typeof spin.winnings !== 'number') {
+          console.warn('Cannot share spin without outcome data and no bet key/round available');
+          return;
+        }
+        const encoded = encodeReplayData({
+          outcome: spin.outcome,
+          winnings: spin.winnings,
+          totalBet: spin.totalBet,
+          selectedPaylines: spin.selectedPaylines,
+          timestamp: spin.timestamp,
+          contractId: spin.contractId,
+          txId: spin.txId
+        });
+        url = `${window.location.origin}/replay?d=${encoded}`;
+      }
+
       await navigator.clipboard.writeText(url);
       
       shareSuccess = true;
@@ -468,118 +493,11 @@
 </div>
 
 <!-- Spin Details Modal -->
-{#if showSpinDetailsModal && selectedSpin}
-  <div class="modal-backdrop" on:click={closeSpinDetails} transition:fade={{ duration: 200 }}>
-    <div class="modal-content" on:click|stopPropagation transition:fly={{ y: 20, duration: 300 }}>
-      <!-- Modal Header -->
-      <div class="modal-header">
-        <h3 class="modal-title">Spin Details</h3>
-        <button class="modal-close" on:click={closeSpinDetails}>
-          <X class="w-4 h-4" />
-        </button>
-      </div>
-
-      <!-- Modal Body -->
-      <div class="modal-body">
-        <!-- Basic Spin Info -->
-        <div class="detail-section">
-          <h4 class="detail-section-title">Spin Information</h4>
-          <div class="detail-grid">
-            <div class="detail-item">
-              <span class="detail-label">Bet Amount:</span>
-              <span class="detail-value">{formatVOI(selectedSpin.totalBet)} VOI</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Paylines:</span>
-              <span class="detail-value">{selectedSpin.selectedPaylines} lines</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Status:</span>
-              <span class="detail-value {getStatusColor(selectedSpin.status)}">{getStatusText(selectedSpin.status, selectedSpin)}</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Timestamp:</span>
-              <span class="detail-value">{new Date(selectedSpin.timestamp).toLocaleString()}</span>
-            </div>
-            {#if typeof selectedSpin.winnings === 'number'}
-              <div class="detail-item">
-                <span class="detail-label">Winnings:</span>
-                <span class="detail-value" class:text-green-400={selectedSpin.winnings > 0} class:text-red-400={selectedSpin.winnings <= 0}>
-                  {selectedSpin.winnings > 0 ? '+' : ''}{formatVOI(selectedSpin.winnings)} VOI
-                </span>
-              </div>
-            {/if}
-          </div>
-        </div>
-
-        <!-- Blockchain Details -->
-        {#if selectedSpin.txId || selectedSpin.claimTxId || selectedSpin.commitmentRound || selectedSpin.outcomeRound}
-          <div class="detail-section">
-            <h4 class="detail-section-title">Blockchain Details</h4>
-            <div class="detail-grid">
-              {#if selectedSpin.commitmentRound}
-                <div class="detail-item">
-                  <span class="detail-label">Block Number (Commitment):</span>
-                  <span class="detail-value font-mono">{selectedSpin.commitmentRound}</span>
-                </div>
-              {/if}
-              {#if selectedSpin.outcomeRound}
-                <div class="detail-item">
-                  <span class="detail-label">Block Number (Outcome):</span>
-                  <span class="detail-value font-mono">{selectedSpin.outcomeRound}</span>
-                </div>
-              {/if}
-              {#if selectedSpin.txId}
-                <div class="detail-item full-width">
-                  <span class="detail-label">Transaction ID:</span>
-                  <div class="tx-link-container">
-                    <span class="detail-value font-mono tx-id">{formatTxId(selectedSpin.txId)}</span>
-                    <a 
-                      href={getExplorerUrl(selectedSpin.txId)} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      class="explorer-link"
-                      title="View on block explorer"
-                    >
-                      View on Explorer
-                    </a>
-                  </div>
-                </div>
-              {/if}
-              {#if selectedSpin.claimTxId}
-                <div class="detail-item full-width">
-                  <span class="detail-label">Claim Transaction ID:</span>
-                  <div class="tx-link-container">
-                    <span class="detail-value font-mono tx-id">{formatTxId(selectedSpin.claimTxId)}</span>
-                    <a 
-                      href={getExplorerUrl(selectedSpin.claimTxId)} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      class="explorer-link"
-                      title="View on block explorer"
-                    >
-                      View on Explorer
-                    </a>
-                  </div>
-                </div>
-              {/if}
-            </div>
-          </div>
-        {/if}
-
-        <!-- Error Information -->
-        {#if selectedSpin.error}
-          <div class="detail-section">
-            <h4 class="detail-section-title text-red-400">Error Details</h4>
-            <div class="error-message">
-              {selectedSpin.error}
-            </div>
-          </div>
-        {/if}
-      </div>
-    </div>
-  </div>
-{/if}
+<SpinDetailsModal 
+  isVisible={showSpinDetailsModal}
+  spin={selectedSpin}
+  on:close={closeSpinDetails}
+/>
 
 <style>
   .game-queue-container {
@@ -739,92 +657,6 @@
     @apply p-1 rounded-full bg-slate-700 hover:bg-slate-600 text-theme-text opacity-60 hover:opacity-100 transition-all duration-200;
   }
 
-  /* Modal Styles */
-  .modal-backdrop {
-    @apply fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4;
-  }
-
-  .modal-content {
-    @apply bg-slate-800 border border-slate-700 rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden;
-  }
-
-  .modal-header {
-    @apply flex items-center justify-between p-4 border-b border-slate-700;
-  }
-
-  .modal-title {
-    @apply text-lg font-semibold text-theme;
-  }
-
-  .modal-close {
-    @apply p-1 rounded-lg hover:bg-slate-700 text-theme-text opacity-70 hover:opacity-100 transition-colors;
-  }
-
-  .modal-body {
-    @apply p-4 max-h-[calc(90vh-80px)] overflow-y-auto;
-  }
-
-  .detail-section {
-    @apply mb-6 last:mb-0;
-  }
-
-  .detail-section-title {
-    @apply text-sm font-semibold text-theme-text mb-3;
-  }
-
-  .detail-grid {
-    @apply grid grid-cols-1 sm:grid-cols-2 gap-3;
-  }
-
-  .detail-item {
-    @apply flex flex-col gap-1;
-  }
-
-  .detail-item.full-width {
-    @apply sm:col-span-2;
-  }
-
-  .detail-label {
-    @apply text-xs text-theme-text opacity-70 font-medium;
-  }
-
-  .detail-value {
-    @apply text-sm text-theme font-medium;
-  }
-
-  .tx-link-container {
-    @apply flex items-center justify-between gap-3 bg-slate-700/50 rounded-lg border border-slate-600/50 p-2;
-  }
-
-  .tx-id {
-    @apply text-xs text-theme-text;
-  }
-
-  .explorer-link {
-    @apply text-xs bg-voi-600 hover:bg-voi-700 text-theme px-3 py-1 rounded-md transition-colors font-medium;
-  }
-
-  .error-message {
-    @apply bg-red-900/20 border border-red-800/50 rounded-md p-3 text-sm text-red-300;
-  }
-
-  /* Custom scrollbar for modal */
-  .modal-body::-webkit-scrollbar {
-    width: 4px;
-  }
-  
-  .modal-body::-webkit-scrollbar-track {
-    background: rgba(51, 65, 85, 0.3);
-  }
-  
-  .modal-body::-webkit-scrollbar-thumb {
-    background: rgba(16, 185, 129, 0.5);
-    border-radius: 2px;
-  }
-  
-  .modal-body::-webkit-scrollbar-thumb:hover {
-    background: rgba(16, 185, 129, 0.7);
-  }
   
   /* Pagination styles */
   .pagination-controls {

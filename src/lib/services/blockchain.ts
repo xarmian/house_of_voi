@@ -115,6 +115,22 @@ export class BlockchainService {
       
       console.log(`💰 Spin ${spin.id.slice(-8)} moved to WAITING - reserved balance should now be released`);
 
+      // Kick off immediate outcome processing to avoid queue polling delay
+      ;(async () => {
+        try {
+          const immediateSpin: any = {
+            ...spin,
+            txId: result.txId,
+            betKey: result.betKey,
+            commitmentRound: result.round,
+            status: SpinStatus.WAITING,
+          };
+          await this.checkBetOutcome(immediateSpin);
+        } catch (e) {
+          console.warn('Immediate outcome processing failed:', e);
+        }
+      })();
+
     } catch (error) {
       const retryInfo = spin.retryCount ? ` (attempt ${spin.retryCount + 1})` : '';
       console.error(`Error submitting spin${retryInfo}:`, error);
@@ -208,15 +224,29 @@ export class BlockchainService {
         return;
       }*/
       
-      const isReady = true; //await algorandService.isBetReadyToClaim(spin.betKey);
-      await this.sleep(2000);
-      
-      if (isReady) {
-        // Get the grid outcome
-        const gridOutcome = await algorandService.getGridOutcome(spin.betKey, get(walletStore).account?.address || '');
-        
-        // Calculate winnings using contract payout tables
-        const winnings = await this.calculateWinnings(gridOutcome.grid, spin.betPerLine, spin.selectedPaylines);
+      // Fast path to outcome: wait aggressively for claim round block, then compute deterministically
+      const userAddr = get(walletStore).account?.address || '';
+      // Claim round = commitment round + 1 (matches contract round_future_delta)
+      const commitmentRound = (spin as any)?.commitmentRound || 0;
+      const claimRound = commitmentRound ? commitmentRound + 1 : 0;
+      if (!claimRound) {
+        throw new Error('Missing commitmentRound; cannot derive claimRound');
+      }
+      // Wait exactly for the block after commitment round
+      await algorandService.waitForBlockAfter(commitmentRound);
+
+      // Compute deterministic grid at claim round
+      const gridString = await algorandService.getBetGridDeterministic(spin.betKey, claimRound, userAddr);
+      const grid: string[][] = [];
+      for (let col = 0; col < 5; col++) {
+        grid[col] = [] as any;
+        for (let row = 0; row < 3; row++) {
+          grid[col][row] = gridString[col * 3 + row];
+        }
+      }
+
+      // Calculate winnings using contract payout tables
+      const winnings = await this.calculateWinnings(grid, spin.betPerLine, spin.selectedPaylines);
         
         // Log the bet outcome
         const totalBet = spin.betPerLine * spin.selectedPaylines;
@@ -226,7 +256,7 @@ export class BlockchainService {
         console.log(`💰 Bet: ${totalBet.toLocaleString()} microVOI (${(totalBet / 1000000).toFixed(6)} VOI)`);
         console.log(`🎊 Won: ${winnings.toLocaleString()} microVOI (${(winnings / 1000000).toFixed(6)} VOI)`);
         console.log(`📊 Profit: ${profit >= 0 ? '+' : ''}${profit.toLocaleString()} microVOI (${(profit / 1000000).toFixed(6)} VOI)`);
-        console.log(`🎲 Grid: "${gridOutcome.gridString || 'N/A'}"`);
+        console.log(`🎲 Grid: "${gridString || 'N/A'}"`);
         console.log(`📋 Bet Key: ${spin.betKey?.slice(0, 16)}...`);
         console.log(`🔄 Paylines: ${spin.selectedPaylines}`);
         console.log(`⏰ Status: Moving to READY_TO_CLAIM with winnings visible immediately`);
@@ -253,19 +283,48 @@ export class BlockchainService {
           id: spin.id,
           status: SpinStatus.READY_TO_CLAIM,
           data: {
-            outcome: gridOutcome.grid,
+            outcome: grid,
             winnings,
-            outcomeRound: gridOutcome.round
+            outcomeRound: claimRound
           }
         });
-      }
+
+        // Auto-claim immediately once outcome is known
+        try {
+          const spinForClaim: any = { ...spin, outcome: grid, winnings };
+          await this.submitClaim(spinForClaim, true);
+        } catch (e) {
+          console.warn('Auto-claim failed; UI remains READY_TO_CLAIM:', e);
+        }
     } catch (error) {
-      console.error('Error checking bet outcome:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Error checking bet outcome:', errorMessage);
       
-      console.log('📦 Bet no longer exists - treating as already completed');
+      // Check if this is a "box not found" error that should terminate the spin
+      const isBoxNotFound = errorMessage.includes('box not found') || 
+                           errorMessage.includes('Bet not found') ||
+                           errorMessage.includes('unable to determine outcome') ||
+                           errorMessage.includes('does not exist');
+      
+      if (isBoxNotFound) {
+        console.log('📦 Bet box not found - TERMINATING SPIN immediately');
+        
+        // **FORCE SPIN TERMINATION**: Cannot determine outcome, end the spin
+        queueStore.updateSpin({
+          id: spin.id,
+          status: SpinStatus.FAILED,
+          data: {
+            error: 'Unable to determine outcome - bet box not found',
+            terminatedDueToMissingBox: true
+          }
+        });
+        return;
+      }
+      
+      console.log('📦 Other error - treating as already completed');
       
       // **TRANSACTION COMPLETED**: Bet no longer exists (already claimed elsewhere)
-      console.log(`✅ Spin ${spin.id.slice(-8)} already completed elsewhere - refreshing balance`);
+      console.log(`✅ Spin ${spin.id.slice(-8)} completed elsewhere - refreshing balance`);
       const account = await this.getWalletAccount();
       if (account) {
         balanceManager.getBalance(account.address, true);
@@ -388,6 +447,7 @@ export class BlockchainService {
         console.log('📦 Box not found - treating as already claimed');
         
         // Update spin as completed since the box doesn't exist (already claimed)
+        // Preserve the outcome and winnings data that we already know
         queueStore.updateSpin({
           id: spin.id,
           status: SpinStatus.COMPLETED,
@@ -395,7 +455,10 @@ export class BlockchainService {
             claimTxId: 'already-claimed',
             totalPayout: 0,
             isAutoClaimInProgress: undefined,
-            note: 'Box not found - likely already claimed by background process'
+            note: 'Box not found - likely already claimed by background process',
+            // Keep existing outcome and winnings data so UI can display results
+            outcome: spin.outcome,
+            winnings: spin.winnings
           }
         });
         

@@ -531,30 +531,57 @@ program
       return;
     }
     console.log(betKey);
-    let getBetGridR;
-    do {
-      getBetGridR = await getBetGrid({
-        ...options,
-        appId: Number(options.appId),
-        betKey,
-      });
-      if (getBetGridR.return) {
-        displayGrid(getBetGridR.return);
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
-    } while (1);
-    console.log(getBetGridR.return);
-    console.log(getBetGridR.return.length);
+    // Determine claim round and wait for it
+    const betKeyBytes = new Uint8Array(Buffer.from(betKey, "hex"));
+    const claimRoundR = await new SlotMachineClient({ resolveBy: "id", id: Number(appId), sender: acc }, algodClient)
+      .getBetClaimRound({ betKey: betKeyBytes });
+    const claimRound = Number(claimRoundR.return);
+    console.log("Claim round:", claimRound);
+    // Wait for block seed to be available and compute grid locally
+    const seedB64 = await getBlockSeed(claimRound);
+    const fullSeedBytes = Buffer.from(seedB64, "base64");
+    const seed32 = fullSeedBytes.slice(-32);
+    const combined = Buffer.concat([seed32, Buffer.from(betKey, "hex")]);
+    const hashed = crypto.createHash("sha256").update(combined).digest();
+    // Fetch reels and build grid deterministically
+    const appClient2 = new SlotMachineClient({ resolveBy: "id", id: Number(appId), sender: acc }, algodClient);
+    const reelsR = await appClient2.getReels({});
+    const reelData = Buffer.from(reelsR.return).toString();
+    const reelLenR = await appClient2.getReelLength({});
+    const reelLength = Number(reelLenR.return);
+    const windowLength = 3;
+    const maxReelStop = reelLength - (windowLength + 1);
+    const reelTops: number[] = [];
+    for (let i = 1; i <= 5; i++) {
+      const h = crypto
+        .createHash("sha256")
+        .update(Buffer.concat([hashed, Buffer.from(String(i))]))
+        .digest();
+      const last8 = h.slice(-8);
+      const val = last8.readBigUInt64BE(0);
+      reelTops.push(Number(val % BigInt(maxReelStop)));
+    }
+    let localGrid = "";
+    for (let r = 0; r < 5; r++) {
+      const start = r * reelLength;
+      const data = reelData.slice(start, start + reelLength);
+      const p0 = reelTops[r] % reelLength;
+      const p1 = (reelTops[r] + 1) % reelLength;
+      const p2 = (reelTops[r] + 2) % reelLength;
+      localGrid += data[p0] + data[p1] + data[p2];
+    }
+    displayGrid(localGrid);
+    console.log(localGrid);
+    console.log(localGrid.length);
     for (let j = 0; j <= maxPaylineIndex; j++) {
       const simulatedMatchPayline = simulateGridPaylineMatch(
-        getBetGridR.return,
+        localGrid,
         paylines[j]
       );
       console.log({ simulatedMatchPayline });
       const matchPaylineR = await matchPayline({
         appId,
-        grid: new Uint8Array(Buffer.from(getBetGridR.return)),
+        grid: new Uint8Array(Buffer.from(localGrid)),
         paylineIndex: j,
         ...acc,
       });
@@ -579,10 +606,7 @@ program
     }
     let i = 0;
     for (const payline of paylines) {
-      const matchPaylineR = simulateGridPaylineMatch(
-        getBetGridR.return,
-        payline
-      );
+      const matchPaylineR = simulateGridPaylineMatch(localGrid, payline);
       if (matchPaylineR.matches >= 3) {
         console.log(i++, matchPaylineR);
       }
@@ -613,6 +637,57 @@ export const getBetGrid = async (options: GetBetGridOptions) => {
     },
     algodClient
   );
+  // Start local deterministic calculation in parallel
+  const localCalcPromise = (async () => {
+    try {
+      // 1) Fetch claim round
+      const betKeyBytes = new Uint8Array(Buffer.from(options.betKey, "hex"));
+      const claimRoundR = await appClient.getBetClaimRound({ betKey: betKeyBytes });
+      const claimRound = Number(claimRoundR.return);
+      // 2) Fetch block seed (base64), take last 32 bytes
+      const seedB64 = await getBlockSeed(claimRound);
+      const fullSeedBytes = Buffer.from(seedB64, "base64");
+      const seed32 = fullSeedBytes.slice(-32);
+      // 3) combined = seed32 + bet_key
+      const combined = Buffer.concat([seed32, Buffer.from(options.betKey, "hex")]);
+      const hashed = crypto.createHash("sha256").update(combined).digest();
+      // 4) compute reel tops
+      // Fetch reel data and meta
+      const reelsR = await appClient.getReels({});
+      const reelData = Buffer.from(reelsR.return).toString();
+      const reelLengthR = await appClient.getReelLength({});
+      const reelLength = Number(reelLengthR.return);
+      // Window length is constant 3 in contract
+      const windowLength = 3;
+      const maxReelStop = reelLength - (windowLength + 1);
+      const reelTops: number[] = [];
+      for (let i = 1; i <= 5; i++) {
+        const h = crypto
+          .createHash("sha256")
+          .update(Buffer.concat([hashed, Buffer.from(String(i))]))
+          .digest();
+        const last8 = h.slice(-8);
+        const val = last8.readBigUInt64BE(0);
+        const pos = Number(val % BigInt(maxReelStop));
+        reelTops.push(pos);
+      }
+      // 5) build grid from reel windows
+      let grid = "";
+      for (let r = 0; r < 5; r++) {
+        const start = r * reelLength;
+        const data = reelData.slice(start, start + reelLength);
+        const p0 = reelTops[r] % reelLength;
+        const p1 = (reelTops[r] + 1) % reelLength;
+        const p2 = (reelTops[r] + 2) % reelLength;
+        grid += data[p0] + data[p1] + data[p2];
+      }
+      return grid;
+    } catch (e: any) {
+      console.log("⚠️ Local grid calculation failed:", e?.message || e);
+      return null as unknown as string;
+    }
+  })();
+
   const get_bet_gridR = await appClient.getBetGrid({
     betKey: new Uint8Array(Buffer.from(options.betKey, "hex")),
     staticFee: algokit.microAlgos(5000),
@@ -620,6 +695,18 @@ export const getBetGrid = async (options: GetBetGridOptions) => {
   if (options.debug) {
     console.log(get_bet_gridR);
   }
+  try {
+    const localGrid = await localCalcPromise;
+    if (localGrid) {
+      console.log("🧮 Local grid:", localGrid);
+      if (get_bet_gridR.return) {
+        // return is Uint8Array representing string
+        const contractGrid = Buffer.from(get_bet_gridR.return).toString();
+        console.log("✅ Contract grid:", contractGrid);
+        console.log("🔎 Grids match:", contractGrid === localGrid);
+      }
+    }
+  } catch {}
   return get_bet_gridR;
 };
 

@@ -8,7 +8,7 @@
   import WalletManager from '$lib/components/wallet/WalletManager.svelte';
   import MachineCard from '$lib/components/game/MachineCard.svelte';
   import VoiRadioPlayer from '$lib/components/app/VoiRadioPlayer.svelte';
-  import { Search, Filter, Home, Gamepad2, TrendingUp, Users } from 'lucide-svelte';
+  import { Search, Filter, Home, Gamepad2, TrendingUp, Users, Loader2 } from 'lucide-svelte';
   import type { ContractPair } from '$lib/types/multiContract';
   import type { PageData } from './$types';
   
@@ -18,6 +18,7 @@
   let statusFilter: 'all' | 'active' | 'maintenance' | 'testing' = 'all';
   let sortBy: 'name' | 'tvl' | 'players' | 'winRate' = 'name';
   let showFilters = false;
+  let loadingMachineId: string | null = null;
   let aggregateStats: {
     totalPlayers: number;
     totalBets: string;
@@ -69,6 +70,7 @@
   // Navigate to machine
   function playMachine(event: CustomEvent<{ contract: ContractPair }>) {
     const { contract } = event.detail;
+    loadingMachineId = contract.id;
     goto(`/app/${contract.slotMachineAppId}`);
   }
 
@@ -281,14 +283,24 @@
         </div>
       {:else}
         {#each filteredContracts as contract (contract.id)}
-          <MachineCard
-            {contract}
-            size="md"
-            showStats={true}
-            showPlayButton={true}
-            on:play={playMachine}
-            on:select={playMachine}
-          />
+          <div class="machine-card-container" class:loading={loadingMachineId === contract.id}>
+            <MachineCard
+              {contract}
+              size="md"
+              showStats={true}
+              showPlayButton={true}
+              on:play={playMachine}
+              on:select={playMachine}
+            />
+            {#if loadingMachineId === contract.id}
+              <div class="loading-overlay">
+                <div class="loading-content">
+                  <Loader2 class="w-8 h-8 animate-spin text-white" />
+                  <span class="loading-text">Loading {contract.name}...</span>
+                </div>
+              </div>
+            {/if}
+          </div>
         {/each}
       {/if}
     </div>
@@ -384,4 +396,30 @@
   .focus\:ring-voi-400\/50:focus {
     --tw-ring-color: rgba(16, 185, 129, 0.5);
   }
+
+  /* Loading animation styles */
+     .machine-card-container {
+       @apply relative;
+     }
+
+     .loading-overlay {
+       @apply absolute inset-0 bg-slate-900/80 backdrop-blur-sm;
+       @apply flex items-center justify-center z-10;
+       @apply rounded-lg;
+       animation: fadeIn 0.2s ease-in-out;
+     }
+     .loading-content {
+       @apply flex flex-col items-center gap-3;
+     }
+     .loading-text {
+       @apply text-white font-medium text-sm;
+     }
+     @keyframes fadeIn {
+       from {
+         opacity: 0;
+       }
+       to {
+         opacity: 1;
+       }
+     }
 </style>
