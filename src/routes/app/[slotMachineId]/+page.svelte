@@ -157,14 +157,14 @@
   });
 </script>
 
-<main class="min-h-screen transition-all duration-700 ease-in-out" style={combinedStyle}>
-  <div class="max-w-7xl mx-auto px-4 py-2 lg:py-2">
-    <!-- Desktop Layout -->
-    <div class="hidden lg:block min-h-screen">
+<main class="min-h-screen transition-all duration-700 ease-in-out overflow-x-hidden" style={combinedStyle}>
+  <div class="max-w-7xl mx-auto px-4 py-2 lg:py-2 mobile-no-padding">
+    <!-- Unified Layout - Single SlotMachine instance -->
+    <div class="min-h-screen">
       <!-- Header with navigation and machine info -->
-      <div class="mb-4">
+      <div class="mb-0">
         <!-- Navigation breadcrumb -->
-        <div class="flex items-center gap-2 mb-4">
+        <div class="hidden items-center gap-2 mb-4">
           <button
             on:click={goHome}
             class="nav-button"
@@ -179,315 +179,176 @@
             title="Back to Machine Selection"
           >
             <ArrowLeft class="w-4 h-4" />
-            <span>Machines</span>
+            <span class="hidden sm:inline">Machines</span>
           </button>
           <span class="text-theme-text opacity-60">/</span>
-          <span class="text-theme font-medium">{data.contract.name}</span>
+          <span class="text-theme font-medium truncate">{data.contract.name}</span>
         </div>
 
-        <!-- Machine header -->
-        <div class="p-4 bg-surface-primary/60 backdrop-blur-sm border border-surface-border rounded-lg">
+        <!-- Machine header - responsive -->
+        <div class="p-2 bg-surface-primary/60 backdrop-blur-sm">
           <div class="flex items-center justify-between">
             <div>
-              <h1 class="text-2xl font-bold text-theme mb-2">{data.contract.name}</h1>
+              <h1 class="text-xl lg:text-2xl font-bold text-theme mb-2">{data.contract.name}</h1>
             </div>
             
-            <button
-              on:click={goBack}
-              class="back-button"
-            >
-              <ArrowLeft class="w-5 h-5" />
-              <span>All Machines</span>
-            </button>
+            <div class="flex items-center gap-2">
+              {#if data.contract.features.betaMode}
+                <span class="beta-badge text-xs">Beta</span>
+              {/if}
+              <button
+                on:click={goBack}
+                class="back-button"
+              >
+                <ArrowLeft class="w-5 h-5" />
+                <span class="inline">All Machines</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
       
-      <!-- Main content grid -->
-      <div class="grid grid-cols-12 gap-6 items-start">
-        <!-- Main game area -->
-        <div class="col-span-8 relative">
-          <SlotMachine disabled={false} contractContext={data.contract} />
+      <!-- Responsive content layout -->
+      <div class="responsive-layout">
+        <div class="wallet-section lg:hidden mb-4">
+          <WalletManager compact={true} />
         </div>
         
-        <!-- Right sidebar: Wallet and Tabbed panels -->
-        <div class="col-span-4 space-y-4 relative">
-          <WalletManager />
+        <!-- Main content grid -->
+        <div class="content-grid">
+          <!-- Main game area -->
+          <div class="game-section">
+            <SlotMachine disabled={false} contractContext={data.contract} />
+          </div>
           
-          <!-- Tabbed panels -->
-          <div class="tabbed-panels">
-            <!-- Tab buttons -->
-            <div class="tab-buttons">
-              <button 
-                class="tab-button {!showLeaderboard && !showPlayerStats && !showStaking ? 'active' : ''}"
-                on:click={() => { showLeaderboard = false; showPlayerStats = false; showStaking = false; }}
-              >
-                Queue
-              </button>
-              <button 
-                class="tab-button {showLeaderboard ? 'active' : ''}"
-                on:click={async () => { 
-                  await loadLeaderboard(); 
-                  showLeaderboard = true; 
-                  showPlayerStats = false; 
-                  showStaking = false; 
-                }}
-              >
-                Leaderboard
-                {#if componentLoadingStates.leaderboard}
-                  <span class="loading-spinner">⏳</span>
-                {/if}
-              </button>
-              <button 
-                class="tab-button {showPlayerStats ? 'active' : ''}"
-                on:click={async () => { 
-                  await loadPlayerStats(); 
-                  showPlayerStats = true; 
-                  showLeaderboard = false; 
-                  showStaking = false; 
-                }}
-              >
-                Stats
-                {#if componentLoadingStates.playerStats}
-                  <span class="loading-spinner">⏳</span>
-                {/if}
-              </button>
-              <button 
-                class="tab-button {showStaking ? 'active' : ''}"
-                on:click={async () => { 
-                  await loadGameStaking(); 
-                  showStaking = true; 
-                  showLeaderboard = false; 
-                  showPlayerStats = false; 
-                }}
-              >
-                Staking
-                {#if componentLoadingStates.gameStaking}
-                  <span class="loading-spinner">⏳</span>
-                {/if}
-              </button>
+          <!-- Right sidebar: Wallet and Tabbed panels -->
+          <div class="sidebar-section">
+            <div class="hidden lg:block mb-4">
+              <WalletManager />
             </div>
             
-            <!-- Tab content -->
-            <div class="tab-content">
-              {#if showLeaderboard}
-                {#if LazyLeaderboard && !componentLoadingStates.leaderboard}
-                  <svelte:component this={LazyLeaderboard} compact={true} contractId={BigInt(data.contract.slotMachineAppId)} />
-                {:else}
-                  <!-- Leaderboard Skeleton -->
-                  <div class="skeleton-container">
-                    <div class="skeleton-header">
-                      <div class="skeleton-title"></div>
-                      <div class="skeleton-metric-buttons">
-                        <div class="skeleton-button"></div>
-                        <div class="skeleton-button"></div>
-                        <div class="skeleton-button"></div>
+            <!-- Tabbed panels -->
+            <div class="tabbed-panels">
+              <!-- Tab buttons -->
+              <div class="tab-buttons">
+                <button 
+                  class="tab-button {!showLeaderboard && !showPlayerStats && !showStaking ? 'active' : ''}"
+                  on:click={() => { showLeaderboard = false; showPlayerStats = false; showStaking = false; }}
+                >
+                  Queue
+                </button>
+                <button 
+                  class="tab-button {showLeaderboard ? 'active' : ''}"
+                  on:click={async () => { 
+                    await loadLeaderboard(); 
+                    showLeaderboard = true; 
+                    showPlayerStats = false; 
+                    showStaking = false; 
+                  }}
+                >
+                  Leaderboard
+                  {#if componentLoadingStates.leaderboard}
+                    <span class="loading-spinner">⏳</span>
+                  {/if}
+                </button>
+                <button 
+                  class="tab-button {showPlayerStats ? 'active' : ''}"
+                  on:click={async () => { 
+                    await loadPlayerStats(); 
+                    showPlayerStats = true; 
+                    showLeaderboard = false; 
+                    showStaking = false; 
+                  }}
+                >
+                  Stats
+                  {#if componentLoadingStates.playerStats}
+                    <span class="loading-spinner">⏳</span>
+                  {/if}
+                </button>
+                <button 
+                  class="tab-button {showStaking ? 'active' : ''}"
+                  on:click={async () => { 
+                    await loadGameStaking(); 
+                    showStaking = true; 
+                    showLeaderboard = false; 
+                    showPlayerStats = false; 
+                  }}
+                >
+                  Staking
+                  {#if componentLoadingStates.gameStaking}
+                    <span class="loading-spinner">⏳</span>
+                  {/if}
+                </button>
+              </div>
+              
+              <!-- Tab content -->
+              <div class="tab-content">
+                {#if showLeaderboard}
+                  {#if LazyLeaderboard && !componentLoadingStates.leaderboard}
+                    <svelte:component this={LazyLeaderboard} compact={true} contractId={BigInt(data.contract.slotMachineAppId)} />
+                  {:else}
+                    <!-- Leaderboard Skeleton -->
+                    <div class="skeleton-container">
+                      <div class="skeleton-header">
+                        <div class="skeleton-title"></div>
+                        <div class="skeleton-metric-buttons">
+                          <div class="skeleton-button"></div>
+                          <div class="skeleton-button"></div>
+                          <div class="skeleton-button"></div>
+                        </div>
+                      </div>
+                      <div class="skeleton-list">
+                        {#each Array(8) as _, i}
+                          <div class="skeleton-row">
+                            <div class="skeleton-rank"></div>
+                            <div class="skeleton-address"></div>
+                            <div class="skeleton-stat"></div>
+                            <div class="skeleton-badge"></div>
+                          </div>
+                        {/each}
                       </div>
                     </div>
-                    <div class="skeleton-list">
-                      {#each Array(8) as _, i}
-                        <div class="skeleton-row">
-                          <div class="skeleton-rank"></div>
-                          <div class="skeleton-address"></div>
-                          <div class="skeleton-stat"></div>
-                          <div class="skeleton-badge"></div>
-                        </div>
-                      {/each}
+                  {/if}
+                {:else if showPlayerStats}
+                  {#if LazyPlayerStats && !componentLoadingStates.playerStats}
+                    <svelte:component this={LazyPlayerStats} compact={true} />
+                  {:else}
+                    <!-- Player Stats Skeleton -->
+                    <div class="skeleton-container">
+                      <div class="skeleton-header">
+                        <div class="skeleton-title"></div>
+                      </div>
+                      <div class="skeleton-stats-grid">
+                        {#each Array(6) as _, i}
+                          <div class="skeleton-stat-card">
+                            <div class="skeleton-stat-value"></div>
+                            <div class="skeleton-stat-label"></div>
+                          </div>
+                        {/each}
+                      </div>
                     </div>
-                  </div>
-                {/if}
-              {:else if showPlayerStats}
-                {#if LazyPlayerStats && !componentLoadingStates.playerStats}
-                  <svelte:component this={LazyPlayerStats} compact={true} />
+                  {/if}
+                {:else if showStaking}
+                  {#if LazyGameStaking && !componentLoadingStates.gameStaking}
+                    <svelte:component this={LazyGameStaking} compact={true} contractContext={data.contract} />
+                  {:else}
+                    <!-- Game Staking Skeleton -->
+                    <div class="skeleton-container">
+                      <div class="skeleton-header">
+                        <div class="skeleton-title"></div>
+                      </div>
+                      <div class="skeleton-staking-form">
+                        <div class="skeleton-input"></div>
+                        <div class="skeleton-button-large"></div>
+                        <div class="skeleton-info-box"></div>
+                      </div>
+                    </div>
+                  {/if}
                 {:else}
-                  <!-- Player Stats Skeleton -->
-                  <div class="skeleton-container">
-                    <div class="skeleton-header">
-                      <div class="skeleton-title"></div>
-                    </div>
-                    <div class="skeleton-stats-grid">
-                      {#each Array(6) as _, i}
-                        <div class="skeleton-stat-card">
-                          <div class="skeleton-stat-value"></div>
-                          <div class="skeleton-stat-label"></div>
-                        </div>
-                      {/each}
-                    </div>
-                  </div>
+                  <GameQueue />
                 {/if}
-              {:else if showStaking}
-                {#if LazyGameStaking && !componentLoadingStates.gameStaking}
-                  <svelte:component this={LazyGameStaking} compact={true} contractContext={data.contract} />
-                {:else}
-                  <!-- Game Staking Skeleton -->
-                  <div class="skeleton-container">
-                    <div class="skeleton-header">
-                      <div class="skeleton-title"></div>
-                    </div>
-                    <div class="skeleton-staking-form">
-                      <div class="skeleton-input"></div>
-                      <div class="skeleton-button-large"></div>
-                      <div class="skeleton-info-box"></div>
-                    </div>
-                  </div>
-                {/if}
-              {:else}
-                <GameQueue />
-              {/if}
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Mobile Layout -->
-    <div class="lg:hidden min-h-screen flex flex-col safe-area-top safe-area-bottom">
-      <!-- Compact mobile header -->
-      <div class="flex-shrink-0 px-2 py-2 safe-area-left safe-area-right">
-        <!-- Navigation -->
-        <div class="flex items-center justify-between mb-2">
-          <h1 class="text-lg font-bold text-theme truncate mx-4">{data.contract.name}</h1>
-          <div class="flex items-center gap-2">
-            {#if data.contract.features.betaMode}
-              <span class="beta-badge text-xs">Beta</span>
-            {/if}
-          </div>
-          <button
-            on:click={goBack}
-            class="mobile-nav-button"
-          >
-            <ArrowLeft class="w-5 h-5" />
-            <span>Machines</span>
-          </button>
-        </div>
-        
-        <WalletManager compact={true} />
-      </div>
-      
-      <!-- Main game area -->
-      <div class="flex-1 flex flex-col px-2 pb-2 safe-area-left safe-area-right">
-        <SlotMachine disabled={false} compact={true} contractContext={data.contract} />
-        
-        <!-- Mobile Tabbed panels -->
-        <div class="mobile-tabbed-panels">
-          <!-- Mobile Tab buttons -->
-          <div class="mobile-tab-buttons">
-            <button 
-              class="mobile-tab-button {!showLeaderboard && !showPlayerStats && !showStaking ? 'active' : ''}"
-              on:click={() => { showLeaderboard = false; showPlayerStats = false; showStaking = false; }}
-            >
-              Queue
-            </button>
-            <button 
-              class="mobile-tab-button {showLeaderboard ? 'active' : ''}"
-              on:click={async () => { 
-                await loadLeaderboard(); 
-                showLeaderboard = true; 
-                showPlayerStats = false; 
-                showStaking = false; 
-              }}
-            >
-              Leaderboard
-              {#if componentLoadingStates.leaderboard}
-                <span class="loading-spinner">⏳</span>
-              {/if}
-            </button>
-            <button 
-              class="mobile-tab-button {showPlayerStats ? 'active' : ''}"
-              on:click={async () => { 
-                await loadPlayerStats(); 
-                showPlayerStats = true; 
-                showLeaderboard = false; 
-                showStaking = false; 
-              }}
-            >
-              Stats
-              {#if componentLoadingStates.playerStats}
-                <span class="loading-spinner">⏳</span>
-              {/if}
-            </button>
-            <button 
-              class="mobile-tab-button {showStaking ? 'active' : ''}"
-              on:click={async () => { 
-                await loadGameStaking(); 
-                showStaking = true; 
-                showLeaderboard = false; 
-                showPlayerStats = false; 
-              }}
-            >
-              Staking
-              {#if componentLoadingStates.gameStaking}
-                <span class="loading-spinner">⏳</span>
-              {/if}
-            </button>
-          </div>
-          
-          <!-- Mobile Tab content -->
-          <div class="mobile-tab-content">
-            {#if showLeaderboard}
-              {#if LazyLeaderboard && !componentLoadingStates.leaderboard}
-                <svelte:component this={LazyLeaderboard} compact={true} contractId={BigInt(data.contract.slotMachineAppId)} />
-              {:else}
-                <!-- Leaderboard Skeleton -->
-                <div class="skeleton-container">
-                  <div class="skeleton-header">
-                    <div class="skeleton-title"></div>
-                    <div class="skeleton-metric-buttons">
-                      <div class="skeleton-button"></div>
-                      <div class="skeleton-button"></div>
-                      <div class="skeleton-button"></div>
-                    </div>
-                  </div>
-                  <div class="skeleton-list">
-                    {#each Array(8) as _, i}
-                      <div class="skeleton-row">
-                        <div class="skeleton-rank"></div>
-                        <div class="skeleton-address"></div>
-                        <div class="skeleton-stat"></div>
-                        <div class="skeleton-badge"></div>
-                      </div>
-                    {/each}
-                  </div>
-                </div>
-              {/if}
-            {:else if showPlayerStats}
-              {#if LazyPlayerStats && !componentLoadingStates.playerStats}
-                <svelte:component this={LazyPlayerStats} compact={true} />
-              {:else}
-                <!-- Player Stats Skeleton -->
-                <div class="skeleton-container">
-                  <div class="skeleton-header">
-                    <div class="skeleton-title"></div>
-                  </div>
-                  <div class="skeleton-stats-grid">
-                    {#each Array(6) as _, i}
-                      <div class="skeleton-stat-card">
-                        <div class="skeleton-stat-value"></div>
-                        <div class="skeleton-stat-label"></div>
-                      </div>
-                    {/each}
-                  </div>
-                </div>
-              {/if}
-            {:else if showStaking}
-              {#if LazyGameStaking && !componentLoadingStates.gameStaking}
-                <svelte:component this={LazyGameStaking} compact={true} contractContext={data.contract} />
-              {:else}
-                <!-- Game Staking Skeleton -->
-                <div class="skeleton-container">
-                  <div class="skeleton-header">
-                    <div class="skeleton-title"></div>
-                  </div>
-                  <div class="skeleton-staking-form">
-                    <div class="skeleton-input"></div>
-                    <div class="skeleton-button-large"></div>
-                    <div class="skeleton-info-box"></div>
-                  </div>
-                </div>
-              {/if}
-            {:else}
-              <GameQueue />
-            {/if}
           </div>
         </div>
       </div>
@@ -497,7 +358,7 @@
   
 </main>
 
-<style>
+<style lang="postcss">
   .nav-button {
     @apply flex items-center gap-1 px-2 py-1 text-sm text-theme-text;
     opacity: 0.7;
@@ -540,10 +401,45 @@
     @apply px-2 py-1 text-xs font-medium rounded-full bg-blue-900/30 text-blue-400 border border-blue-500/30;
   }
 
+  /* Responsive Layout Grid */
+  .responsive-layout {
+    @apply w-full;
+  }
+
+  .content-grid {
+    @apply grid gap-4 lg:gap-6 items-start;
+    grid-template-columns: 1fr;
+  }
+  
+  @media (max-width: 767px) {
+    .content-grid {
+      gap: 0.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .content-grid {
+      grid-template-columns: 2fr 1fr;
+    }
+  }
+
+  .game-section {
+    @apply w-full;
+  }
+
+  .sidebar-section {
+    @apply space-y-4 relative w-full;
+  }
+
+  .wallet-section {
+    @apply w-full;
+  }
+
   .tabbed-panels {
     @apply rounded-xl border overflow-hidden;
     background: var(--theme-surface-primary);
     border-color: var(--theme-surface-border);
+    margin: 4px;
   }
 
   .tab-buttons {
@@ -571,6 +467,38 @@
     @apply overflow-hidden;
     min-height: calc(100vh - 22rem);
   }
+
+  @media (max-width: 1023px) {
+    .tab-content {
+      max-height: calc(50vh - 60px);
+      min-height: auto;
+    }
+
+    .tabbed-panels {
+      max-height: 50vh;
+    }
+  }
+  
+  @media (max-width: 767px) {
+    .tabbed-panels {
+      max-width: calc(100vw - 1rem); /* Constrain tabs to fit within viewport minus container padding */
+    }
+  }
+
+    .tab-buttons {
+      @apply overflow-x-auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .tab-buttons::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tab-button {
+      @apply flex-shrink-0 whitespace-nowrap;
+      min-width: 100px;
+    }
 
   .text-voi-400 {
     color: #10b981;
@@ -680,54 +608,16 @@
   .skeleton-row:nth-child(7) { animation-delay: 600ms; }
   .skeleton-row:nth-child(8) { animation-delay: 700ms; }
 
-  /* Mobile Tabbed Panels Styles */
-  .mobile-tabbed-panels {
-    @apply mt-4 rounded-xl border overflow-hidden;
-    background: var(--theme-surface-primary);
-    border-color: var(--theme-surface-border);
-    max-height: 50vh; /* Limit height to prevent taking up too much screen space */
+  /* Remove padding on mobile to eliminate left margin while maintaining box-sizing */
+  @media (max-width: 767px) {
+    .mobile-no-padding {
+      padding-left: 0.25rem !important; /* Keep minimal padding to prevent overflow */
+      padding-right: 0.25rem !important;
+    }
+    
+    .mobile-no-padding > * {
+      box-sizing: border-box; /* Ensure all child elements respect container bounds */
+    }
   }
 
-  .mobile-tab-buttons {
-    @apply flex overflow-x-auto border-b;
-    border-color: var(--theme-surface-border);
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE and Edge */
-  }
-
-  .mobile-tab-buttons::-webkit-scrollbar {
-    display: none; /* Chrome, Safari, Opera */
-  }
-
-  .mobile-tab-button {
-    @apply flex-shrink-0 px-4 py-3 text-sm font-medium transition-all duration-200 border-b-2 border-transparent;
-    @apply whitespace-nowrap;
-    color: var(--theme-text, #9ca3af);
-    min-width: 100px; /* Ensure minimum width for touch targets */
-  }
-
-  .mobile-tab-button:hover {
-    color: var(--theme-primary);
-    background: var(--theme-surface-hover);
-  }
-
-  .mobile-tab-button.active {
-    color: var(--theme-primary);
-    border-color: var(--theme-primary);
-    background: var(--theme-surface-secondary);
-  }
-
-  .mobile-tab-content {
-    @apply overflow-y-auto;
-    max-height: calc(50vh - 60px); /* Account for tab button height */
-  }
-
-  /* Ensure mobile tab content components are properly sized */
-  .mobile-tab-content :global(.game-queue-container) {
-    @apply max-h-full;
-  }
-
-  .mobile-tab-content :global(.spin-list) {
-    max-height: calc(50vh - 120px); /* Account for header and pagination */
-  }
 </style>

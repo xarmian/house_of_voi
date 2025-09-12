@@ -26,11 +26,9 @@
   }>();
   
   export let disabled = false;
-  export let compact = false;
   
   let betInputValue = $betPerLineVOI;
-  let desktopSpinButtonElement: HTMLElement;
-  let mobileSpinButtonElement: HTMLElement;
+  let spinButtonElement: HTMLElement;
   let showAddFundsModal = false;
   let showPaylinePayouts = false;
   let showPreferencesModal = false;
@@ -111,7 +109,7 @@
   }
   
   function handleSpin() {
-    const currentSpinButton = compact ? mobileSpinButtonElement : desktopSpinButtonElement;
+    const currentSpinButton = spinButtonElement;
     
     if (!$canAffordBet || !$isWalletConnected || !$bettingStore.isValidBet || disabled || !$isSlotMachineOperational) {
       // Provide feedback for invalid spin attempts
@@ -321,11 +319,9 @@
   $: autoSpinCountDisplay = $isAutoSpinning ? ($autoSpinCount === 'unlimited' ? '∞' : $autoSpinCount) : '';
 </script>
 
-<div class="betting-controls relative" class:compact={compact}>
-  <!-- Always show betting controls structure -->
-  <!-- Header -->
-  {#if !compact}
-  <div class="flex items-center justify-between my-2 py-1 border-b border-surface-tertiary" class:blurred-background={$isNewUser || walletExistsButLocked}>
+<div class="betting-controls relative">
+  <!-- Header - Hidden on mobile -->
+  <div class="header-section" class:blurred-background={$isNewUser || walletExistsButLocked}>
     <div class="flex items-center gap-2 text-amber-400">
       <DollarSign class="w-5 h-5" />
       <h3 class="font-bold text-lg">Betting Controls</h3>
@@ -340,333 +336,179 @@
       <span class="text-sm">Paylines & Payouts</span>
     </button>
   </div>
-  {/if}
 
-  <!-- Desktop: Clean Horizontal Layout -->
-  {#if !compact}
-    <div class="clean-betting-strip" class:blurred-background={$isNewUser || walletExistsButLocked}>
-      
-      <!-- Left: Betting Controls (Stacked) -->
-      <div class="betting-controls-section">
-        <!-- Paylines Row -->
-        <div class="control-row">
-          <span class="control-label">Lines: {$bettingStore.selectedPaylines}</span>
-          <div class="control-buttons">
-            <button
-              on:click={(e) => handleControlButton(() => bettingStore.decreasePaylines(), e.currentTarget)}
-              disabled={$bettingStore.selectedPaylines <= BETTING_CONSTANTS.MIN_PAYLINES || disabled}
-              class="control-btn"
-              aria-label="Decrease paylines"
-            >
-              <Minus class="w-4 h-4" />
-            </button>
-            <button
-              on:click={(e) => handleControlButton(() => bettingStore.setMaxPaylines(), e.currentTarget)}
-              disabled={$bettingStore.selectedPaylines >= BETTING_CONSTANTS.MAX_PAYLINES || disabled}
-              class="control-btn max-btn"
-            >
-              Max
-            </button>
-            <button
-              on:click={(e) => handleControlButton(() => bettingStore.increasePaylines(), e.currentTarget)}
-              disabled={$bettingStore.selectedPaylines >= BETTING_CONSTANTS.MAX_PAYLINES || disabled}
-              class="control-btn"
-              aria-label="Increase paylines"
-            >
-              <Plus class="w-4 h-4" />
-            </button>
-          </div>
+  <!-- Main Responsive Layout -->
+  <div class="responsive-betting-layout" class:blurred-background={$isNewUser || walletExistsButLocked}>
+    
+    <!-- Betting Controls Section -->
+    <div class="controls-section">
+      <!-- Paylines Control -->
+      <div class="control-group-horizontal">
+        <div class="control-label-section">
+          <span class="control-title">Lines:</span>
+          <span class="control-value">{$bettingStore.selectedPaylines}</span>
         </div>
-
-        <!-- Bet Per Line Row -->
-        <div class="control-row">
-          <span class="control-label">Bet: {$betPerLineVOI} VOI</span>
-          <div class="control-buttons">
-            <button
-              on:click={(e) => handleControlButton(() => bettingStore.decreaseBetPerLine(), e.currentTarget)}
-              disabled={$bettingStore.betPerLine <= BETTING_CONSTANTS.MIN_BET_PER_LINE || disabled}
-              class="control-btn"
-              aria-label="Decrease bet per line"
-            >
-              <Minus class="w-4 h-4" />
-            </button>
-            <input
-              type="number"
-              min={formatVOI(BETTING_CONSTANTS.MIN_BET_PER_LINE)}
-              max={formatVOI(BETTING_CONSTANTS.MAX_BET_PER_LINE)}
-              bind:value={betInputValue}
-              on:input={handleBetInput}
-              disabled={disabled}
-              class="bet-input"
-              placeholder="1"
-            />
-            <button
-              on:click={(e) => handleControlButton(() => bettingStore.increaseBetPerLine(), e.currentTarget)}
-              disabled={$bettingStore.betPerLine >= BETTING_CONSTANTS.MAX_BET_PER_LINE || disabled}
-              class="control-btn"
-              aria-label="Increase bet per line"
-            >
-              <Plus class="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        <!-- Quick Bets Row -->
-        <div class="quick-bets-row">
-          <div class="quick-bets-container">
-            {#each customQuickBets.slice(0, 4) as quickBet}
-              <button
-                on:click={(e) => setQuickBet(quickBet, e.currentTarget)}
-                disabled={disabled}
-                class="quick-bet-btn"
-                class:active={$bettingStore.betPerLine === quickBet.amount * 1_000_000 && $bettingStore.selectedPaylines === quickBet.lines}
-              >
-                {quickBet.amount}×{quickBet.lines}
-              </button>
-            {/each}
-            <button
-              on:click={openBettingSettings}
-              class="edit-quick-bets"
-              title="Edit betting settings"
-              disabled={$isNewUser || walletExistsButLocked}
-            >
-              <Edit3 class="w-3 h-3" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Center: Large Spin Button -->
-      <div class="spin-section" class:blurred-background={$isNewUser || walletExistsButLocked}>
-        <button
-          bind:this={desktopSpinButtonElement}
-          on:click={handleSpin}
-          disabled={spinButtonDisabled}
-          class="large-spin-button"
-          class:spinning={$isSpinning}
-        >
-          {#if $isSpinning}
-            <div class="flex items-center justify-center gap-3">
-              <div class="border-2 border-white border-t-transparent rounded-full animate-spin w-6 h-6"></div>
-              <span class="text-xl font-bold">Spinning...</span>
-            </div>
-          {:else}
-            <div class="flex items-center justify-center gap-3">
-              <Zap class="w-8 h-8" />
-              <span class="text-2xl font-bold">SPIN</span>
-            </div>
-          {/if}
-        </button>
-        
-        <!-- Auto Spin Button -->
-        <button
-          on:click={handleAutoSpinClick}
-          disabled={autoSpinButtonDisabled}
-          class="auto-spin-button"
-          class:active={$isAutoSpinning}
-        >
-          <div class="flex items-center justify-center gap-2">
-            {#if $isAutoSpinning}
-              <Square class="w-5 h-5" />
-              <span class="text-lg font-bold">{autoSpinButtonText}</span>
-              {#if autoSpinCountDisplay}
-                <span class="text-sm opacity-80">({autoSpinCountDisplay})</span>
-              {/if}
-            {:else}
-              <RotateCcw class="w-5 h-5" />
-              <span class="text-lg font-bold">{autoSpinButtonText}</span>
-            {/if}
-          </div>
-        </button>
-      </div>
-
-      <!-- Right: Total & Credits -->
-      <div class="total-section">
-        <div class="total-display">
-          <div class="total-header">
-            <span class="total-label">Total Bet</span>
-            <span class="total-amount">{$totalBetVOI} VOI</span>
-          </div>
-          <div class="total-breakdown">
-            {$bettingStore.selectedPaylines} lines × {$betPerLineVOI} VOI
-          </div>
-          <div class="balance-info">
-            <BalanceBreakdown compact={true} />
-          </div>
-        </div>
-        <button
-          on:click={() => showAddFundsModal = true}
-          disabled={!$isWalletConnected}
-          class="add-credits-btn"
-        >
-          <Plus class="w-4 h-4" />
-          <span>Add Credits</span>
-        </button>
-      </div>
-
-    </div>
-  {:else}
-    <!-- Mobile: Balanced Layout -->
-    <div class="mobile-balanced-layout" class:blurred-background={$isNewUser || walletExistsButLocked}>
-      
-      <!-- Top: Large Spin Button -->
-      <div class="mobile-spin-section">
-        <button
-          bind:this={mobileSpinButtonElement}
-          on:click={handleSpin}
-          disabled={spinButtonDisabled}
-          class="mobile-large-spin"
-          class:spinning={$isSpinning}
-        >
-          {#if $isSpinning}
-            <div class="flex items-center justify-center gap-3">
-              <div class="border-2 border-white border-t-transparent rounded-full animate-spin w-6 h-6"></div>
-              <span class="text-xl font-bold">Spinning...</span>
-            </div>
-          {:else}
-            <div class="flex items-center justify-center gap-3">
-              <Zap class="w-8 h-8" />
-              <span class="text-xl font-bold">SPIN</span>
-            </div>
-          {/if}
-        </button>
-        
-        <!-- Mobile Auto Spin Button -->
-        <button
-          on:click={handleAutoSpinClick}
-          disabled={autoSpinButtonDisabled}
-          class="mobile-auto-spin-button"
-          class:active={$isAutoSpinning}
-        >
-          <div class="flex items-center justify-center gap-2">
-            {#if $isAutoSpinning}
-              <Square class="w-5 h-5" />
-              <span class="text-base font-bold">{autoSpinButtonText}</span>
-              {#if autoSpinCountDisplay}
-                <span class="text-sm opacity-80">({autoSpinCountDisplay})</span>
-              {/if}
-            {:else}
-              <RotateCcw class="w-5 h-5" />
-              <span class="text-base font-bold">{autoSpinButtonText}</span>
-            {/if}
-          </div>
-        </button>
-      </div>
-
-      <!-- Bottom: Expanded Controls Grid -->
-      <div class="mobile-controls-grid">
-        <!-- Lines Control -->
-        <div class="mobile-control-card">
-          <div class="mobile-control-header">
-            <span class="mobile-control-title">Lines</span>
-            <span class="mobile-control-value">{$bettingStore.selectedPaylines}</span>
-          </div>
-          <div class="mobile-control-buttons">
-            <button
-              on:click={(e) => handleControlButton(() => bettingStore.decreasePaylines(), e.currentTarget)}
-              disabled={$bettingStore.selectedPaylines <= BETTING_CONSTANTS.MIN_PAYLINES || disabled}
-              class="mobile-control-btn"
-              aria-label="Decrease paylines"
-            >
-              <Minus class="w-4 h-4" />
-            </button>
-            <button
-              on:click={(e) => handleControlButton(() => bettingStore.setMaxPaylines(), e.currentTarget)}
-              disabled={$bettingStore.selectedPaylines >= BETTING_CONSTANTS.MAX_PAYLINES || disabled}
-              class="mobile-max-btn"
-            >
-              Max
-            </button>
-            <button
-              on:click={(e) => handleControlButton(() => bettingStore.increasePaylines(), e.currentTarget)}
-              disabled={$bettingStore.selectedPaylines >= BETTING_CONSTANTS.MAX_PAYLINES || disabled}
-              class="mobile-control-btn"
-              aria-label="Increase paylines"
-            >
-              <Plus class="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        <!-- Bet Control -->
-        <div class="mobile-control-card">
-          <div class="mobile-control-header">
-            <span class="mobile-control-title">Bet Per Line</span>
-            <span class="mobile-control-value">{$betPerLineVOI} VOI</span>
-          </div>
-          <div class="mobile-control-buttons">
-            <button
-              on:click={(e) => handleControlButton(() => bettingStore.decreaseBetPerLine(), e.currentTarget)}
-              disabled={$bettingStore.betPerLine <= BETTING_CONSTANTS.MIN_BET_PER_LINE || disabled}
-              class="mobile-control-btn"
-              aria-label="Decrease bet"
-            >
-              <Minus class="w-4 h-4" />
-            </button>
-            <input
-              type="number"
-              min={formatVOI(BETTING_CONSTANTS.MIN_BET_PER_LINE)}
-              max={formatVOI(BETTING_CONSTANTS.MAX_BET_PER_LINE)}
-              bind:value={betInputValue}
-              on:input={handleBetInput}
-              disabled={disabled}
-              class="mobile-bet-input"
-              placeholder="1"
-            />
-            <button
-              on:click={(e) => handleControlButton(() => bettingStore.increaseBetPerLine(), e.currentTarget)}
-              disabled={$bettingStore.betPerLine >= BETTING_CONSTANTS.MAX_BET_PER_LINE || disabled}
-              class="mobile-control-btn"
-              aria-label="Increase bet"
-            >
-              <Plus class="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Total & Quick Actions -->
-      <div class="mobile-bottom-section">
-        <div class="mobile-total-card">
-          <div class="mobile-total-info">
-            <div class="mobile-total-label">Total Bet</div>
-            <div class="mobile-total-amount">{$totalBetVOI} VOI</div>
-            <div class="mobile-total-breakdown">{$bettingStore.selectedPaylines} lines × {$betPerLineVOI} VOI</div>
-          </div>
-        </div>
-        
-        <div class="mobile-actions-row">
-          <!-- Quick Bets -->
-          <div class="mobile-quick-bets">
-            {#each customQuickBets.slice(0, 4) as quickBet}
-              <button
-                on:click={(e) => setQuickBet(quickBet, e.currentTarget)}
-                disabled={disabled}
-                class="mobile-quick-bet-btn"
-                class:active={$bettingStore.betPerLine === quickBet.amount * 1_000_000 && $bettingStore.selectedPaylines === quickBet.lines}
-              >
-                {quickBet.amount}×{quickBet.lines}
-              </button>
-            {/each}
-          </div>
-          
-          <!-- Add Credits -->
+        <div class="control-buttons">
           <button
-            on:click={() => showAddFundsModal = true}
-            disabled={!$isWalletConnected}
-            class="mobile-add-credits-btn"
+            on:click={(e) => handleControlButton(() => bettingStore.decreasePaylines(), e.currentTarget)}
+            disabled={$bettingStore.selectedPaylines <= BETTING_CONSTANTS.MIN_PAYLINES || disabled}
+            class="control-btn"
+            aria-label="Decrease paylines"
+          >
+            <Minus class="w-4 h-4" />
+          </button>
+          <button
+            on:click={(e) => handleControlButton(() => bettingStore.setMaxPaylines(), e.currentTarget)}
+            disabled={$bettingStore.selectedPaylines >= BETTING_CONSTANTS.MAX_PAYLINES || disabled}
+            class="max-btn"
+          >
+            Max
+          </button>
+          <button
+            on:click={(e) => handleControlButton(() => bettingStore.increasePaylines(), e.currentTarget)}
+            disabled={$bettingStore.selectedPaylines >= BETTING_CONSTANTS.MAX_PAYLINES || disabled}
+            class="control-btn"
+            aria-label="Increase paylines"
           >
             <Plus class="w-4 h-4" />
-            <span>Add Credits</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Bet Per Line Control -->
+      <div class="control-group-horizontal">
+        <div class="control-label-section">
+          <span class="control-title">Bet:</span>
+          <span class="control-value">{$betPerLineVOI} VOI</span>
+        </div>
+        <div class="control-buttons">
+          <button
+            on:click={(e) => handleControlButton(() => bettingStore.decreaseBetPerLine(), e.currentTarget)}
+            disabled={$bettingStore.betPerLine <= BETTING_CONSTANTS.MIN_BET_PER_LINE || disabled}
+            class="control-btn"
+            aria-label="Decrease bet per line"
+          >
+            <Minus class="w-4 h-4" />
+          </button>
+          <input
+            type="number"
+            min={formatVOI(BETTING_CONSTANTS.MIN_BET_PER_LINE)}
+            max={formatVOI(BETTING_CONSTANTS.MAX_BET_PER_LINE)}
+            bind:value={betInputValue}
+            on:input={handleBetInput}
+            disabled={disabled}
+            class="bet-input"
+            placeholder="1"
+          />
+          <button
+            on:click={(e) => handleControlButton(() => bettingStore.increaseBetPerLine(), e.currentTarget)}
+            disabled={$bettingStore.betPerLine >= BETTING_CONSTANTS.MAX_BET_PER_LINE || disabled}
+            class="control-btn"
+            aria-label="Increase bet per line"
+          >
+            <Plus class="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Bets -->
+      <div class="quick-bets-section">
+        <div class="quick-bets-container">
+          {#each customQuickBets.slice(0, 4) as quickBet}
+            <button
+              on:click={(e) => setQuickBet(quickBet, e.currentTarget)}
+              disabled={disabled}
+              class="quick-bet-btn"
+              class:active={$bettingStore.betPerLine === quickBet.amount * 1_000_000 && $bettingStore.selectedPaylines === quickBet.lines}
+            >
+              {quickBet.amount}×{quickBet.lines}
+            </button>
+          {/each}
+          <button
+            on:click={openBettingSettings}
+            class="edit-quick-bets"
+            title="Edit betting settings"
+            disabled={$isNewUser || walletExistsButLocked}
+          >
+            <Edit3 class="w-3 h-3" />
           </button>
         </div>
       </div>
     </div>
-  {/if}
+
+    <!-- Spin Section -->
+    <div class="spin-section" class:blurred-background={$isNewUser || walletExistsButLocked}>
+      <button
+        bind:this={spinButtonElement}
+        on:click={handleSpin}
+        disabled={spinButtonDisabled}
+        class="spin-button"
+        class:spinning={$isSpinning}
+      >
+        {#if $isSpinning}
+          <div class="flex items-center justify-center gap-3">
+            <div class="border-2 border-white border-t-transparent rounded-full animate-spin w-6 h-6"></div>
+            <span class="spin-text">Spinning...</span>
+          </div>
+        {:else}
+          <div class="flex items-center justify-center gap-3">
+            <Zap class="spin-icon" />
+            <span class="spin-text">SPIN</span>
+          </div>
+        {/if}
+      </button>
+      
+      <!-- Auto Spin Button -->
+      <button
+        on:click={handleAutoSpinClick}
+        disabled={autoSpinButtonDisabled}
+        class="auto-spin-button"
+        class:active={$isAutoSpinning}
+      >
+        <div class="flex items-center justify-center gap-2">
+          {#if $isAutoSpinning}
+            <Square class="w-5 h-5" />
+            <span class="auto-spin-text">{autoSpinButtonText}</span>
+            {#if autoSpinCountDisplay}
+              <span class="text-sm opacity-80">({autoSpinCountDisplay})</span>
+            {/if}
+          {:else}
+            <RotateCcw class="w-5 h-5" />
+            <span class="auto-spin-text">{autoSpinButtonText}</span>
+          {/if}
+        </div>
+      </button>
+    </div>
+
+    <!-- Total & Credits Section -->
+    <div class="totals-section">
+      <div class="total-display">
+        <div class="total-header">
+          <span class="total-label">Total Bet</span>
+          <span class="total-amount">{$totalBetVOI} VOI</span>
+        </div>
+        <div class="total-breakdown">
+          {$bettingStore.selectedPaylines} lines × {$betPerLineVOI} VOI
+        </div>
+        <div class="balance-info">
+          <BalanceBreakdown />
+        </div>
+      </div>
+      <button
+        on:click={() => showAddFundsModal = true}
+        disabled={!$isWalletConnected}
+        class="add-credits-btn"
+      >
+        <Plus class="w-4 h-4" />
+        <span>Add Credits</span>
+      </button>
+    </div>
+
+  </div>
 
   <!-- Error Messages -->
   {#if $bettingStore.errors.length > 0}
-    <div class="control-group" class:mt-4={!compact} class:mt-3={compact} class:blurred-background={$isNewUser || walletExistsButLocked}>
+    <div class="error-section" class:blurred-background={$isNewUser || walletExistsButLocked}>
       <div class="bg-red-900/20 border border-red-700/50 rounded-lg p-3">
         {#each $bettingStore.errors as error}
           <p class="text-red-400 text-sm">{error}</p>
@@ -799,266 +641,196 @@
   .betting-controls {
     @apply max-w-full;
   }
-  
-  /* Desktop: Balanced Layout */
-  .clean-betting-strip {
-    @apply flex items-stretch gap-6 p-2 backdrop-blur-sm border border-surface-border rounded-xl shadow-lg;
-    background: linear-gradient(135deg, rgba(var(--theme-surface-primary-rgb), 0.8) 0%, rgba(var(--theme-surface-secondary-rgb), 0.6) 100%);
+
+  /* Header Section - Hidden on mobile */
+  .header-section {
+    @apply flex items-center justify-between my-2 py-1 border-b border-surface-tertiary;
+  }
+
+  /* Responsive Main Layout */
+  .responsive-betting-layout {
+    @apply grid gap-4 p-4 backdrop-blur-sm lg:border lg:border-surface-border rounded-xl shadow-lg;
+    /*background: linear-gradient(135deg, rgba(var(--theme-surface-primary-rgb), 0.8) 0%, rgba(var(--theme-surface-secondary-rgb), 0.6) 100%);*/
+    
+    /* Desktop: 3-column layout */
+    grid-template-columns: 1fr 2fr 1fr;
+    grid-template-areas: "controls spin totals";
     min-height: 120px;
-    overflow: hidden;
   }
-  
-  /* Left Section: Betting Controls (Stacked) */
-  .betting-controls-section {
-    @apply flex flex-col gap-3 p-4 rounded-lg border border-surface-border;
+
+  /* Controls Section */
+  .controls-section {
+    grid-area: controls;
+    @apply flex flex-col gap-2 p-3 rounded-lg border border-surface-border;
     background: rgba(var(--theme-surface-primary-rgb), 0.3);
-    flex: 0 1 auto;
-    min-width: clamp(240px, 20vw, 280px);
-    max-width: clamp(280px, 25vw, 320px);
+    min-width: 280px;
   }
-  
-  .control-row {
-    @apply flex items-center justify-between py-1;
+
+  .control-group {
+    @apply space-y-2;
   }
-  
-  .control-label {
-    @apply text-sm font-medium text-theme-text min-w-[90px];
+
+  .control-group-horizontal {
+    @apply flex items-center justify-between gap-3;
   }
-  
+
+  .control-label-section {
+    @apply flex flex-row gap-1 min-w-0 flex-shrink-0;
+  }
+
+  .control-header {
+    @apply flex items-center justify-between;
+  }
+
+  .control-title {
+    @apply text-sm font-medium text-theme-text uppercase tracking-wide;
+  }
+
+  .control-value {
+    @apply text-sm font-bold text-theme;
+  }
+
   .control-buttons {
-    @apply flex items-center gap-2;
+    @apply flex items-center gap-2 justify-center;
   }
-  
+
   .control-btn {
     @apply w-10 h-10 rounded-md bg-surface-tertiary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-200 text-theme-text hover:text-theme;
   }
-  
+
   .max-btn {
-    @apply text-xs font-medium px-3 py-1 text-voi-400 hover:text-voi-300 bg-surface-secondary hover:bg-surface-hover rounded w-16;
+    @apply text-xs font-medium px-5 py-3 text-voi-400 hover:text-voi-300 bg-surface-secondary hover:bg-surface-hover rounded;
   }
-  
+
   .bet-input {
-    @apply w-16 h-8 px-3 text-center text-sm font-medium bg-surface-primary border border-surface-border rounded text-theme-text focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent;
+    @apply w-16 h-10 px-2 text-center text-sm font-medium bg-surface-primary border border-surface-border rounded text-theme-text focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent;
     -moz-appearance: textfield;
+    font-size: 16px; /* Prevent zoom on iOS */
   }
-  
+
   .bet-input::-webkit-outer-spin-button,
   .bet-input::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
   }
-  
-  /* Quick Bets Row */
-  .quick-bets-row {
-    @apply mt-2 pt-2 border-t border-surface-border;
+
+  /* Quick Bets Section */
+  .quick-bets-section {
+    @apply pt-2 border-t border-surface-border;
   }
-  
+
   .quick-bets-container {
-    @apply flex items-center gap-2 flex-wrap;
-    min-width: 0;
+    @apply flex items-center gap-2 flex-wrap justify-center;
   }
-  
+
   .quick-bet-btn {
     @apply px-3 py-2 text-xs font-medium bg-surface-tertiary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed rounded transition-all duration-200 text-theme-text hover:text-theme;
     min-height: 32px;
     flex-shrink: 0;
     white-space: nowrap;
   }
-  
+
   .quick-bet-btn.active {
     @apply bg-voi-600 hover:bg-voi-700 text-white;
   }
-  
+
   .edit-quick-bets {
-    @apply rounded hover:bg-surface-hover text-theme-text hover:text-theme transition-colors duration-200;
+    @apply p-2 rounded hover:bg-surface-hover text-theme-text hover:text-theme transition-colors duration-200;
   }
-  
-  /* Center Section: Responsive Spin Button */
+
+  /* Spin Section */
   .spin-section {
-    @apply flex-1 flex flex-col justify-center items-center gap-3;
-    min-width: 0; /* Allow flex shrinking */
+    grid-area: spin;
+    @apply flex flex-col justify-center items-center gap-3;
   }
-  
-  .large-spin-button {
-    @apply w-full h-24 bg-gradient-to-r from-voi-600 to-voi-700 hover:from-voi-700 hover:to-voi-800 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl disabled:shadow-none;
+
+  .spin-button {
+    @apply w-full bg-gradient-to-r from-voi-600 to-voi-700 hover:from-voi-700 hover:to-voi-800 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl disabled:shadow-none;
+    height: 5rem; /* 80px */
+    max-width: 320px;
     background-size: 200% 200%;
     animation: shimmer 3s ease-in-out infinite;
-    width: clamp(180px, 100%, 320px);
-    max-width: 100%;
   }
-  
-  .large-spin-button:not(:disabled):hover {
+
+  .spin-button:not(:disabled):hover {
     transform: scale(1.02);
   }
-  
-  .large-spin-button.spinning {
+
+  .spin-button.spinning {
     animation: spin-button-pulse 1.5s ease-in-out infinite;
     background: linear-gradient(-45deg, #0f766e, #059669, #047857, #065f46);
     background-size: 400% 400%;
     animation: spin-button-gradient 2s ease infinite;
   }
-  
-  /* Right Section: Total & Credits */
-  .total-section {
-    @apply flex flex-col;
-    flex: 0 0 auto;
-    width: clamp(180px, 18vw, 220px);
+
+  .spin-icon {
+    @apply w-8 h-8;
   }
-  
+
+  .spin-text {
+    @apply text-2xl font-bold;
+  }
+
+  /* Auto Spin Button */
+  .auto-spin-button {
+    @apply w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl disabled:shadow-none;
+    height: 3rem; /* 48px */
+    min-height: 48px;
+    max-width: 320px;
+  }
+
+  .auto-spin-button:not(:disabled):hover {
+    transform: scale(1.02);
+  }
+
+  .auto-spin-button.active {
+    @apply from-red-600 to-red-700 hover:from-red-700 hover:to-red-800;
+    animation: auto-spin-pulse 2s ease-in-out infinite;
+  }
+
+  .auto-spin-text {
+    @apply text-lg font-bold;
+  }
+
+  /* Totals Section */
+  .totals-section {
+    grid-area: totals;
+    @apply flex flex-col;
+    min-width: 230px;
+  }
+
   .total-display {
     @apply p-4 rounded-lg border border-surface-border mb-4 flex-1;
     background: rgba(var(--theme-surface-primary-rgb), 0.3);
   }
-  
+
   .total-header {
     @apply flex items-center justify-between mb-3;
   }
-  
+
   .total-label {
     @apply text-sm font-medium text-theme-text;
   }
-  
+
   .total-amount {
     @apply text-xl font-bold text-voi-400;
   }
-  
+
   .total-breakdown {
     @apply text-sm text-theme-text opacity-70 mb-3;
   }
-  
+
   .balance-info {
     @apply border-t border-surface-border pt-3;
   }
-  
+
   .add-credits-btn {
     @apply w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 text-sm;
   }
-  
-  /* Mobile: Balanced Layout */
-  .mobile-balanced-layout {
-    @apply space-y-4 p-4;
-  }
-  
-  /* Mobile Spin Section */
-  .mobile-spin-section {
-    @apply w-full space-y-3;
-  }
-  
-  .mobile-large-spin {
-    @apply w-full bg-gradient-to-r from-voi-600 to-voi-700 hover:from-voi-700 hover:to-voi-800 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl disabled:shadow-none;
-    height: 4.5rem; /* 72px */
-    min-height: 72px;
-    touch-action: manipulation;
-  }
-  
-  .mobile-large-spin:not(:disabled):active {
-    transform: scale(0.98);
-  }
-  
-  .mobile-large-spin.spinning {
-    animation: mobile-spin-pulse 1.5s ease-in-out infinite;
-    background: linear-gradient(-45deg, #0f766e, #059669, #047857, #065f46);
-    background-size: 400% 400%;
-    animation: spin-button-gradient 2s ease infinite;
-  }
-  
-  /* Mobile Controls Grid */
-  .mobile-controls-grid {
-    @apply grid grid-cols-2 gap-3;
-  }
-  
-  .mobile-control-card {
-    @apply p-3 rounded-lg border border-surface-border;
-    background: rgba(var(--theme-surface-primary-rgb), 0.3);
-    min-height: 100px;
-  }
-  
-  .mobile-control-header {
-    @apply flex items-center justify-between mb-3;
-  }
-  
-  .mobile-control-title {
-    @apply text-xs font-medium text-theme-text uppercase tracking-wide;
-  }
-  
-  .mobile-control-value {
-    @apply text-sm font-bold text-theme;
-  }
-  
-  .mobile-control-buttons {
-    @apply flex items-center gap-2 justify-center;
-  }
-  
-  .mobile-control-btn {
-    @apply w-10 h-10 rounded bg-surface-tertiary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-200 text-theme-text hover:text-theme;
-    min-height: 44px;
-  }
-  
-  .mobile-max-btn {
-    @apply text-xs font-medium px-3 py-2 text-voi-400 hover:text-voi-300 bg-surface-secondary hover:bg-surface-hover rounded;
-    min-height: 36px;
-  }
-  
-  .mobile-bet-input {
-    @apply w-16 h-10 px-2 text-center text-sm font-medium bg-surface-primary border border-surface-border rounded text-theme-text focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent;
-    -moz-appearance: textfield;
-    min-height: 44px;
-    font-size: 16px; /* Prevent zoom on iOS */
-  }
-  
-  .mobile-bet-input::-webkit-outer-spin-button,
-  .mobile-bet-input::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-  
-  /* Mobile Bottom Section */
-  .mobile-bottom-section {
-    @apply space-y-3;
-  }
-  
-  .mobile-total-card {
-    @apply p-4 rounded-lg border border-surface-border;
-    background: rgba(var(--theme-surface-primary-rgb), 0.3);
-  }
-  
-  .mobile-total-info {
-    @apply text-center;
-  }
-  
-  .mobile-total-label {
-    @apply text-sm font-medium text-theme-text mb-1;
-  }
-  
-  .mobile-total-amount {
-    @apply text-2xl font-bold text-voi-400 mb-1;
-  }
-  
-  .mobile-total-breakdown {
-    @apply text-sm text-theme-text opacity-70;
-  }
-  
-  /* Mobile Actions Row */
-  .mobile-actions-row {
-    @apply flex items-center justify-between gap-3;
-  }
-  
-  .mobile-quick-bets {
-    @apply flex gap-2;
-  }
-  
-  .mobile-quick-bet-btn {
-    @apply px-3 py-2 text-sm font-medium bg-surface-tertiary hover:bg-surface-hover disabled:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed rounded transition-all duration-200 text-theme-text hover:text-theme;
-    min-height: 40px;
-  }
-  
-  .mobile-quick-bet-btn.active {
-    @apply bg-voi-600 hover:bg-voi-700 text-white;
-  }
-  
-  .mobile-add-credits-btn {
-    @apply py-2.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-all duration-200 flex items-center gap-2 text-sm;
-    min-height: 44px;
+
+  /* Error Section */
+  .error-section {
+    @apply mt-4;
   }
   
   /* Animation keyframes */
@@ -1080,117 +852,271 @@
     }
   }
   
-  @keyframes mobile-spin-pulse {
-    0%, 100% { 
-      box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
-    }
-    50% { 
-      box-shadow: 0 0 25px rgba(16, 185, 129, 0.6);
-    }
-  }
-  
   @keyframes spin-button-gradient {
     0% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }
     100% { background-position: 0% 50%; }
   }
+
+  @keyframes auto-spin-pulse {
+    0%, 100% { 
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+    }
+    50% { 
+      box-shadow: 0 0 30px rgba(239, 68, 68, 0.6);
+    }
+  }
   
   /* Responsive Design */
   @media (max-width: 1200px) {
-    .clean-betting-strip {
-      @apply gap-4 p-4;
+    .responsive-betting-layout {
+      @apply gap-3;
+      grid-template-columns: 1fr 1.8fr 1fr;
     }
     
-    .betting-controls-section {
-      min-width: clamp(220px, 22vw, 260px);
-      max-width: clamp(260px, 28vw, 300px);
+    .spin-button {
+      height: 4.5rem; /* 72px */
+      font-size: 1.8rem;
     }
     
-    .total-section {
-      width: clamp(160px, 20vw, 200px);
+    .spin-icon {
+      @apply w-7 h-7;
     }
     
-    .large-spin-button {
-      @apply h-20;
-      width: clamp(160px, 100%, 280px);
-      font-size: 1.1rem;
+    .spin-text {
+      @apply text-xl;
+    }
+    
+    .auto-spin-button {
+      height: 2.75rem; /* 44px */
+    }
+    
+    .auto-spin-text {
+      @apply text-base;
     }
   }
   
   @media (max-width: 1024px) {
-    .clean-betting-strip {
-      @apply gap-3 p-3;
+    .responsive-betting-layout {
+      @apply gap-2;
+      grid-template-columns: 1fr 1.5fr 1fr;
     }
     
-    .betting-controls-section {
-      min-width: clamp(200px, 25vw, 240px);
-      max-width: clamp(240px, 30vw, 280px);
+    .spin-button {
+      height: 4rem; /* 64px */
+      font-size: 1.5rem;
     }
     
-    .total-section {
-      width: clamp(150px, 22vw, 180px);
+    .spin-icon {
+      @apply w-6 h-6;
     }
     
-    .large-spin-button {
-      @apply h-16;
-      width: clamp(140px, 100%, 240px);
-      font-size: 1rem;
+    .spin-text {
+      @apply text-lg;
+    }
+    
+    .auto-spin-button {
+      height: 2.5rem; /* 40px */
+    }
+    
+    .auto-spin-text {
+      @apply text-sm;
     }
   }
   
   @media (max-width: 900px) {
-    .clean-betting-strip {
-      @apply flex-col gap-4 p-4;
-      min-height: auto;
+    .header-section {
+      @apply hidden;
     }
     
-    .betting-controls-section,
-    .total-section {
-      width: 100%;
+    .responsive-betting-layout {
+      display: flex;
+      flex-direction: column;
+      @apply gap-3 p-3;
     }
     
+    .controls-section {
+      @apply grid grid-cols-2 gap-3 order-2;
+    }
+    
+    .control-group,
+    .control-group-horizontal {
+      @apply p-3 rounded-lg border border-surface-border;
+      background: rgba(var(--theme-surface-primary-rgb), 0.3);
+      min-height: 100px;
+    }
+
+    .control-group-horizontal {
+      @apply flex-col items-start gap-2;
+    }
+
+    .control-label-section {
+      @apply flex-row items-center justify-between w-full;
+    }
+
     .spin-section {
-      @apply order-first;
+      @apply order-1;
+    }
+
+    .totals-section {
+      @apply order-3;
+    }
+
+    .quick-bets-section {
+      @apply col-span-2 pt-0;
+      border-top: none;
+    }
+
+    .quick-bets-container {
+      @apply grid grid-cols-4 gap-2 justify-center;
     }
     
-    .large-spin-button {
-      @apply h-16;
-      width: clamp(200px, 60%, 300px);
-      margin: 0 auto;
+    .spin-button {
+      height: 4.5rem; /* 72px */
+      font-size: 1.6rem;
+    }
+    
+    .spin-icon {
+      @apply w-7 h-7;
+    }
+    
+    .spin-text {
+      @apply text-xl;
+    }
+    
+    .auto-spin-button {
+      height: 3rem; /* 48px */
+    }
+    
+    .auto-spin-text {
+      @apply text-base;
     }
   }
   
   @media (max-width: 768px) {
-    .mobile-balanced-layout {
-      @apply space-y-3 p-3;
+    .responsive-betting-layout {
+      @apply p-3 gap-3;
     }
     
-    .mobile-large-spin {
-      height: 4rem; /* 64px */
-      min-height: 64px;
-      font-size: 1rem;
+    .controls-section {
+      @apply gap-3;
     }
     
-    .mobile-controls-grid {
-      @apply gap-2;
-    }
-    
-    .mobile-control-card {
+    .control-group,
+    .control-group-horizontal {
       @apply p-2;
       min-height: 90px;
     }
     
-    .mobile-control-btn {
+    .control-btn {
       @apply w-9 h-9;
-      min-height: 40px;
+      min-height: 44px;
     }
     
-    .mobile-total-amount {
-      @apply text-xl;
+    .bet-input {
+      @apply w-14 h-9;
+      min-height: 44px;
     }
     
-    .mobile-add-credits-btn {
-      @apply py-2 px-3 text-xs;
+    .spin-button {
+      height: 4rem; /* 64px */
+      font-size: 1.4rem;
+    }
+    
+    .spin-icon {
+      @apply w-6 h-6;
+    }
+    
+    .spin-text {
+      @apply text-lg;
+    }
+    
+    .auto-spin-button {
+      height: 2.75rem; /* 44px */
+    }
+    
+    .auto-spin-text {
+      @apply text-sm;
+    }
+    
+    .totals-section {
+      @apply flex flex-col;
+    }
+    
+    .total-display {
+      @apply text-center;
+    }
+    
+    .total-amount {
+      @apply text-2xl;
+    }
+    
+    .quick-bets-container {
+      @apply justify-center;
+    }
+    
+    .quick-bet-btn {
+      @apply text-sm py-2.5;
+      min-height: 44px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .responsive-betting-layout {
+      @apply gap-4;
+    }
+    
+    .controls-section {
+      @apply grid-cols-2 gap-3;
+    }
+    
+    .control-group,
+    .control-group-horizontal {
+      min-height: 90px;
+    }
+    
+    .spin-button {
+      height: 4rem; /* 64px */
+      font-size: 1.3rem;
+    }
+    
+    .spin-text {
+      @apply text-lg;
+    }
+    
+    .auto-spin-button {
+      height: 2.75rem; /* 44px */
+    }
+    
+    .auto-spin-text {
+      @apply text-sm;
+    }
+    
+    .totals-section {
+      @apply text-center;
+    }
+    
+    .total-display {
+      @apply mb-3;
+    }
+    
+    .total-amount {
+      @apply text-3xl;
+    }
+    
+    /* Mobile Bottom Section - Matches first screenshot layout */
+    .quick-bets-container {
+      @apply flex gap-2 justify-center;
+    }
+    
+    .quick-bet-btn {
+      @apply text-sm py-2.5 px-3;
+      min-height: 44px;
+    }
+    
+    .add-credits-btn {
+      @apply py-3 px-4 text-sm;
+      min-height: 44px;
     }
   }
   
@@ -1198,53 +1124,55 @@
   @media (hover: none) and (pointer: coarse) {
     .control-btn:hover,
     .quick-bet-btn:hover,
-    .mobile-control-btn:hover,
-    .mobile-quick-bet-btn:hover,
-    .large-spin-button:hover,
-    .mobile-large-spin:hover {
+    .spin-button:hover,
+    .auto-spin-button:hover {
       transform: none;
     }
     
-    .large-spin-button:not(:disabled):active,
-    .mobile-large-spin:not(:disabled):active {
+    .spin-button:not(:disabled):active,
+    .auto-spin-button:not(:disabled):active {
       transform: scale(0.98);
     }
   }
   
   /* Reduced motion support */
   @media (prefers-reduced-motion: reduce) {
-    .large-spin-button,
-    .mobile-large-spin,
-    .control-btn,
-    .mobile-control-btn {
+    .spin-button,
+    .auto-spin-button,
+    .control-btn {
       animation: none !important;
       transition: opacity 0.2s ease !important;
     }
     
-    .large-spin-button.spinning,
-    .mobile-large-spin.spinning {
+    .spin-button.spinning {
       animation: none !important;
       background: #047857;
+    }
+    
+    .auto-spin-button.active {
+      animation: none !important;
+      background: #dc2626;
     }
   }
   
   /* High contrast mode */
   @media (prefers-contrast: high) {
     .control-btn,
-    .mobile-control-btn,
-    .quick-bet-btn,
-    .mobile-quick-bet-btn {
+    .quick-bet-btn {
       border: 2px solid currentColor;
     }
     
-    .large-spin-button,
-    .mobile-large-spin {
+    .spin-button,
+    .auto-spin-button {
       border: 3px solid #10b981;
     }
     
-    .quick-bet-btn.active,
-    .mobile-quick-bet-btn.active {
+    .quick-bet-btn.active {
       border-color: #10b981;
+    }
+    
+    .auto-spin-button.active {
+      border-color: #dc2626;
     }
   }
 
@@ -1259,131 +1187,5 @@
   .betting-controls.relative {
     position: relative;
     isolation: isolate;
-  }
-
-  /* Auto Spin Button Styles */
-  .auto-spin-button {
-    @apply w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl disabled:shadow-none;
-    height: 3.5rem; /* 56px - about 60% of the main spin button */
-    width: clamp(180px, 100%, 320px);
-    max-width: 100%;
-  }
-
-  .auto-spin-button:not(:disabled):hover {
-    transform: scale(1.02);
-  }
-
-  .auto-spin-button.active {
-    @apply from-red-600 to-red-700 hover:from-red-700 hover:to-red-800;
-    animation: auto-spin-pulse 2s ease-in-out infinite;
-  }
-
-  /* Mobile Auto Spin Button */
-  .mobile-auto-spin-button {
-    @apply w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl disabled:shadow-none;
-    height: 3rem; /* 48px */
-    min-height: 48px;
-    touch-action: manipulation;
-  }
-
-  .mobile-auto-spin-button:not(:disabled):active {
-    transform: scale(0.98);
-  }
-
-  .mobile-auto-spin-button.active {
-    @apply from-red-600 to-red-700 hover:from-red-700 hover:to-red-800;
-    animation: mobile-auto-spin-pulse 2s ease-in-out infinite;
-  }
-
-  /* Auto Spin Animation Keyframes */
-  @keyframes auto-spin-pulse {
-    0%, 100% { 
-      box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
-    }
-    50% { 
-      box-shadow: 0 0 30px rgba(239, 68, 68, 0.6);
-    }
-  }
-
-  @keyframes mobile-auto-spin-pulse {
-    0%, 100% { 
-      box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
-    }
-    50% { 
-      box-shadow: 0 0 25px rgba(239, 68, 68, 0.6);
-    }
-  }
-
-  /* Auto Spin Responsive Adjustments */
-  @media (max-width: 1200px) {
-    .auto-spin-button {
-      @apply h-12;
-      width: clamp(160px, 100%, 280px);
-      font-size: 1rem;
-    }
-  }
-
-  @media (max-width: 1024px) {
-    .auto-spin-button {
-      @apply h-10;
-      width: clamp(140px, 100%, 240px);
-      font-size: 0.9rem;
-    }
-  }
-
-  @media (max-width: 900px) {
-    .auto-spin-button {
-      @apply h-12;
-      width: clamp(200px, 60%, 300px);
-    }
-  }
-
-  @media (max-width: 768px) {
-    .mobile-auto-spin-button {
-      height: 2.75rem; /* 44px */
-      min-height: 44px;
-      font-size: 0.9rem;
-    }
-  }
-
-  /* Touch device optimizations for Auto Spin */
-  @media (hover: none) and (pointer: coarse) {
-    .auto-spin-button:hover,
-    .mobile-auto-spin-button:hover {
-      transform: none;
-    }
-    
-    .auto-spin-button:not(:disabled):active,
-    .mobile-auto-spin-button:not(:disabled):active {
-      transform: scale(0.98);
-    }
-  }
-
-  /* Reduced motion support for Auto Spin */
-  @media (prefers-reduced-motion: reduce) {
-    .auto-spin-button,
-    .mobile-auto-spin-button {
-      animation: none !important;
-      transition: opacity 0.2s ease !important;
-    }
-    
-    .auto-spin-button.active,
-    .mobile-auto-spin-button.active {
-      animation: none !important;
-      background: #dc2626;
-    }
-  }
-
-  /* High contrast mode for Auto Spin */
-  @media (prefers-contrast: high) {
-    .auto-spin-button,
-    .mobile-auto-spin-button {
-      border: 3px solid #f59e0b;
-    }
-    
-    .auto-spin-button.active,
-    .mobile-auto-spin-button.active {
-      border-color: #dc2626;
-    }
   }
 </style>

@@ -27,17 +27,13 @@
   import { selectedContract, isMultiContractMode } from '$lib/stores/multiContract';
   import type { ContractPair } from '$lib/types/multiContract';
   
-  // References to ReelGrid components for direct function calls
-  let desktopReelGrid: ReelGrid;
-  let mobileReelGrid1: ReelGrid;
-  let mobileReelGrid2: ReelGrid;
+  // Reference to single ReelGrid component for direct function calls
+  let reelGrid: ReelGrid;
   
-  function callAllReelGrids(methodName: string, ...args: any[]) {
-    [desktopReelGrid, mobileReelGrid1, mobileReelGrid2].forEach(component => {
-      if (component && typeof component[methodName] === 'function') {
-        component[methodName](...args);
-      }
-    });
+  function callReelGrid(methodName: string, ...args: any[]) {
+    if (reelGrid && typeof reelGrid[methodName] === 'function') {
+      reelGrid[methodName](...args);
+    }
   }
 
   // Theme switching function
@@ -78,7 +74,6 @@
   
   
   export let disabled = false;
-  export let compact = false;
   export let initialReplayData: any = null;
   export let hideBettingControls = false;
   export let contractContext: ContractPair | null = null; // Optional contract context for multi-contract mode
@@ -287,9 +282,8 @@
         const maxAttempts = 50; // 5 seconds max wait
         
         while (attempts < maxAttempts) {
-          // Check if all mounted reel grids are ready
-          const reelGrids = [desktopReelGrid, mobileReelGrid1, mobileReelGrid2].filter(Boolean);
-          const hasReadyGrid = reelGrids.length > 0 && reelGrids.every(grid => grid?.isReady?.());
+          // Check if the reel grid is ready
+          const hasReadyGrid = reelGrid && reelGrid.isReady?.();
           
           if (hasReadyGrid) {
             console.log('✅ Reels are ready, starting replay');
@@ -387,7 +381,7 @@
       isReplayMode = false;
       
       // Force stop any lingering replay animations
-      callAllReelGrids('stopSpin');
+      callReelGrid('stopSpin');
       // Reset game store state to ensure $isSpinning is false before starting new spin
       gameStore.reset();
     }
@@ -447,7 +441,7 @@
     gameStore.startSpin(spinId);
     
     // DIRECTLY call ReelGrid to start physics animation - NO REACTIVE DEPENDENCIES
-    callAllReelGrids('startSpin', spinId);
+    callReelGrid('startSpin', spinId);
   }
 
   async function handleFailedSpin(spin: any) {
@@ -477,7 +471,7 @@
     }, 100);
     
     // Stop reel animations completely
-    callAllReelGrids('stopSpin');
+    callReelGrid('stopSpin');
     
     // Reset game state
     gameStore.reset();
@@ -505,7 +499,7 @@
             console.warn('Failed to stop spin-loop sound after queue empty');
           }
         });
-        callAllReelGrids('stopSpin');
+        callReelGrid('stopSpin');
         gameStore.reset();
         if (spinningInterval) {
           clearInterval(spinningInterval);
@@ -557,7 +551,7 @@
     playReelStop().catch(() => {});
     
     // Show final outcome
-    callAllReelGrids('setFinalPositions', spin.outcome, spin.id);
+    callReelGrid('setFinalPositions', spin.outcome, spin.id);
     gameStore.completeSpin(spin.id, spin.outcome);
     
     // DEBUG: Log payline overlay state when outcome is displayed
@@ -884,8 +878,8 @@
     console.log('🧹 SlotMachine: EMERGENCY cleanup - stopping all animations');
     
     // 1. Stop all reel animations
-    callAllReelGrids('stopSpin');
-    callAllReelGrids('forceCleanup');
+    callReelGrid('stopSpin');
+    callReelGrid('forceCleanup');
     
     // 2. Clear spinning interval
     if (spinningInterval) {
@@ -940,7 +934,7 @@
     
     // 9. Give reels a moment to clean up, then set to clean positions
     setTimeout(() => {
-      callAllReelGrids('setFinalPositions', [['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_']], 'force-cleanup');
+      callReelGrid('setFinalPositions', [['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_']], 'force-cleanup');
     }, 500);
     
     console.log('✅ SlotMachine: EMERGENCY cleanup complete');
@@ -984,7 +978,7 @@
         // No pending spins but still spinning - this is stuck
         console.log('🛠️ No pending spins but still spinning - forcing cleanup');
         gentleCleanupSpinning();
-        callAllReelGrids('stopSpin');
+        callReelGrid('stopSpin');
         gameStore.reset();
       } else {
         // There are pending spins - give them more time
@@ -1020,8 +1014,8 @@
       replayTimeouts.forEach(timeout => clearTimeout(timeout));
       replayTimeouts = [];
       // Force stop any ongoing animations
-      callAllReelGrids('stopSpin');
-      callAllReelGrids('setFinalPositions', [['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_']], 'cancel-previous');
+      callReelGrid('stopSpin');
+      callReelGrid('setFinalPositions', [['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_']], 'cancel-previous');
       gameStore.reset();
     }
     
@@ -1061,8 +1055,8 @@
     }
     
     // Force stop any physics animations and reset game state
-    callAllReelGrids('stopSpin');
-    callAllReelGrids('setFinalPositions', [['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_']], 'force-stop');
+    callReelGrid('stopSpin');
+    callReelGrid('setFinalPositions', [['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_'], ['_', '_', '_']], 'force-stop');
     gameStore.reset();
     
     // Additional wait to ensure all cleanup is complete
@@ -1091,7 +1085,7 @@
       gameStore.startSpin(replayAnimationId);
       
       // CRITICAL: Start physics animation just like regular spins
-      callAllReelGrids('startSpin', replayAnimationId);
+      callReelGrid('startSpin', replayAnimationId);
       
       // After spinning duration, display the outcome
       const outcomeTimeout = setTimeout(() => {
@@ -1108,7 +1102,7 @@
         }, 100);
         
         // CRITICAL: Stop physics and set final positions just like regular spins
-        callAllReelGrids('setFinalPositions', replayData.outcome, replayAnimationId);
+        callReelGrid('setFinalPositions', replayData.outcome, replayAnimationId);
         gameStore.completeSpin(replayAnimationId, replayData.outcome);
         
         // Trigger win/loss animation after a small delay
@@ -1164,25 +1158,10 @@
      style="--theme-primary: {$currentTheme.primary}; --theme-secondary: {$currentTheme.secondary}; --theme-lights: {$currentTheme.lights};">
 
 
-  <!-- Desktop: Vertical Layout -->
-  <div class="hidden lg:block">
+  <!-- Single Slot Machine Layout - Responsive -->
+  <div class="slot-machine-wrapper">
     <!-- Slot Machine Frame -->
-    <div class="slot-machine-frame mb-4">
-      <!-- Outer decorative border with casino lights -->
-      <div class="casino-border" 
-           class:theme-changing={isThemeChanging}
-           class:background-theme={$currentTheme.useBackgroundImage && !$currentTheme.useBorderGradient}
-           style={$currentTheme.useBackgroundImage ? `--theme-bg-image: url('${$currentTheme.backgroundImage}')` : ''}
-           role="button" 
-           tabindex="0"
-           aria-label="Change slot machine theme"
-           title="Click to change theme: {$currentTheme.displayName}"
-           on:click={handleThemeClick}
-           on:keydown={(e) => e.key === 'Enter' && handleThemeClick(e)}>
-        {#if !$currentTheme.useBackgroundImage}
-          <div class="casino-lights"></div>
-        {/if}
-      </div>
+    <div class="slot-machine-frame">
       
       <!-- Machine body with metallic finish -->
       <div class="machine-body">
@@ -1199,8 +1178,8 @@
           <div class="inner-frame" class:background-theme={$currentTheme.useBackgroundImage}>
             <!-- Main game grid -->
             <div class="game-grid" class:background-theme={$currentTheme.useBackgroundImage}>
-              <!-- Reel Grid -->
-              <ReelGrid bind:this={desktopReelGrid} grid={$currentGrid} isSpinning={$isSpinning} />
+              <!-- Single Reel Grid for all viewports -->
+              <ReelGrid bind:this={reelGrid} grid={$currentGrid} isSpinning={$isSpinning} />
               
               <!-- Always visible payline numbers -->
               <div class="payline-numbers">
@@ -1234,154 +1213,10 @@
       </div>
     </div>
     
-    <!-- Betting Controls - Below slot machine -->
+    <!-- Betting Controls - Below slot machine, responsive -->
     {#if !hideBettingControls && !initialReplayData}
-      <BettingControls on:spin={handleSpin} {compact} disabled={disabled} />
-    {/if}
-  </div>
-  
-  <!-- Mobile: Full height layout -->
-  <div class="lg:hidden h-full flex flex-col">
-    {#if compact}
-      <!-- Slot Machine Frame - Fixed size -->
-      <div class="flex-shrink-0 slot-machine-frame mb-3">
-        <!-- Outer decorative border with casino lights -->
-        <div class="casino-border" 
-             class:theme-changing={isThemeChanging}
-             class:background-theme={$currentTheme.useBackgroundImage && !$currentTheme.useBorderGradient}
-             style={$currentTheme.useBackgroundImage ? `--theme-bg-image: url('${$currentTheme.backgroundImage}')` : ''}
-             role="button" 
-             tabindex="0"
-             aria-label="Change slot machine theme"
-             title="Click to change theme: {$currentTheme.displayName}"
-             on:click={handleThemeClick}
-             on:keydown={(e) => e.key === 'Enter' && handleThemeClick(e)}>
-          {#if !$currentTheme.useBackgroundImage}
-            <div class="casino-lights"></div>
-          {/if}
-        </div>
-        
-        <!-- Machine body with metallic finish -->
-        <div class="machine-body">
-          <!-- Chrome accent frame -->
-          <div class="chrome-frame">
-            <!-- Inner shadow frame -->
-            <div class="inner-frame" class:background-theme={$currentTheme.useBackgroundImage}>
-              <!-- Main game grid -->
-              <div class="game-grid" class:background-theme={$currentTheme.useBackgroundImage}>
-                <!-- Reel Grid -->
-                <ReelGrid bind:this={mobileReelGrid1} grid={$currentGrid} isSpinning={$isSpinning} />
-                
-                <!-- Always visible payline numbers -->
-                <div class="payline-numbers">
-                  {#if $bettingStore.selectedPaylines > 1}
-                    <svg class="payline-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-                      {#each Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i) as index}
-                        <text
-                          x="2"
-                          y={5 + (index * 3)}
-                          fill="#10b981"
-                          font-size="2.5"
-                          font-weight="bold"
-                          class="payline-number"
-                        >
-                          {index + 1}
-                        </text>
-                      {/each}
-                    </svg>
-                  {/if}
-                </div>
-                
-                <!-- Fading payline paths overlay -->
-                {#if showPaylineOverlay}
-                  <div transition:fade={{ duration: 500 }}>
-                    <PaylineOverlay showPaylines={true} activePaylines={defaultActivePaylines} />
-                  </div>
-                {/if}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Mobile Controls - Vertical stacked layout -->
-      <div class="flex-1 flex flex-col space-y-3">
-        <!-- Betting Controls - Fixed height, takes priority -->
-        {#if !hideBettingControls && !initialReplayData}
-          <div class="flex-shrink-0">
-            <BettingControls on:spin={handleSpin} {compact} disabled={disabled} />
-          </div>
-        {/if}
-        
-        <!-- Note: GameQueue and other tabs are now handled by the page route -->
-      </div>
-    {:else}
-      <!-- Original mobile layout for non-compact -->
-      <div class="space-y-4">
-        <!-- Slot Machine Frame -->
-        <div class="slot-machine-frame">
-          <!-- Outer decorative border with casino lights -->
-          <div class="casino-border" 
-               class:theme-changing={isThemeChanging}
-               role="button" 
-               tabindex="0"
-               aria-label="Change slot machine theme"
-               title="Click to change theme: {$currentTheme.displayName}"
-               on:click={handleThemeClick}
-               on:keydown={(e) => e.key === 'Enter' && handleThemeClick(e)}>
-            <div class="casino-lights"></div>
-          </div>
-          
-          <!-- Machine body with metallic finish -->
-          <div class="machine-body">
-            <!-- Chrome accent frame -->
-            <div class="chrome-frame">
-              <!-- Inner shadow frame -->
-              <div class="inner-frame">
-                <!-- Main game grid -->
-                <div class="game-grid">
-                  <!-- Reel Grid -->
-                  <ReelGrid bind:this={mobileReelGrid2} grid={$currentGrid} isSpinning={$isSpinning} />
-                  
-                  <!-- Always visible payline numbers -->
-                  <div class="payline-numbers">
-                    {#if $bettingStore.selectedPaylines > 1}
-                      <svg class="payline-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-                        {#each Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i) as index}
-                          <text
-                            x="2"
-                            y={5 + (index * 3)}
-                            fill="#10b981"
-                            font-size="2.5"
-                            font-weight="bold"
-                            class="payline-number"
-                          >
-                            {index + 1}
-                          </text>
-                        {/each}
-                      </svg>
-                    {/if}
-                  </div>
-                  
-                  <!-- Fading payline paths overlay -->
-                  {#if showPaylineOverlay}
-                    <div transition:fade={{ duration: 500 }}>
-                      <PaylineOverlay showPaylines={true} activePaylines={defaultActivePaylines} />
-                    </div>
-                  {/if}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Mobile Controls -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {#if !hideBettingControls && !initialReplayData}
-            <BettingControls on:spin={handleSpin} {compact} disabled={disabled} />
-          {/if}
-          <!-- Note: GameQueue and other tabs are now handled by the page route -->
-        </div>
+      <div class="betting-controls-section">
+        <BettingControls on:spin={handleSpin} disabled={disabled} />
       </div>
     {/if}
   </div>
@@ -1561,52 +1396,57 @@
     position: relative;
   }
 
+  /* Slot Machine Wrapper - Responsive Layout */
+  .slot-machine-wrapper {
+    @apply w-full h-full flex flex-col items-center;
+    margin: 0 auto;
+  }
 
+  .betting-controls-section {
+    @apply w-full mt-4;
+  }
 
   /* Enhanced Slot Machine Frame Styling */
   .slot-machine-frame {
-    @apply relative;
+    @apply relative w-full;
     filter: drop-shadow(0 25px 50px rgba(0, 0, 0, 0.4));
+    margin: 0 auto;
+    overflow: hidden; /* Prevent casino-border from causing horizontal overflow */
   }
 
-  .casino-border {
-    @apply absolute -inset-4 rounded-2xl cursor-default;
-    background: linear-gradient(45deg, 
-      var(--theme-primary) 0%, var(--theme-secondary) 25%, var(--theme-primary) 50%, var(--theme-secondary) 75%, var(--theme-primary) 100%);
-    background-size: 200% 200%;
-    animation: shimmer 3s ease-in-out infinite;
-    padding: 3px;
-    border-radius: 20px;
-    transition: all 0.3s ease;
+  /* Desktop: Wider reel area */
+  @media (min-width: 1024px) {
+    .slot-machine-wrapper {
+      max-width: 900px;
+    }
+    
+    .slot-machine-frame {
+      max-width: 800px;
+    }
   }
 
-  /* Background for Dorks theme - normal border size */
-  .casino-border.background-theme {
-    background: var(--theme-bg-image);
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    animation: none; /* Disable shimmer for background themes */
-    border: 2px solid var(--theme-primary);
+  /* Tablet */
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .slot-machine-wrapper {
+      max-width: 700px;
+    }
+    
+    .slot-machine-frame {
+      max-width: 600px;
+    }
   }
 
-  /*.casino-border:hover {
-    transform: scale(1.02);
-    filter: brightness(1.1);
-  }
-
-  .casino-border:active {
-    transform: scale(0.98);
-  }*/
-
-  .casino-border.theme-changing {
-    animation: theme-change-pulse 0.5s ease-out;
-  }
-
-  @keyframes theme-change-pulse {
-    0% { transform: scale(1); filter: brightness(1); }
-    50% { transform: scale(1.05); filter: brightness(1.3); }
-    100% { transform: scale(1); filter: brightness(1); }
+  /* Mobile: Remove transform scaling to prevent spacing issues */
+  @media (max-width: 767px) {
+    .slot-machine-wrapper {
+      /* Remove transform scale to prevent large gaps underneath */
+      max-width: 100%;
+      padding: 0 0.5rem;
+    }
+    
+    .slot-machine-frame {
+      max-width: calc(100vw - 2rem); /* Ensure frame fits within viewport minus wrapper padding */
+    }
   }
 
   .casino-lights {
@@ -1623,18 +1463,19 @@
 
   .machine-body {
     @apply relative rounded-xl p-3;
-    background: linear-gradient(145deg, 
+    background: linear-gradient(45deg, 
+      var(--theme-primary) 0%, var(--theme-secondary) 25%, var(--theme-primary) 50%, var(--theme-secondary) 75%, var(--theme-primary) 100%);
+/*    background: linear-gradient(145deg, 
       var(--theme-surface-primary) 0%, 
       var(--theme-surface-secondary) 25%, 
       var(--theme-surface-tertiary) 50%, 
       var(--theme-surface-secondary) 75%, 
-      var(--theme-surface-primary) 100%);
-    border: 2px solid var(--theme-surface-border);
+      var(--theme-surface-primary) 100%);*/
     box-shadow: 
       inset 0 2px 4px rgba(255, 255, 255, 0.1),
       inset 0 -2px 4px rgba(0, 0, 0, 0.3),
       0 0 20px var(--theme-lights);
-  }
+    }
 
   .replay-indicator {
     @apply absolute top-2 left-1/2 transform -translate-x-1/2 z-20;
@@ -1677,6 +1518,19 @@
     background-repeat: no-repeat !important;
     border: none !important;
     box-shadow: none !important;
+  }
+
+  /* Ensure background scales properly on mobile */
+  @media (max-width: 767px) {
+    :global(.background-theme) .inner-frame {
+      background-size: contain !important;
+      background-position: center center !important;
+    }
+    
+    :global(.background-theme) .game-grid {
+      background-size: contain !important;
+      background-position: center center !important;
+    }
   }
 
   .game-grid {
@@ -1737,18 +1591,11 @@
     text-shadow: 0 0 2px currentColor;
   }
 
-  /* Responsive adjustments for mobile */
-  @media (max-width: 1024px) {
-    .casino-border {
-      @apply -inset-2;
-    }
-    
-    .machine-body {
-      @apply p-2;
-    }
-    
-    .chrome-frame {
-      @apply p-1;
+  @media (max-width: 480px) {
+    .slot-machine-wrapper {
+      /* Remove transform scale to prevent spacing issues on small screens */
+      max-width: 100%;
+      padding: 0;
     }
   }
 </style>

@@ -500,8 +500,16 @@
   
   .spin-list {
     @apply overflow-y-auto;
-    min-height: calc(100vh - 22rem);
-    max-height: calc(100vh - 22rem);
+    min-height: calc(50vh - 8rem);
+    max-height: calc(50vh - 8rem);
+  }
+
+  /* Desktop: Allow more height for the spin list */
+  @media (min-width: 1024px) {
+    .spin-list {
+      min-height: calc(100vh - 22rem);
+      max-height: calc(100vh - 22rem);
+    }
   }
   
   .spin-item {

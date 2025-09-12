@@ -5,8 +5,7 @@
   import { reservedBalance } from '$lib/stores/queue';
   import { formatVOI } from '$lib/constants/betting';
 
-  // Props
-  export let compact = false;
+  // Props (compact prop removed as no longer needed)
 
   // Calculate how much they can actually bet
   $: walletBal = $walletBalance || 0;

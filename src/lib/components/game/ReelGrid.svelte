@@ -553,16 +553,15 @@
   </div>
 </div>
 
-<style>
+<style lang="postcss">
   .reel-grid {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 4px;
+    gap: 0;
     padding: 8px;
     background: linear-gradient(145deg, var(--theme-surface-secondary), var(--theme-surface-primary));
     border-radius: 8px;
     border: 2px solid var(--theme-surface-border);
-    max-width: 600px;
     margin: 0 auto;
     position: relative;
     overflow: hidden;
@@ -574,6 +573,15 @@
   :global(.background-theme) .reel-grid {
     border: 2px solid transparent;
     background: transparent;
+  }
+
+  /* Scale background image properly on mobile */
+  @media (max-width: 767px) {
+    :global(.background-theme) .reel-grid {
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
   }
 
   /* Fallback height when grid is empty */
@@ -679,7 +687,6 @@
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 2px;
     transform-origin: center top;
     backface-visibility: hidden;
     transform-style: preserve-3d;
@@ -741,6 +748,14 @@
     position: relative;
     /*overflow: hidden;*/
     transition: all 0.3s ease;
+  }
+
+  /* Scale symbol images appropriately */
+  .symbol-position :global(img),
+  .symbol-position :global(svg) {
+    max-width: 85%;
+    max-height: 85%;
+    object-fit: contain;
   }
 
   /* Make symbol position borders and background transparent for background themes */
@@ -844,42 +859,78 @@
     display: none;
   }
   
-  /* Responsive design */
-  @media (max-width: 768px) {
+  /* Desktop: Larger reel grid */
+  @media (min-width: 1024px) {
     .reel-grid {
-      gap: 4px;
-      padding: 12px;
+      padding: 8px;
+      min-height: 330px; /* Reduced by ~20px from 380px */
+      width: 600px; /* Fixed narrower width instead of 100% */
+      max-width: 600px; /* Cap the width */
+      margin: 0 auto; /* Center the narrower reel area */
     }
     
     .symbol-position {
-      border-radius: 6px;
+      height: 100px; /* Restore normal height for vertical spacing */
+      border-radius: 8px; /* Restore border radius */
+      border: 1px solid var(--theme-surface-border); /* Restore borders */
     }
     
-    /* Reduce animation complexity on mobile */
-    .reel-column.accelerating,
-    .reel-column.decelerating {
-      animation-duration: calc(var(--animation-duration, 0.3s) * 1.2);
+    .reel-container {
+      height: 306px; /* Restored: 3 * 100px + gaps */
+    }
+    
+    /* Make symbol images fill the containers completely */
+    .symbol-position :global(img),
+    .symbol-position :global(svg) {
+      max-width: 95%;
+      max-height: 95%;
+    }
+  }
+
+  /* Tablet: Medium size */
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .reel-grid {
+      padding: 10px;
+      min-height: 350px;
+    }
+    
+    .symbol-position {
+      height: 100px;
+    }
+    
+    .reel-container {
+      height: 316px; /* 3 * 100px + 2 * 4px gap + padding */
+    }
+  }
+
+  /* Mobile: Normal size since slot machine wrapper is scaled */
+  @media (max-width: 767px) {
+    .reel-grid {
+      padding: 4px;
+      width: 100%;
+    }
+    
+    .symbol-position {
+      border-radius: 8px;
+      border-width: 1px;
+    }
+    
+    .reel-container {
+      height: 306px;
+    }
+    
+    /* Make symbol images bigger since slot machine is scaled down */
+    .symbol-position :global(img),
+    .symbol-position :global(svg) {
+      max-width: 95%;
+      max-height: 95%;
     }
   }
   
   @media (max-width: 480px) {
-    .reel-grid {
-      gap: 2px;
-      padding: 8px;
-    }
-    
-    .symbol-position {
-      border-radius: 4px;
-      border-width: 1px;
-    }
-    
     /* Further reduce animations on small screens */
     .reel-blur-overlay {
       display: none;
-    }
-    
-    .reel-column.settling {
-      animation-duration: 0.2s;
     }
   }
   
