@@ -213,9 +213,10 @@ export class BlockchainService {
       if (!betExists) {
         console.log('📦 Bet no longer exists - treating as already completed');
         
+        // DON'T set to COMPLETED - let SlotMachine handle that after display
         queueStore.updateSpin({
           id: spin.id,
-          status: SpinStatus.COMPLETED,
+          status: SpinStatus.READY_TO_CLAIM,
           data: {
             claimTxId: 'bet-not-found',
             totalPayout: 0,
@@ -333,9 +334,10 @@ export class BlockchainService {
         balanceManager.getBalance(account.address, true);
       }
         
+      // DON'T set to COMPLETED - let SlotMachine handle that after display
       queueStore.updateSpin({
         id: spin.id,
-        status: SpinStatus.COMPLETED,
+        status: SpinStatus.READY_TO_CLAIM,
         data: {
           error: this.formatError(error)
         }
@@ -411,9 +413,10 @@ export class BlockchainService {
       console.log(`📋 Claim Tx: ${result.txId}`);
       console.log(`📋 Bet Key: ${spin.betKey?.slice(0, 16)}...`);
 
+      // DON'T set to COMPLETED - let SlotMachine handle that after display
       queueStore.updateSpin({
         id: spin.id,
-        status: SpinStatus.COMPLETED,
+        status: SpinStatus.READY_TO_CLAIM,
         data: {
           claimTxId: result.txId,
           totalPayout: result.payout,
@@ -451,9 +454,10 @@ export class BlockchainService {
         
         // Update spin as completed since the box doesn't exist (already claimed)
         // Preserve the outcome and winnings data that we already know
+        // DON'T set to COMPLETED - let SlotMachine handle that after display
         queueStore.updateSpin({
           id: spin.id,
-          status: SpinStatus.COMPLETED,
+          status: SpinStatus.READY_TO_CLAIM,
           data: {
             claimTxId: 'already-claimed',
             totalPayout: 0,

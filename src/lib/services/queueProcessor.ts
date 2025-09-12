@@ -1,5 +1,5 @@
-// Phase 6: Queue Processing Service  
-// Background processing for blockchain spin lifecycle management
+// Simplified FIFO Queue Processor
+// Processes exactly one spin at a time in FIFO order.
 
 import { queueStore } from '$lib/stores/queue';
 import { blockchainService } from './blockchain';
@@ -7,359 +7,346 @@ import { SpinStatus } from '$lib/types/queue';
 import type { QueuedSpin } from '$lib/types/queue';
 
 export class QueueProcessor {
-  private processingInterval: NodeJS.Timeout | null = null;
   private isRunning = false;
-  private processingSpins = new Set<string>(); // Track spins currently being processed
+  private unsubscribe: (() => void) | null = null;
+  private processingSpins = new Set<string>();
+  private isDisplaying = false;
+  private displayed = new Set<string>();
+  private enteredOrder: string[] = [];
+  private sessionStart = Date.now();
 
   start() {
     if (this.isRunning) return;
-    
     this.isRunning = true;
-    this.processingInterval = setInterval(() => {
-      this.processQueue();
-    }, 2000); // Check every 2 seconds
+    this.sessionStart = Date.now();
+    // React to queue changes to keep things simple and responsive
+    this.unsubscribe = queueStore.subscribe((state) => {
+      // Append any new session spins to enteredOrder without reordering existing entries
+      const sessionSpins = state.spins
+        .filter((s) => s.timestamp >= this.sessionStart)
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .map((s) => s.id);
+      for (const id of sessionSpins) {
+        if (!this.enteredOrder.includes(id)) {
+          this.enteredOrder.push(id);
+        }
+      }
+
+      this.maybeKickProcessing();
+      this.maybeDisplayNext();
+    });
   }
 
   stop() {
-    if (this.processingInterval) {
-      clearInterval(this.processingInterval);
-      this.processingInterval = null;
+    if (this.unsubscribe) {
+      this.unsubscribe();
+      this.unsubscribe = null;
     }
     this.isRunning = false;
   }
 
-  private async processQueue() {
-    // Get current queue state
-    let currentSpins: QueuedSpin[] = [];
-    
-    const unsubscribe = queueStore.subscribe(state => {
-      currentSpins = state.spins;
-    });
-    unsubscribe();
-    
-    // Skip processing if queue is empty or only has completed/failed spins
-    const activeSpins = currentSpins.filter(spin => 
-      ![SpinStatus.COMPLETED, SpinStatus.FAILED, SpinStatus.EXPIRED].includes(spin.status)
-    );
-    
-    if (activeSpins.length === 0) {
-      return; // Nothing to process
-    }
-
-    // Process all spins in parallel - don't block claims while waiting for other spins
-    const processingPromises = currentSpins
-      .filter(spin => ![SpinStatus.COMPLETED, SpinStatus.FAILED, SpinStatus.EXPIRED].includes(spin.status))
-      .map(async (spin) => {
-        try {
-          switch (spin.status) {
-            case SpinStatus.PENDING:
-              await this.submitSpin(spin);
-              break;
-            case SpinStatus.WAITING:
-              await this.checkCommitment(spin);
-              break;
-            case SpinStatus.PROCESSING:
-              await this.checkOutcome(spin);
-              break;
-            case SpinStatus.CLAIMING:
-              await this.checkClaimStatus(spin);
-              break;
-            case SpinStatus.READY_TO_CLAIM:
-              await this.attemptAutoClaim(spin);
-              break;
-            default:
-              // No action needed for other statuses
-              break;
-          }
-        } catch (error) {
-          console.error(`Error processing spin ${spin.id}:`, error);
-          this.handleSpinError(spin, error);
-        }
-      });
-
-    // Wait for all spins to process in parallel
-    await Promise.allSettled(processingPromises);
+  checkQueue() {
+    // Trigger an immediate check without waiting for store updates
+    this.maybeKickProcessing();
+    this.maybeDisplayNext();
   }
 
-  private async submitSpin(spin: QueuedSpin) {
-    // Check if we need to wait for retry delay (3 seconds as requested)
-    const retryDelay = 3000; // 3 seconds
-    const lastRetry = spin.lastRetry || 0;
-    const currentTime = Date.now();
-    const timeSinceLastRetry = currentTime - lastRetry;
-    
-    // If this is a retry attempt and not enough time has passed, skip for now
-    if (spin.retryCount && spin.retryCount > 0 && timeSinceLastRetry < retryDelay) {
-      const remainingWait = Math.ceil((retryDelay - timeSinceLastRetry) / 1000);
-      console.log(`⏳ Waiting ${remainingWait}s before retry attempt ${spin.retryCount} for spin ${spin.id.slice(-8)}`);
+  private getQueueSnapshot(): QueuedSpin[] {
+    let spins: QueuedSpin[] = [];
+    const unsub = queueStore.subscribe((state) => {
+      spins = state.spins.slice();
+    });
+    unsub();
+    return spins;
+  }
+
+  private maybeKickProcessing() {
+    if (!this.isRunning) return;
+    const spins = this.getQueueSnapshot();
+    // Pick all spins not terminal; process concurrently when not already processing
+    const candidates = spins.filter(
+      (s) => ![SpinStatus.FAILED, SpinStatus.EXPIRED, SpinStatus.COMPLETED].includes(s.status)
+    );
+    for (const s of candidates) {
+      if (this.processingSpins.has(s.id)) continue;
+      if (s.status === SpinStatus.PENDING) {
+        // Start processing this pending spin
+        this.processSpin(s.id);
+      } else if (s.status === SpinStatus.WAITING || s.status === SpinStatus.PROCESSING || s.status === SpinStatus.READY_TO_CLAIM || s.status === SpinStatus.CLAIMING || s.status === SpinStatus.SUBMITTING) {
+        // Continue monitoring spins already in-flight
+        this.processSpin(s.id);
+      }
+    }
+  }
+
+  private async processSpin(spinId: string) {
+    this.processingSpins.add(spinId);
+    try {
+      // Grab a fresh snapshot each step
+      let spin = this.getQueueSnapshot().find((x) => x.id === spinId);
+      if (!spin) return;
+
+      // If a previous submission is stuck in SUBMITTING too long, retry or fail
+      if (spin.status === SpinStatus.SUBMITTING) {
+        const now = Date.now();
+        const since = now - (spin.lastRetry || spin.timestamp);
+        const maxSubmitRetries = 2;
+        if (since > 15000) { // 15s without progress
+          const nextRetry = (spin.retryCount || 0) + 1;
+          if (nextRetry <= maxSubmitRetries) {
+            queueStore.updateSpin({
+              id: spin.id,
+              status: SpinStatus.PENDING,
+              data: {
+                retryCount: nextRetry,
+                lastRetry: now,
+                error: 'Submission stalled; retrying'
+              }
+            });
+          } else {
+            queueStore.updateSpin({
+              id: spin.id,
+              status: SpinStatus.FAILED,
+              data: { error: 'Submission stalled; max retries exceeded' }
+            });
+          }
+          return; // End this processing pass; will be re-picked
+        }
+      }
+
+      // Submit if still pending
+      if (spin.status === SpinStatus.PENDING) {
+        try {
+          await blockchainService.submitSpin(spin);
+        } catch (e: any) {
+          const msg = (e && (e.message || e.toString())) || 'submit error';
+          const now = Date.now();
+          const maxSubmitRetries = 2;
+          // Special case: already in ledger → treat as submitted; move to WAITING
+          if (/already in ledger/i.test(msg)) {
+            queueStore.updateSpin({ id: spin.id, status: SpinStatus.WAITING });
+          } else {
+            const nextRetry = (spin.retryCount || 0) + 1;
+            if (nextRetry <= maxSubmitRetries) {
+              queueStore.updateSpin({
+                id: spin.id,
+                status: SpinStatus.PENDING,
+                data: { retryCount: nextRetry, lastRetry: now, error: msg }
+              });
+            } else {
+              queueStore.updateSpin({ id: spin.id, status: SpinStatus.FAILED, data: { error: msg } });
+            }
+          }
+          return; // End this processing pass; state updated, will be re-picked
+        }
+      }
+
+      // Wait for outcome (or terminal)
+      await this.waitForSpinState(
+        spinId,
+        (s) => (!!s.outcome) || s.status === SpinStatus.FAILED || s.status === SpinStatus.EXPIRED,
+        5 * 60 * 1000
+      );
+
+      spin = this.getQueueSnapshot().find((x) => x.id === spinId);
+      if (!spin) return;
+      if (!spin.outcome || [SpinStatus.FAILED, SpinStatus.EXPIRED].includes(spin.status)) return;
+
+      // Mark completed in background; reveal is strictly handled by maybeDisplayNext (FIFO)
+      await this.sleep(10);
+      queueStore.updateSpin({ id: spin.id, status: SpinStatus.COMPLETED });
+      this.maybeDisplayNext();
+    } finally {
+      this.processingSpins.delete(spinId);
+    }
+  }
+
+  // Compatibility method (no-op path now)
+  private getHeadOfLineId(): string | null { return null; }
+
+  private async submitAndAwaitOutcome(spin: QueuedSpin) {
+    // Keep trying submission respecting basic retry semantics already baked into blockchainService + store
+    try {
+      await blockchainService.submitSpin(spin);
+    } catch (e) {
+      // Submission error: rely on store retry logic; if it transitions to FAILED, we'll move on
+    }
+
+    // Wait for this spin to reach READY_TO_CLAIM or a terminal failure
+    await this.waitForSpinState(
+      spin.id,
+      (s) => {
+        return (!!s.outcome) || s.status === SpinStatus.FAILED || s.status === SpinStatus.EXPIRED;
+      },
+      5 * 60 * 1000 // Safety timeout 5 minutes
+    );
+  }
+
+  private async displayOutcomeAndComplete(spin: QueuedSpin) {
+    // Notify SlotMachine to render the outcome
+    document.dispatchEvent(
+      new CustomEvent('display-spin-outcome', {
+        detail: {
+          spin,
+          outcome: spin.outcome,
+          winnings: spin.winnings || 0,
+          betAmount: spin.totalBet,
+        },
+      })
+    );
+
+    // Do not block on UI animations here. Caller decides completion.
+  }
+
+  private enqueueForDisplay(_spinId: string) { /* simplified path no longer uses this */ }
+
+  private async maybeDisplayNext() {
+    if (this.isDisplaying) return;
+    const snapshot = this.getQueueSnapshot();
+
+    // Enforce strict FIFO gating: find first undispayed spin in entered order
+    // Skip over earlier spins that are terminal (failed/expired/completed)
+    let nextId: string | null = null;
+    for (const id of this.enteredOrder) {
+      if (this.displayed.has(id)) continue;
+      const s = snapshot.find((x) => x.id === id);
+      if (!s) { this.displayed.add(id); continue; }
+      if ([SpinStatus.FAILED, SpinStatus.EXPIRED].includes(s.status)) { this.displayed.add(id); continue; }
+      if (!!s.outcome) { nextId = id; break; }
+      // The head-of-line is not ready yet; wait
       return;
     }
-    
-    try {
-      // Log retry attempt if applicable
-      if (spin.retryCount && spin.retryCount > 0) {
-        console.log(`🔄 Executing retry attempt ${spin.retryCount}/3 for spin ${spin.id.slice(-8)}`);
-      }
-      
-      await blockchainService.submitSpin(spin);
-    } catch (error) {
-      console.error(`Error submitting spin ${spin.id}:`, error);
-      this.handleSpinError(spin, error);
-    }
-  }
+    if (!nextId) return;
 
-  private async checkCommitment(spin: QueuedSpin) {
-    if (!spin.commitmentRound) return;
+    // Immediate path removed; single visual path handles all spins
 
-    // Check if this spin is already being processed
-    if (this.processingSpins.has(spin.id)) {
-      return; // Skip if already processing
+    // Confirm spin still exists and has outcome
+    const spin = this.getQueueSnapshot().find((s) => s.id === nextId);
+    if (!spin || !spin.outcome) {
+      // Remove invalid and continue
+      this.visualQueue.shift();
+      this.maybeDisplayNext();
+      return;
     }
 
-    // Add to processing set
-    this.processingSpins.add(spin.id);
-
+    this.isDisplaying = true;
     try {
-      const currentRound = await blockchainService.getCurrentRound();
-      
-      if (currentRound >= spin.commitmentRound) {
-        queueStore.updateSpin({
-          id: spin.id,
-          status: SpinStatus.PROCESSING,
-          data: {
-            outcomeRound: currentRound + 1
-          }
-        });
+      // For the very first visual, do not add fake delay (SlotMachine already started it)
+      if (this.displayed.size > 0) {
+        document.dispatchEvent(new CustomEvent('start-spin-animation', { detail: { spinId: spin.id } }));
+        const revealMs = 2200; // 2.2s abbreviated spin
+        await this.sleep(revealMs);
       }
-    } catch (error) {
-      console.error(`Error checking commitment for spin ${spin.id}:`, error);
+
+      // Reveal outcome and celebration
+      // Mark as displayed up front and set revealed flag so UI switches from Confirming to Completed
+      this.displayed.add(spin.id);
+      queueStore.updateSpin({ id: spin.id, status: spin.status, data: { revealed: true } });
+      await this.displayOutcomeAndComplete(spin);
+
+      // Mark as displayed
+      this.displayed.add(spin.id);
+      // Small gap to avoid visual overlap (slightly longer for clarity)
+      await this.sleep(1200);
     } finally {
-      // Always remove from processing set when done
-      this.processingSpins.delete(spin.id);
+      this.isDisplaying = false;
+      // Continue with any remaining displays
+      this.maybeDisplayNext();
     }
   }
 
-  private async checkOutcome(spin: QueuedSpin) {
-    // Check if this spin is already being processed
-    if (this.processingSpins.has(spin.id)) {
-      return; // Skip if already processing
-    }
+  private waitForSpinState(
+    spinId: string,
+    predicate: (s: QueuedSpin) => boolean,
+    timeoutMs: number
+  ): Promise<void> {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      let finished = false;
 
-    // Add to processing set
-    this.processingSpins.add(spin.id);
-
-    try {
-      // TIMEOUT MECHANISM: Check if spin has been PROCESSING too long (5 minutes)
-      const PROCESSING_TIMEOUT = 5 * 60 * 1000; // 5 minutes
-      const timeInProcessing = Date.now() - spin.timestamp;
-      
-      if (timeInProcessing > PROCESSING_TIMEOUT) {
-        console.warn(`⏰ Spin ${spin.id} has been PROCESSING for ${Math.round(timeInProcessing / 1000)}s, marking as failed`);
-        queueStore.updateSpin({
-          id: spin.id,
-          status: SpinStatus.FAILED,
-          data: {
-            error: 'Processing timeout - please try again'
-          }
-        });
-        return;
-      }
-
-      await blockchainService.checkBetOutcome(spin);
-    } catch (error) {
-      console.error(`Error checking outcome for spin ${spin.id}:`, error);
-      this.handleSpinError(spin, error);
-    } finally {
-      // Always remove from processing set when done
-      this.processingSpins.delete(spin.id);
-    }
-  }
-
-  private async checkClaimStatus(spin: QueuedSpin) {
-    if (!spin.claimTxId) return;
-    
-    try {
-      const txStatus = await blockchainService.checkTransactionStatus(spin.claimTxId);
-      if (txStatus.confirmed) {
-        queueStore.updateSpin({
-          id: spin.id,
-          status: SpinStatus.COMPLETED
-        });
-      } else if (txStatus.failed) {
-        // Transaction failed, reset to READY_TO_CLAIM for retry
-        console.log(`❌ Claim transaction failed for spin ${spin.id}, resetting for retry`);
-        queueStore.updateSpin({
-          id: spin.id,
-          status: SpinStatus.READY_TO_CLAIM,
-          data: {
-            error: 'Claim transaction failed, will retry automatically',
-            claimTxId: undefined, // Clear failed transaction ID
-            isAutoClaimInProgress: undefined
-          }
-        });
-      }
-      // If still pending, do nothing and check again later
-    } catch (error) {
-      console.error(`Error checking claim status for spin ${spin.id}:`, error);
-      // On error checking status, reset to ready for retry
-      queueStore.updateSpin({
-        id: spin.id,
-        status: SpinStatus.READY_TO_CLAIM,
-        data: {
-          error: 'Failed to check claim status, will retry',
-          isAutoClaimInProgress: undefined
+      const check = () => {
+        const s = this.getQueueSnapshot().find((x) => x.id === spinId);
+        if (!s) {
+          finished = true;
+          resolve();
+          return;
         }
+        if (predicate(s)) {
+          finished = true;
+          resolve();
+          return;
+        }
+        if (Date.now() - start > timeoutMs) {
+          finished = true;
+          resolve();
+          return;
+        }
+      };
+
+      const unsub = queueStore.subscribe(() => {
+        if (!finished) check();
       });
-    }
+
+      // Initial check in case it's already satisfied
+      check();
+
+      // Ensure cleanup when resolved
+      const finish = () => {
+        if (unsub) unsub();
+      };
+      const originalResolve = resolve as any;
+      const wrapped = () => {
+        finish();
+        originalResolve();
+      };
+      // Replace resolve in this closure scope
+      // @ts-ignore
+      resolve = wrapped;
+    });
   }
 
-  private async attemptAutoClaim(spin: QueuedSpin) {
-    // Check if this spin is already being processed
-    if (this.processingSpins.has(spin.id)) {
-      return; // Skip if already processing
-    }
-
-    // Add to processing set
-    this.processingSpins.add(spin.id);
-
-    const claimRetryCount = spin.claimRetryCount || 0;
-    const lastClaimRetry = spin.lastClaimRetry || 0;
-
-    try {
-      const currentTime = Date.now();
-      
-      // Don't auto-claim if we've already tried 3 times - just give up silently
-      if (claimRetryCount >= 3) {
-        console.log(`Auto-claim completed for spin ${spin.id} after ${claimRetryCount} attempts. Likely claimed by bot (good!).`);
-
-        // Mark as completed since claim failures usually mean someone else claimed it
-        // Preserve the outcome and winnings data that we already know
-        queueStore.updateSpin({
-          id: spin.id,
-          status: SpinStatus.COMPLETED,
-          data: {
-            // Keep existing outcome and winnings data so UI can display results
-            outcome: spin.outcome,
-            winnings: spin.winnings
-          }
-        });
-        return;
-      }
-      
-      // Wait 10-20 seconds between claim attempts (random to avoid collision with bots)
-      const minWait = 10000; // 10 seconds
-      const maxWait = 20000; // 20 seconds
-      const randomWait = minWait + Math.random() * (maxWait - minWait);
-      
-      if (lastClaimRetry && (currentTime - lastClaimRetry) < randomWait) {
-        return;
-      }
-      
-      console.log(`Attempting auto-claim for spin ${spin.id} (attempt ${claimRetryCount + 1}/3)`);
-      
-      // Update retry tracking and mark as auto-claiming before attempting
-      queueStore.updateSpin({
-        id: spin.id,
-        data: {
-          claimRetryCount: claimRetryCount + 1,
-          lastClaimRetry: currentTime,
-          isAutoClaimInProgress: true
-        }
-      });
-      
-      await this.submitClaim(spin, true); // Pass true for auto-claim
-      console.log(`Auto-claim submitted successfully for spin ${spin.id}`);
-      
-    } catch (error) {
-      console.error(`Auto-claim attempt ${claimRetryCount + 1} failed for spin ${spin.id}:`, error);
-      
-      if (claimRetryCount + 1 >= 3) {
-        console.log(`Auto-claim completed for spin ${spin.id} after ${claimRetryCount + 1} attempts. Likely claimed by bot (good!).`);
-        // After 3 failed attempts, just mark as completed - failures usually mean someone else claimed it
-        // Preserve the outcome and winnings data that we already know
-        queueStore.updateSpin({
-          id: spin.id,
-          status: SpinStatus.COMPLETED,
-          data: {
-            isAutoClaimInProgress: undefined,
-            // Keep existing outcome and winnings data so UI can display results
-            outcome: spin.outcome,
-            winnings: spin.winnings
-          }
-        });
-      } else {
-        // For attempts < 3, reset to READY_TO_CLAIM so it can be retried with proper spacing
-        console.log(`Will retry auto-claim for spin ${spin.id} in 10-20 seconds (attempt ${claimRetryCount + 1}/3)`);
-        queueStore.updateSpin({
-          id: spin.id,
-          status: SpinStatus.READY_TO_CLAIM,
-          data: {
-            isAutoClaimInProgress: undefined,
-            // KEEP the retry tracking fields that were just set
-            claimRetryCount: claimRetryCount + 1,
-            lastClaimRetry: Date.now()
-          }
-        });
-      }
-    } finally {
-      // Always remove from processing set when done
-      this.processingSpins.delete(spin.id);
-    }
+  private sleep(ms: number) {
+    return new Promise((r) => setTimeout(r, ms));
   }
 
-  private handleSpinError(spin: QueuedSpin, error: any) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const currentRetryCount = spin.retryCount || 0;
-    const maxRetries = 3;
-    
-    // Only retry for submission failures (PENDING/SUBMITTING status)
-    const isSubmissionFailure = [SpinStatus.PENDING, SpinStatus.SUBMITTING].includes(spin.status);
-    
-    if (isSubmissionFailure && currentRetryCount < maxRetries) {
-      // Retry the spin - increment count and reset to PENDING with delay tracking
-      const newRetryCount = currentRetryCount + 1;
-      console.log(`🔄 Retrying spin ${spin.id.slice(-8)} (attempt ${newRetryCount}/${maxRetries}) after error: ${errorMessage}`);
-      
-      queueStore.updateSpin({
-        id: spin.id,
-        status: SpinStatus.PENDING, // Reset to pending for retry
-        data: {
-          retryCount: newRetryCount,
-          lastRetry: Date.now(),
-          error: `Retry ${newRetryCount}/${maxRetries}: ${errorMessage}` // Keep error history
-        }
-      });
-    } else {
-      // Max retries exhausted or not a submission failure - mark as failed
-      if (isSubmissionFailure) {
-        console.log(`❌ Spin ${spin.id.slice(-8)} failed after ${currentRetryCount} retry attempts: ${errorMessage}`);
-      }
-      
-      queueStore.updateSpin({
-        id: spin.id,
-        status: SpinStatus.FAILED,
-        data: {
-          error: errorMessage
-        }
-      });
-    }
-  }
-
-  /**
-   * Check if we should submit a claim transaction for a spin
-   * This is called by the GameQueue component when user clicks claim
-   */
+  // Public helpers preserved for compatibility
   async submitClaim(spin: QueuedSpin, isAutoClaim: boolean = false): Promise<void> {
     await blockchainService.submitClaim(spin, isAutoClaim);
   }
 
-  /**
-   * Get current network status
-   */
   async getNetworkStatus() {
     return await blockchainService.getNetworkStatus();
+  }
+
+  markSpinAsUserInitiated(spinId: string) {
+    if (!this.enteredOrder.includes(spinId)) {
+      this.enteredOrder.push(spinId);
+    }
+  }
+
+  // Emergency cleanup
+  forceCleanupAllSpins() {
+    this.processingSpins.clear();
+    this.visualQueue = [];
+    this.displayed.clear();
+    this.enteredOrder = [];
+    queueStore.clearOldSpins(0);
+  }
+
+  // Compatibility: called by UI if needed
+  onAnimationStart(_spinId: string) {
+    // No-op; SlotMachine drives animations based on events
+  }
+
+  onAnimationComplete(spinId: string) {
+    queueStore.updateSpin({ id: spinId, status: SpinStatus.COMPLETED });
   }
 }
 
 // Singleton instance
 export const queueProcessor = new QueueProcessor();
+
+// Export for emergency cleanup (can be called from console)
+if (typeof window !== 'undefined') {
+  (window as any).forceCleanupQueue = () => queueProcessor.forceCleanupAllSpins();
+}

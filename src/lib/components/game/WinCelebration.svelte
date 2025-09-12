@@ -240,16 +240,9 @@
         
         const betPerLine = betAmount / selectedPaylines;
         
-        // For test data and replays, use simplified detection that doesn't rely on contract calls
-        // Check if this is test data by looking for test-specific patterns
-        const isTestData = winAmount >= 5000000 && winAmount <= 300000000 && selectedPaylines > 1;
-        
-        if (isTestData || isReplay) {
-          winningPaylines = await detectTestWinningPaylines(gridOutcome, betPerLine, selectedPaylines);
-        } else {
-          winningPaylines = await detectWinningPaylines(gridOutcome, betPerLine, selectedPaylines);
-        }
-        
+        // Always use full detection across all paylines (including replays)
+        winningPaylines = await detectWinningPaylines(gridOutcome, betPerLine, selectedPaylines);
+
         // Show winning lines immediately
         showWinLines = true;
       } catch (error) {

@@ -44,7 +44,7 @@
 
   // Auto Spin state - now using centralized store
   let autoSpinInterval: NodeJS.Timeout | null = null;
-  let autoSpinDelay = 5000; // 5 seconds between spins - intentionally rapid queuing
+  let autoSpinDelay = 3000; // 3 seconds between spins - intentionally rapid queuing
 
   // Subscribe to animation preferences
   $: preferences = $animationPreferences;

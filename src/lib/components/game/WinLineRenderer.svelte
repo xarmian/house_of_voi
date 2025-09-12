@@ -65,9 +65,13 @@
   $: reduceMotion = $shouldReduceAnimations;
 
   $: if (isVisible && winningPaylines.length > 0) {
+    console.log('WinLineRenderer DEBUG: visible with', winningPaylines.length, 'winning lines:', winningPaylines.map(w => w.paylineIndex));
     findGameGrid();
     startRendering();
   } else {
+    if (isVisible) {
+      console.log('WinLineRenderer DEBUG: visible but no winning lines');
+    }
     stopRendering();
   }
 
@@ -79,7 +83,7 @@
     // Find the game grid element by class name
     gameGridElement = document.querySelector('.game-grid') as HTMLElement;
     if (!gameGridElement) {
-      console.warn('Could not find .game-grid element for win line positioning');
+      console.warn('WinLineRenderer DEBUG: Could not find .game-grid element for positioning');
     }
   }
 
@@ -92,7 +96,7 @@
 
     gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
     if (!gl) {
-      console.warn('WebGL not supported, falling back to canvas rendering');
+      console.warn('WinLineRenderer DEBUG: WebGL not supported, renderer disabled');
       return;
     }
 
@@ -101,14 +105,14 @@
     const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
 
     if (!vertexShader || !fragmentShader) {
-      console.error('Failed to create shaders');
+      console.error('WinLineRenderer DEBUG: Failed to create shaders');
       return;
     }
 
     // Create and link program
     program = createProgram(gl, vertexShader, fragmentShader);
     if (!program) {
-      console.error('Failed to create WebGL program');
+      console.error('WinLineRenderer DEBUG: Failed to create WebGL program');
       return;
     }
 
@@ -324,6 +328,9 @@
       points.push({ x, y });
     }
 
+    if (points.length !== 5) {
+      console.warn('WinLineRenderer DEBUG: generated unexpected point count for payline', payline, 'points=', points);
+    }
     return points;
   }
 

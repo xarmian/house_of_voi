@@ -37,6 +37,8 @@ export interface QueuedSpin {
   outcome?: string[][];
   winnings?: number;
   claimTxId?: string;
+  // UI: has this spin been visually revealed (reels + outcome shown)?
+  revealed?: boolean;
   
   // Error handling
   error?: string;

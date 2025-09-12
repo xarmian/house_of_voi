@@ -67,9 +67,26 @@
     });
   }
   
-  // Update with contract data when available (but keep existing data if contract fails)
-  $: if (!currentlySpinning && contractReels.length > 0) {
-    console.log('🔗 ReelGrid: Updating with contract reel data');
+  // Update visible positions when game store grid changes (for spin outcomes)
+  $: if (grid && grid.length > 0 && !currentlySpinning) {
+    console.log('🎯 ReelGrid: Updating visible positions with outcome');
+    // Keep extended reels but update the visible portion (positions 0-2)
+    for (let reelIndex = 0; reelIndex < Math.min(grid.length, extendedReels.length); reelIndex++) {
+      for (let symbolIndex = 0; symbolIndex < Math.min(grid[reelIndex].length, 3); symbolIndex++) {
+        if (extendedReels[reelIndex] && extendedReels[reelIndex][symbolIndex]) {
+          extendedReels[reelIndex][symbolIndex] = grid[reelIndex][symbolIndex];
+        }
+      }
+    }
+    // Force reactivity update
+    extendedReels = [...extendedReels];
+  }
+  
+  // Update with contract data ONLY on initial load, not after spins
+  let hasInitializedWithContractData = false;
+  $: if (!currentlySpinning && contractReels.length > 0 && !hasInitializedWithContractData && (!grid || grid.length === 0)) {
+    console.log('🔗 ReelGrid: Initial update with contract reel data');
+    hasInitializedWithContractData = true;
     extendedReels = contractReels.map((contractReel, reelIndex) => {
       const extended: SlotSymbol[] = [];
       
@@ -174,6 +191,7 @@
       return; // Don't allow spinning if reel data failed to load
     }
     lastProcessedSpinId = spinId;
+    
     currentlySpinning = true;
     
     // SAFETY FIX: Calculate target positions within safe zone with better bounds
@@ -191,6 +209,13 @@
     physicsEngine.startSpin(targetPositions);
   }
   
+  function symbolsMatch(a: string, b: string): boolean {
+    // Treat blanks as equivalent across representations ('_', 'x', 'y', 'z')
+    const blank = new Set(['_', 'x', 'y', 'z']);
+    if (blank.has(a) && blank.has(b)) return true;
+    return a === b;
+  }
+
   export function startQuickDeceleration(finalGrid?: string[][]) {
     if (!finalGrid) return;
     
@@ -202,9 +227,9 @@
       if (!contractReel) return 0;
       
       for (let pos = 0; pos < contractReel.length - 2; pos++) {
-        if (contractReel[pos] === outcomeReel[0] && 
-            contractReel[pos + 1] === outcomeReel[1] && 
-            contractReel[pos + 2] === outcomeReel[2]) {
+        if (symbolsMatch(contractReel[pos], outcomeReel[0]) && 
+            symbolsMatch(contractReel[pos + 1], outcomeReel[1]) && 
+            symbolsMatch(contractReel[pos + 2], outcomeReel[2])) {
           return pos * 102; // Convert symbol position to pixels (100px + 2px gap)
         }
       }
@@ -279,16 +304,8 @@
     if (!physicsEngine || !reelElements.length) return;
     
     // PREVENT CLEANUP INTERFERENCE: Don't process cleanup calls that would show blanks
-    const isBlankGrid = finalGrid.every(reel => 
-      reel.every(symbol => symbol === '_')
-    );
-    
+    const isBlankGrid = finalGrid.every(reel => reel.every(symbol => symbol === '_'));
     if (isBlankGrid && (spinId === 'cleanup' || spinId === 'cancel-previous' || spinId === 'force-stop')) {
-      return;
-    }
-    
-    // PREVENT DOUBLE POSITIONING: If startQuickDeceleration already handled this, skip
-    if (!isBlankGrid && spinId && !spinId.includes('replay')) {
       return;
     }
     
@@ -298,58 +315,37 @@
     }
     lastProcessedOutcomeSpinId = spinId || null;
     
-    // COMPLETELY stop physics animation and any callbacks
+    // Stop physics and clear effects
     physicsEngine.stopAllReels();
+    currentlySpinning = false;
     
-    // CRITICAL: Don't set currentlySpinning = false yet - 
-    // this prevents reactive statements from interfering
-    
-    // Calculate correct positions based on finalGrid
-    const targetPositions = finalGrid.map((outcomeReel, reelIndex) => {
-      const contractReel = contractReels[reelIndex];
-      if (!contractReel) return 0;
-      
-      // Find the outcome sequence in contract reel
-      for (let pos = 0; pos < contractReel.length - 2; pos++) {
-        if (contractReel[pos] === outcomeReel[0] && 
-            contractReel[pos + 1] === outcomeReel[1] && 
-            contractReel[pos + 2] === outcomeReel[2]) {
-          return pos * 102; // Convert symbol position to pixels (100px + 2px gap)
+    // Directly set the visible 3 symbols to match the final grid outcome
+    for (let reelIndex = 0; reelIndex < 5; reelIndex++) {
+      const outcomeReel = finalGrid[reelIndex];
+      if (!outcomeReel || outcomeReel.length < 3) continue;
+      for (let row = 0; row < 3; row++) {
+        const charId = outcomeReel[row];
+        const themed = getThemeSymbol(charId, $currentTheme);
+        if (extendedReels[reelIndex] && extendedReels[reelIndex][row]) {
+          extendedReels[reelIndex][row] = themed;
         }
       }
-      return 0; // Fallback to start if not found
-    });
+    }
+    // Force reactivity
+    extendedReels = [...extendedReels];
     
-    
-    // Set reels to calculated positions
+    // Reset transforms to show top 3 entries
     reelElements.forEach((element, reelIndex) => {
       if (element && reelContainers[reelIndex]) {
-        const targetPos = targetPositions[reelIndex] || 0;
-        element.style.transform = `translate3d(0, ${-targetPos}px, 0)`;
-        
-        // Clear visual effects
+        element.style.transition = '';
+        element.style.transform = 'translate3d(0, 0px, 0)';
         reelContainers[reelIndex].style.filter = '';
         reelContainers[reelIndex].style.perspective = '';
         reelContainers[reelIndex].style.boxShadow = '';
-        
-        // Disable GPU optimization to prevent further updates
         element.style.willChange = '';
         reelContainers[reelIndex].style.willChange = '';
       }
     });
-    
-    // Set currentlySpinning = false immediately, then re-apply transforms after any interference
-    currentlySpinning = false;
-    
-    // Re-apply transforms after interference
-    setTimeout(() => {
-      reelElements.forEach((element, reelIndex) => {
-        if (element) {
-          const targetPos = targetPositions[reelIndex] || 0;
-          element.style.transform = `translate3d(0, ${-targetPos}px, 0)`;
-        }
-      });
-    }, 200);
   }
   
   // Removed complex visual update system - physics engine handles everything

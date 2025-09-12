@@ -43,9 +43,30 @@ function createQueueStore() {
       if (stored) {
         const parsed = JSON.parse(stored);
         // Keep only the most recent 100 spins
-        const limitedSpins = parsed.spins
+        let limitedSpins = parsed.spins
           .sort((a: QueuedSpin, b: QueuedSpin) => b.timestamp - a.timestamp)
           .slice(0, MAX_QUEUE_SIZE);
+        
+        // On load, normalize all spins to terminal UI state:
+        // - Any non-terminal becomes COMPLETED
+        // - All spins are marked revealed so UI does not show "Confirming" for past sessions
+        limitedSpins = limitedSpins.map((spin: QueuedSpin) => {
+          const isTerminal = [SpinStatus.COMPLETED, SpinStatus.FAILED, SpinStatus.EXPIRED].includes(spin.status);
+          if (!isTerminal) {
+            return {
+              ...spin,
+              status: SpinStatus.COMPLETED,
+              revealed: true,
+              isAutoClaimInProgress: undefined,
+              error: undefined
+            } as QueuedSpin;
+          }
+          // Ensure terminal spins are also flagged as revealed for UI purposes
+          return {
+            ...spin,
+            revealed: true
+          } as QueuedSpin;
+        });
         
         // Calculate reserved balance from active pending spins
         const activePendingSpins = filterActivePendingSpins(limitedSpins);

@@ -129,6 +129,8 @@
   // Track if we're in replay mode to prevent queue auto-start
   let isReplayMode = false;
   
+  
+  
   // Get current contract for operations - use prop override or global selected contract
   $: currentContract = contractContext || $selectedContract;
   
@@ -187,6 +189,7 @@
       // Show paylines if more than 1, OR if dropping from 2+ to 1 (to show the single payline)
       if ($bettingStore.selectedPaylines > 1 || (previousPaylines > 1 && $bettingStore.selectedPaylines === 1)) {
         showPaylineOverlay = true;
+        console.log('PaylineOverlay DEBUG: toggled on due to selection change. prev=', previousPaylines, 'now=', $bettingStore.selectedPaylines);
         
         // Set timeout to fade out after 3 seconds
         paylineTimeout = setTimeout(() => {
@@ -197,6 +200,12 @@
         showPaylineOverlay = false;
       }
     }
+  }
+
+  // Overlay debug: active indices when visible
+  $: defaultActivePaylines = Array.from({ length: $bettingStore.selectedPaylines }, (_, i) => i);
+  $: if (showPaylineOverlay) {
+    console.log('PaylineOverlay DEBUG: active indices =', defaultActivePaylines);
   }
   
   onMount(() => {
@@ -245,8 +254,28 @@
       handleReplaySpin(event.detail);
     };
 
+    // Listen for queue processor animation start events
+    const handleStartAnimation = (event: CustomEvent) => {
+      const { spinId } = event.detail;
+      console.log(`🎬 SlotMachine: Queue requested animation for ${spinId.slice(-8)}`);
+      startContinuousSpinning(spinId);
+    };
+
+    // Listen for outcome display events from queue processor
+    const handleDisplayOutcome = (event: CustomEvent) => {
+      const { spin, outcome, winnings, betAmount } = event.detail;
+      console.log(`🎯 SlotMachine: Displaying outcome for ${spin.id.slice(-8)}`);
+      
+      // Display the outcome (stop reels and show results)
+      displayOutcome({ ...spin, outcome, winnings, totalBet: betAmount });
+    };
+
     // @ts-ignore
     document.addEventListener('replay-spin', handleReplayEvent);
+    // @ts-ignore
+    document.addEventListener('start-spin-animation', handleStartAnimation);
+    // @ts-ignore
+    document.addEventListener('display-spin-outcome', handleDisplayOutcome);
     
     // Auto-start replay if initialReplayData is provided
     if (initialReplayData) {
@@ -300,6 +329,10 @@
     return () => {
       // @ts-ignore
       document.removeEventListener('replay-spin', handleReplayEvent);
+      // @ts-ignore
+      document.removeEventListener('start-spin-animation', handleStartAnimation);
+      // @ts-ignore
+      document.removeEventListener('display-spin-outcome', handleDisplayOutcome);
     };
   });
   
@@ -312,6 +345,10 @@
     if (paylineTimeout) clearTimeout(paylineTimeout);
     if (failureFeedbackTimeout) clearTimeout(failureFeedbackTimeout);
     if (autoSpinStopTimeout) clearTimeout(autoSpinStopTimeout);
+    
+    // Clear outcome display queue
+    outcomeDisplayQueue = [];
+    isDisplayingOutcome = false;
     
     // Clear all replay timeouts
     replayTimeouts.forEach(timeout => clearTimeout(timeout));
@@ -351,6 +388,8 @@
       
       // Force stop any lingering replay animations
       callAllReelGrids('stopSpin');
+      // Reset game store state to ensure $isSpinning is false before starting new spin
+      gameStore.reset();
     }
     
     // Mark that user has initiated a spin this session
@@ -361,13 +400,18 @@
       // Ignore sound errors
     });
     
-    // Add spin to queue (this will handle the blockchain processing in background)
+    // ONLY add spin to queue - queue handles blockchain processing
     const spinId = queueStore.addSpin(betPerLine, selectedPaylines, totalBet, undefined, $selectedContract?.id);
-    
-    // New spin takes over display immediately
-    
-    // Start visual spin animation immediately with continuous spinning
-    startContinuousSpinning(spinId);
+    console.log(`📝 Spin ${spinId.slice(-8)} added to queue - queue will handle all processing`);
+
+    // Immediately start visual spin for the new spin (avoid race with replay state)
+    document.dispatchEvent(new CustomEvent('start-spin-animation', { detail: { spinId } }));
+
+    // Mark this spin as user-initiated so queue knows to reveal immediately when ready
+    queueProcessor.markSpinAsUserInitiated(spinId);
+
+    // Kick processing
+    queueProcessor.checkQueue();
   }
 
   async function startContinuousSpinning(spinId: string) {
@@ -475,200 +519,93 @@
       return;
     }
     
-    // Find spins that have outcomes ready
-    const readySpins = queueState.spins.filter((spin: any) => 
-      [SpinStatus.READY_TO_CLAIM, SpinStatus.COMPLETED].includes(spin.status) && 
-      spin.outcome
-    );
-    
-    if (readySpins.length > 0) {
-      // Sort by timestamp to get the most recent
-      readySpins.sort((a: any, b: any) => b.timestamp - a.timestamp);
-      const mostRecentSpin = readySpins[0];
-      
-      // Additional safeguard: don't display very old outcomes on initial mount
-      const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-      const isTooOld = isInitialMount && mostRecentSpin.timestamp < fiveMinutesAgo;
-      
-      // Display outcome if this is the current spin (for visual animation)
-      if (!isTooOld && $currentSpinId === mostRecentSpin.id && userSessionStarted) {
-        displayOutcome(mostRecentSpin);
-      }
-      
-      // Check for any completed winning spins that we haven't auto-celebrated yet (background wins)
-      if (userSessionStarted && !isInitialMount) {
-        for (const spin of readySpins) {
-          const spinTooOld = spin.timestamp < fiveMinutesAgo;
-          if (!spinTooOld && 
-              spin.winnings > 0 && 
-              !autoCelebratedSpinIds.has(spin.id) &&
-              spin.id !== lastCelebratedSpinId &&
-              spin.id !== $currentSpinId) { // Don't auto-celebrate current spin (it gets normal treatment)
-            
-            // Mark as auto-celebrated
-            autoCelebratedSpinIds.add(spin.id);
-            
-            // This is a background winning spin we haven't celebrated yet
-            const winLevel = spin.winnings >= 100000000 ? 'jackpot' : 
-                           spin.winnings >= 50000000 ? 'large' : 
-                           spin.winnings >= 20000000 ? 'medium' : 'small';
-            
-            // Trigger win celebration for background spin
-            triggerWinCelebration({
-              amount: spin.winnings,
-              betAmount: spin.betPerLine * spin.selectedPaylines,
-              level: winLevel,
-              gridOutcome: spin.outcome,
-              selectedPaylines: spin.selectedPaylines || $bettingStore.selectedPaylines
-            }, spin.id);
-            
-            break; // Only celebrate one spin per update to avoid overwhelming
-          }
-        }
-        
-        // MEMORY LEAK FIX: Clean up old auto-celebrated IDs to prevent memory bloat
-        if (autoCelebratedSpinIds.size > 20) {
-          const idsArray = Array.from(autoCelebratedSpinIds);
-          autoCelebratedSpinIds = new Set(idsArray.slice(-10)); // Keep only last 10 to be more aggressive
-        }
-      }
+    // Animation queue now handles outcome display sequentially
+    // Remove parallel processing - the animation queue will handle this
+
+    // MEMORY LEAK FIX: Clean up old auto-celebrated IDs to prevent memory bloat
+    if (autoCelebratedSpinIds.size > 20) {
+      const idsArray = Array.from(autoCelebratedSpinIds);
+      autoCelebratedSpinIds = new Set(idsArray.slice(-10));
     }
     
-    // Set flag to false after processing any spins to allow future celebrations
-    // BUT don't set it to false immediately if we're about to display outcomes
-    // This prevents the race condition where loss feedback shows on initial mount
-    if (isInitialMount && readySpins.length > 0) {
-      // Wait longer to ensure all initial outcome displays complete first
+    // Set flag to false after initial processing
+    if (isInitialMount) {
       setTimeout(() => {
         isInitialMount = false;
       }, 500);
     }
     
-    // Check if we need to start spinning for a new pending spin
-    // IMPORTANT FIX: Exclude PROCESSING spins from auto-starting new animations
-    // PROCESSING spins should only affect animations if they're the current spin
-    const pendingSpins = queueState.spins.filter((spin: any) => 
-      [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING].includes(spin.status)
-    );
-    
-    // Check for PROCESSING spins separately - only manage them if they're current
-    const processingSpins = queueState.spins.filter((spin: any) => 
-      spin.status === SpinStatus.PROCESSING
-    );
-    
-    // If we have a current spin that's PROCESSING but got an outcome, display it
-    if ($currentSpinId && userSessionStarted) {
-      const currentSpin = queueState.spins.find((spin: any) => spin.id === $currentSpinId);
-      if (currentSpin && currentSpin.status === SpinStatus.PROCESSING && currentSpin.outcome) {
-        // This PROCESSING spin has an outcome and it's our current spin - display it
-        displayOutcome(currentSpin);
-        return; // Don't continue with other logic
-      }
-    }
-    
-    // REMOVED: Automatic spin starting logic that caused duplicate sounds
-    // The spin should only start from handleSpin when user initiates it
-    // This prevents the queue update from restarting sounds unnecessarily
-    
-    if (pendingSpins.length === 0 && processingSpins.length === 0 && $currentSpinId) {
-      // No pending or processing spins but we still have a current spin ID - check if it should be cleared
+    // Clean up completed spins that are no longer current
+    if ($currentSpinId) {
       const currentSpin = queueState.spins.find((spin: any) => spin.id === $currentSpinId);
       if (!currentSpin || [SpinStatus.COMPLETED, SpinStatus.FAILED, SpinStatus.EXPIRED].includes(currentSpin.status)) {
-        // Failed/expired spins should have been handled earlier by handleFailedSpin
-        // This section mainly handles completed spins that weren't displayed yet
         if (currentSpin && [SpinStatus.FAILED, SpinStatus.EXPIRED].includes(currentSpin.status)) {
-          // This should have been caught earlier, but handle it just in case
           handleFailedSpin(currentSpin);
-        } else {
-          // Current spin is done (completed), reset the display
-          gameStore.reset();
-          if (spinningInterval) {
-            clearInterval(spinningInterval);
-            spinningInterval = null;
-          }
         }
       }
     }
   }
 
+  // Process the outcome display queue sequentially
+  // Queue processor handles everything now - no separate display queue needed
+
   async function displayOutcome(spin: any) {
-    // CRITICAL STATE COORDINATION CHECK: Only display if this spin is current
-    if (!spin.outcome || $currentSpinId !== spin.id) {
-      return;
-    }
-
-    // DUPLICATE PROTECTION: Prevent processing same outcome multiple times
-    if (lastProcessedOutcomeSpinId === spin.id) {
-      return;
-    }
-    lastProcessedOutcomeSpinId = spin.id;
-
-    // ANIMATION GUARD: Prevent overlapping animations
-    if ($isSpinning && spinningInterval) {
-      // Stop any existing animation cleanly before starting new one
-      clearInterval(spinningInterval);
-      spinningInterval = null;
-    }
+    console.log(`🎬 Displaying outcome for spin ${spin.id.slice(-8)}`);
     
-    // SMOOTH TRANSITION: Start quick deceleration to actual outcome
-    callAllReelGrids('startQuickDeceleration', spin.outcome);
+    // Stop spinning
+    await soundService.forceStopWithVerification('spin-loop', 3);
+    playReelStop().catch(() => {});
     
-    // Wait a moment for deceleration to take effect before stopping
-    setTimeout(async () => {
-      // Stop the spinning loop sound with verification
-      const soundStopped = await soundService.forceStopWithVerification('spin-loop', 3);
-      if (!soundStopped) {
-        console.warn('Failed to stop spin-loop sound after normal spin');
-      }
-      
-      // Play reel stop sound (only once, not from each ReelGrid)
-      setTimeout(() => {
-        playReelStop().catch(() => {
-          // Ignore sound errors
+    // Show final outcome
+    callAllReelGrids('setFinalPositions', spin.outcome, spin.id);
+    gameStore.completeSpin(spin.id, spin.outcome);
+    
+    // DEBUG: Log payline overlay state when outcome is displayed
+    console.log('PaylineOverlay DEBUG: outcome reveal, selectedPaylines=', $bettingStore.selectedPaylines);
+    
+    // Show win/loss celebration
+    setTimeout(() => {
+      if (spin.winnings > 0) {
+        const winLevel = spin.winnings >= 100000000 ? 'jackpot' : 
+                       spin.winnings >= 50000000 ? 'large' : 
+                       spin.winnings >= 20000000 ? 'medium' : 'small';
+        
+        playWinSound(winLevel).catch(() => {});
+        triggerWinCelebration({
+          amount: spin.winnings,
+          betAmount: spin.totalBet,
+          level: winLevel,
+          gridOutcome: spin.outcome,
+          selectedPaylines: spin.selectedPaylines || $bettingStore.selectedPaylines
+        }, spin.id);
+
+        // Signal completion after the celebration duration for this win level
+        const celebrationDurations: Record<'small'|'medium'|'large'|'jackpot', number> = {
+          small: 600,
+          medium: 700,
+          large: 800,
+          jackpot: 800
+        };
+        const durationMs = celebrationDurations[winLevel] ?? 800;
+        setTimeout(() => {
+          document.dispatchEvent(new CustomEvent('spin-animation-complete', { detail: { spinId: spin.id } }));
+        }, durationMs + 100);
+      } else {
+        playLoss().catch(() => {});
+        triggerLossFeedback({
+          id: spin.id,
+          totalBet: spin.totalBet
         });
-      }, 100);
-      
-      // DIRECTLY stop ReelGrid physics animation and set final positions
-      callAllReelGrids('setFinalPositions', spin.outcome, spin.id);
-      
-      // Complete the spin with actual outcome
-      gameStore.completeSpin(spin.id, spin.outcome);
-      
-      // Only trigger celebrations if this is not the initial mount and we haven't already celebrated this spin
-      if (!isInitialMount && lastCelebratedSpinId !== spin.id) {
-        // Check if we have actual winnings from blockchain first
-        if (spin.winnings > 0) {
-          // Determine win level and play appropriate sound
-          const winLevel = spin.winnings >= 100000000 ? 'jackpot' : 
-                           spin.winnings >= 50000000 ? 'large' : 
-                           spin.winnings >= 20000000 ? 'medium' : 'small';
-          
-          // Play win sound
-          playWinSound(winLevel).catch(() => {
-            // Ignore sound errors
-          });
-          
-          // Use actual winnings from blockchain
-          triggerWinCelebration({
-            amount: spin.winnings,
-            betAmount: spin.betPerLine * spin.selectedPaylines,
-            level: winLevel,
-            gridOutcome: spin.outcome,
-            selectedPaylines: spin.selectedPaylines || $bettingStore.selectedPaylines
-          }, spin.id);
-        } else {
-          // Show loss feedback immediately (but only once per spin and not on initial mount)
-          if (lastLossFeedbackSpinId !== spin.id && !isInitialMount) {
-            // Play loss sound (subtle, non-abrasive)
-            playLoss().catch(() => {
-              // Ignore sound errors
-            });
-            
-            triggerLossFeedback(spin);
-          }
-        }
+
+        // Loss feedback auto-hides after 2 seconds; then signal completion
+        setTimeout(() => {
+          document.dispatchEvent(new CustomEvent('spin-animation-complete', { detail: { spinId: spin.id } }));
+        }, 2000 + 100);
       }
-    }, 1500); // Wait longer for smooth deceleration to outcome
+      
+      // The animation queue will handle completion timing - no need to manually complete here
+      
+    }, 100); // Brief delay after reel stops
   }
   
   function checkForWins(outcome: string[][]) {
@@ -862,12 +799,12 @@
       autoCelebratedSpinIds.add(spinId);
     }
     
-    // Auto-hide duration
+    // Celebration duration tuned shorter to fit tighter timing
     const duration = {
-      small: 3000,
-      medium: 4000,
-      large: 5000,
-      jackpot: 6000
+      small: 900,    // 0.9s
+      medium: 1200,  // 1.2s
+      large: 1500,   // 1.5s
+      jackpot: 1800  // 1.8s
     }[win.level];
     
     // Create celebration timeout
@@ -1213,9 +1150,9 @@
           replayTimeouts = replayTimeouts.filter(t => t !== startTimeout && t !== outcomeTimeout && t !== celebrationTimeout && t !== cleanupTimeout);
           
           console.log(`=== REPLAY: Cleanup completed for ${replayId} ===`);
-        }, 6000); // Clear the replay after 6 seconds
+        }, 4000); // Clear the replay after 4 seconds
         replayTimeouts.push(cleanupTimeout);
-      }, 5000); // Show spinning for 5 seconds
+      }, 3000); // Show spinning for 3 seconds
       replayTimeouts.push(outcomeTimeout);
     }, 0);
     replayTimeouts.push(startTimeout);
@@ -1288,10 +1225,7 @@
               <!-- Fading payline paths overlay -->
               {#if showPaylineOverlay}
                 <div transition:fade={{ duration: 500 }}>
-                  <PaylineOverlay 
-                    showPaylines={true}
-                    activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
-                  />
+                  <PaylineOverlay showPaylines={true} activePaylines={defaultActivePaylines} />
                 </div>
               {/if}
             </div>
@@ -1361,10 +1295,7 @@
                 <!-- Fading payline paths overlay -->
                 {#if showPaylineOverlay}
                   <div transition:fade={{ duration: 500 }}>
-                    <PaylineOverlay 
-                      showPaylines={true}
-                      activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
-                    />
+                    <PaylineOverlay showPaylines={true} activePaylines={defaultActivePaylines} />
                   </div>
                 {/if}
               </div>
@@ -1435,10 +1366,7 @@
                   <!-- Fading payline paths overlay -->
                   {#if showPaylineOverlay}
                     <div transition:fade={{ duration: 500 }}>
-                      <PaylineOverlay 
-                        showPaylines={true}
-                        activePaylines={Array.from({length: $bettingStore.selectedPaylines}, (_, i) => i)}
-                      />
+                      <PaylineOverlay showPaylines={true} activePaylines={defaultActivePaylines} />
                     </div>
                   {/if}
                 </div>

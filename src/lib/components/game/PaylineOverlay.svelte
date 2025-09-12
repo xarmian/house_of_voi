@@ -9,7 +9,6 @@
   let loading = true;
   let error: string | null = null;
   
-  
   async function loadPaylines() {
     if (!$walletAddress) {
       error = 'Wallet not connected - Machine out of order';
@@ -30,7 +29,7 @@
   }
 
   $: visiblePaylines = showPaylines && !loading && !error 
-    ? paylines.slice(0, Math.max(...activePaylines) + 1) 
+    ? paylines.slice(0, (activePaylines.length ? Math.max(...activePaylines) : -1) + 1)
     : [];
 
   // Load paylines when wallet connects or component mounts
@@ -137,35 +136,6 @@
   .payline-number {
     text-shadow: 0 0 2px currentColor;
   }
-
-  .error-overlay, .loading-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.8);
-    border-radius: 8px;
-    z-index: 10;
-  }
-
-  .error-message {
-    color: #ef4444;
-    font-size: 14px;
-    font-weight: bold;
-    text-align: center;
-    padding: 8px;
-  }
-
-  .loading-spinner {
-    width: 24px;
-    height: 24px;
-    border: 2px solid #374151;
-    border-top: 2px solid #10b981;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
-  
   @keyframes payline-dash {
     to {
       stroke-dashoffset: -3;

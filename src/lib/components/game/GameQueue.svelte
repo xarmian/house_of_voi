@@ -56,6 +56,11 @@
       return Check;
     }
     
+    // If not revealed yet, show as confirming loader
+    if (spin && (status === SpinStatus.READY_TO_CLAIM || status === SpinStatus.CLAIMING || status === SpinStatus.COMPLETED) && !spin.revealed) {
+      return Loader;
+    }
+
     switch (status) {
       case SpinStatus.PENDING:
       case SpinStatus.SUBMITTING:
@@ -80,6 +85,11 @@
       return 'text-green-400';
     }
     
+    // If not revealed yet, keep confirming color
+    if (spin && (status === SpinStatus.READY_TO_CLAIM || status === SpinStatus.CLAIMING || status === SpinStatus.COMPLETED) && !spin.revealed) {
+      return 'text-blue-400';
+    }
+
     switch (status) {
       case SpinStatus.PENDING:
       case SpinStatus.SUBMITTING:
@@ -100,11 +110,11 @@
   
   function getStatusText(status: SpinStatus, spin?: QueuedSpin): string {
     // Defensive logic: once a spin has been shown as "Completed", never revert to "Submitting"
-    if (spin && (
-      status === SpinStatus.READY_TO_CLAIM || 
-      status === SpinStatus.CLAIMING || 
-      status === SpinStatus.COMPLETED
-    )) {
+    if (spin && (status === SpinStatus.READY_TO_CLAIM || status === SpinStatus.CLAIMING || status === SpinStatus.COMPLETED)) {
+      // Until the spin has been visually revealed, keep showing Confirming
+      if (!spin.revealed) {
+        return 'Confirming';
+      }
       completedSpins.add(spin.id);
       return 'Completed';
     }
@@ -122,6 +132,7 @@
       case SpinStatus.PROCESSING:
         return 'Confirming';
       case SpinStatus.READY_TO_CLAIM:
+        return 'Confirming'; // Show as "Confirming" until actually displayed
       case SpinStatus.CLAIMING:
       case SpinStatus.COMPLETED:
         return 'Completed';
@@ -379,7 +390,7 @@
           
           <!-- Result / Actions -->
           <div class="spin-result">
-            {#if (spin.status === SpinStatus.READY_TO_CLAIM || spin.status === SpinStatus.CLAIMING || spin.status === SpinStatus.COMPLETED) && typeof spin.winnings === 'number'}
+            {#if (spin.status === SpinStatus.READY_TO_CLAIM || spin.status === SpinStatus.CLAIMING || spin.status === SpinStatus.COMPLETED) && typeof spin.winnings === 'number' && spin.revealed}
               <!-- Show win/loss amount for completed spins -->
               {#if spin.winnings > 0}
                 <div class="win-amount text-green-400">
@@ -390,7 +401,7 @@
                   Loss
                 </div>
               {/if}
-            {:else if [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(spin.status)}
+            {:else}
               <!-- Show processing indicator for active spins -->
               <div class="processing-indicator">
                 <div class="text-xs text-theme-text opacity-70">
@@ -401,7 +412,7 @@
           </div>
           
           <!-- Share Button (far right) -->
-          {#if [SpinStatus.READY_TO_CLAIM, SpinStatus.CLAIMING, SpinStatus.COMPLETED].includes(spin.status) && spin.outcome && typeof spin.winnings === 'number'}
+          {#if [SpinStatus.READY_TO_CLAIM, SpinStatus.CLAIMING, SpinStatus.COMPLETED].includes(spin.status) && spin.outcome && typeof spin.winnings === 'number' && spin.revealed}
             <button 
               class="share-button"
               class:sharing={sharingSpinId === spin.id}
