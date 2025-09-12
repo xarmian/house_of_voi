@@ -231,9 +231,11 @@ export class QueueProcessor {
 
     this.isDisplaying = true;
     try {
-      // For the very first visual, do not add fake delay (SlotMachine already started it)
+      // Always start the spin animation for this spin
+      document.dispatchEvent(new CustomEvent('start-spin-animation', { detail: { spinId: spin.id } }));
+      
+      // For subsequent spins, add delay to allow animation
       if (this.displayed.size > 0) {
-        document.dispatchEvent(new CustomEvent('start-spin-animation', { detail: { spinId: spin.id } }));
         const revealMs = 2200; // 2.2s abbreviated spin
         await this.sleep(revealMs);
       }

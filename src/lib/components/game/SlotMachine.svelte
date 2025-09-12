@@ -398,8 +398,10 @@
     const spinId = queueStore.addSpin(betPerLine, selectedPaylines, totalBet, undefined, $selectedContract?.id);
     console.log(`📝 Spin ${spinId.slice(-8)} added to queue - queue will handle all processing`);
 
-    // Immediately start visual spin for the new spin (avoid race with replay state)
-    document.dispatchEvent(new CustomEvent('start-spin-animation', { detail: { spinId } }));
+    // Start animation immediately if no current spin is being displayed
+    if (!$currentSpinId || !$isSpinning) {
+      document.dispatchEvent(new CustomEvent('start-spin-animation', { detail: { spinId } }));
+    }
 
     // Mark this spin as user-initiated so queue knows to reveal immediately when ready
     queueProcessor.markSpinAsUserInitiated(spinId);
