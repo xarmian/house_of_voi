@@ -53,7 +53,6 @@
   // Subscribe to betting preferences
   $: bettingPrefs = $bettingPreferences;
   $: customQuickBets = bettingPrefs.quickBets;
-  $: defaultPaylineCount = bettingPrefs.defaultPaylines;
   $: defaultQuickBet = bettingPrefs.defaultQuickBet;
   
   // Detect when wallet exists but is locked

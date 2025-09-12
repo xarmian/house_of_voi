@@ -55,14 +55,14 @@ const defaultThemePreferences: ThemePreferences = {
 
 const defaultBettingPreferences: BettingPreferences = {
   quickBets: [
-    { amount: 1, lines: 1 },
-    { amount: 2, lines: 5 },
-    { amount: 5, lines: 10 },
-    { amount: 10, lines: 20 }
+    { amount: 10, lines: 1 },
+    { amount: 25, lines: 5 },
+    { amount: 50, lines: 10 },
+    { amount: 100, lines: 20 }
   ],
   defaultMaxPaylines: false,
-  defaultPaylines: 1,
-  defaultQuickBet: null
+  defaultPaylines: 20,
+  defaultQuickBet: { amount: 25, lines: 20 }
 };
 
 const defaultAnimationPreferences: AnimationPreferences = {
