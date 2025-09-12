@@ -21,7 +21,8 @@
   $: isGameRoute = $page.route.id?.startsWith('/app');
   $: isHouseRoute = $page.route.id?.startsWith('/house');
   $: isProfileRoute = $page.route.id?.startsWith('/profile');
-  $: showUnifiedHeader = isGameRoute || isHouseRoute || isProfileRoute;
+  $: isTournamentRoute = $page.route.id?.startsWith('/tournament');
+  $: showUnifiedHeader = isGameRoute || isHouseRoute || isProfileRoute || isTournamentRoute;
   $: metaTags = deepMerge(data.baseMetaTags, $page.data.pageMetaTags || {});
   
   let mounted = false;
