@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { 
     Crown, 
     Trophy, 
@@ -144,6 +145,11 @@
     return rank <= 3;
   }
 
+  // Navigate to player profile
+  function goToProfile(address: string): void {
+    goto(`/profile/${address}`);
+  }
+
   // Refresh tournament data
   async function refreshData() {
     if (refreshing) return;
@@ -274,9 +280,13 @@
                       <!-- Player Info -->
                       <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2">
-                          <span class="font-mono text-sm text-theme truncate">
+                          <button 
+                            class="player-address-link font-mono text-sm text-theme truncate hover:text-voi-400 transition-colors"
+                            on:click={() => goToProfile(player.who)}
+                            title="View {tournamentService.formatAddress(player.who)} profile"
+                          >
                             {tournamentService.formatAddress(player.who)}
-                          </span>
+                          </button>
                           {#if isCurrentPlayer}
                             <span class="you-badge">YOU</span>
                           {/if}
@@ -325,9 +335,13 @@
                       
                       <div class="flex-1">
                         <div class="flex items-center gap-2">
-                          <span class="font-mono text-sm text-theme">
+                          <button 
+                            class="player-address-link font-mono text-sm text-theme hover:text-voi-400 transition-colors"
+                            on:click={() => goToProfile(currentPlayer.who)}
+                            title="View {tournamentService.formatAddress(currentPlayer.who)} profile"
+                          >
                             {tournamentService.formatAddress(currentPlayer.who)}
-                          </span>
+                          </button>
                           <span class="you-badge">YOU</span>
                         </div>
                       </div>
@@ -412,5 +426,13 @@
   
   .champion-badge {
     @apply px-2 py-0.5 text-xs bg-gradient-to-r from-yellow-500 to-amber-500 text-white rounded-full whitespace-nowrap font-bold;
+  }
+  
+  .player-address-link {
+    @apply bg-transparent border-none cursor-pointer p-0 text-left underline-offset-2 hover:underline;
+  }
+  
+  .player-address-link:focus {
+    @apply outline-none ring-2 ring-voi-500/50 rounded;
   }
 </style>
