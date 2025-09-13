@@ -110,6 +110,17 @@ export interface Database {
         };
         Returns: unknown;
       };
+      get_hov_tournament: {
+        Args: {
+          p_app_id: string;
+          p_start_ts: string;
+          p_end_ts: string;
+          p_limit?: number;
+          p_min_spins?: number;
+          p_min_volume_micro?: string;
+        };
+        Returns: unknown;
+      };
       get_user_ybt_transfers: {
         Args: {
           p_user_addr: string;

@@ -94,7 +94,7 @@
   let selectedCategory = 'volume';
   
   // Get contract ID from selected contract store
-  $: contractId = BigInt("0"); // BigInt("40879920");
+  $: contractId = BigInt("40879920");
   
   // Timer for countdown
   let timeRemaining: string | null = null;

@@ -14,7 +14,7 @@
     { href: '/', label: 'Home', icon: Home, exact: true },
     { href: '/app', label: 'Play', icon: Gamepad2, exact: false },
     { href: '/house', label: 'House', icon: Building, exact: false },
-    { href: '/tournament/weekend-2025', label: 'Tournament', icon: Trophy, exact: false },
+    { href: '/tournament/weekend-2025-09-12', label: 'Tournament', icon: Trophy, exact: false },
     { href: '/profile/' + gamingWalletData?.address || '', label: 'Profiles', icon: User, exact: false }
   ];  
 </script>
