@@ -492,7 +492,7 @@
         <div class="technical-details">
           <div class="detail-item">
             <span class="detail-label">Block Seed:</span>
-            <span class="detail-value font-mono text-xs">{reconstructedData.outcome.blockSeed}</span>
+            <span class="detail-value font-mono text-xs w-full truncate">{reconstructedData.outcome.blockSeed}</span>
           </div>
           <div class="detail-item">
             <span class="detail-label">Claim Round:</span>
@@ -572,7 +572,7 @@
             <div class="detail-item full-width">
               <span class="detail-label">Transaction ID:</span>
               <div class="tx-link-container">
-                <span class="detail-value font-mono tx-id">
+                <span class="detail-value font-mono tx-id w-full truncate">
                   {formatTxId('txId' in spin ? spin.txId : spin.txid)}
                 </span>
                 <a 
@@ -632,7 +632,7 @@
           {:else}
             <Copy class="w-4 h-4" />
           {/if}
-          Copy Deep Link
+          Deep Link
         </button>
       {/if}
       

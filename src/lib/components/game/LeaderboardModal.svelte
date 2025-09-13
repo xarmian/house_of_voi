@@ -235,6 +235,10 @@
     }
   }
 
+  function gotoProfile(address: string) {
+    goto(`/profile/${address}`);
+  }
+
   // Load data when modal becomes visible
   $: if (isVisible && $connectionStatus.initialized && !leaderboardData.length && !loading && !initialized) {
     loadLeaderboard();
@@ -422,7 +426,13 @@
                         </div>
                       </td>
                       <td class="py-3 px-4">
-                        <span class="font-mono text-sm text-theme">{formatAddress(entry.who)}</span>
+                        <button 
+                          on:click={() => gotoProfile(entry.who)}
+                          class="font-mono text-sm text-theme hover:text-voi-400 transition-colors"
+                          title="Go to player profile"
+                        >
+                          {formatAddress(entry.who)}
+                        </button>
                       </td>
                       <td class="py-3 px-4 text-right">
                         <div class="font-semibold {metricConfig.color}">

@@ -35,6 +35,10 @@
   export let compact = false;
   export let pageSize = 50;
   export let hideHeader = false;
+  
+  // Modal state exports for parent component to handle
+  export let showSpinDetailsModal = false;
+  export let selectedSpin: PlayerSpin | null = null;
 
   const dispatch = createEventDispatcher();
 
@@ -47,8 +51,6 @@
   let refreshing = false;
   let error: string | null = null;
   let currentPageSize = pageSize;
-  let showSpinDetailsModal = false;
-  let selectedSpin: PlayerSpin | null = null;
 
   // Reactive data from store
   $: spinsData = $playerSpins.data;
@@ -203,13 +205,11 @@
   }
 
   function openSpinDetails(spin: PlayerSpin) {
-    selectedSpin = spin;
-    showSpinDetailsModal = true;
+    dispatch('openSpinDetails', spin);
   }
 
   function closeSpinDetails() {
-    selectedSpin = null;
-    showSpinDetailsModal = false;
+    dispatch('closeSpinDetails');
   }
 
   // Export to CSV functionality
@@ -256,6 +256,7 @@
     dispatch('exported', { format: 'csv', count: spins.length });
   }
 </script>
+
 
 <div class="player-history-container {compact ? 'compact' : ''}">
   <!-- Header -->
@@ -310,7 +311,7 @@
 
     <!-- Search -->
     {#if !compact}
-      <div class="search-container mb-4">
+      <div class="search-container">
         <div class="relative">
           <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
@@ -406,36 +407,35 @@
   {:else}
     <!-- History content -->
     <div class="history-content" transition:fade={{ duration: 300 }}>
-      <!-- Statistics summary -->
-      <div class="stats-summary mb-6" transition:fly={{ y: 20, duration: 300 }}>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div class="stat-item">
-            <div class="stat-value text-blue-400">{totalCount}</div>
-            <div class="stat-label">Total Spins</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-value text-yellow-400">
-              {formatVOI(Number(spinsData?.totalAmountBet ?? 0))} VOI
+      <!-- Spins table/list with stats moved inside scrollable area -->
+      <div class="spins-container">
+        <!-- Statistics summary moved inside scrollable area -->
+        <div class="stats-summary mb-4" transition:fly={{ y: 20, duration: 300 }}>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="stat-item">
+              <div class="stat-value text-blue-400">{totalCount}</div>
+              <div class="stat-label">Total Spins</div>
             </div>
-            <div class="stat-label">Total Wagered</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-value text-green-400">
-              {formatVOI(Number(spinsData?.totalAmountWon ?? 0))} VOI
+            <div class="stat-item">
+              <div class="stat-value text-yellow-400">
+                {formatVOI(Number(spinsData?.totalAmountBet ?? 0))} VOI
+              </div>
+              <div class="stat-label">Total Wagered</div>
             </div>
-            <div class="stat-label">Total Won</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-value {(spinsData?.winRate ?? 0) > 50 ? 'text-green-400' : 'text-gray-400'}">
-              {(spinsData?.winRate ?? 0).toFixed(1)}%
+            <div class="stat-item">
+              <div class="stat-value text-green-400">
+                {formatVOI(Number(spinsData?.totalAmountWon ?? 0))} VOI
+              </div>
+              <div class="stat-label">Total Won</div>
             </div>
-            <div class="stat-label">Win Rate</div>
+            <div class="stat-item">
+              <div class="stat-value {(spinsData?.winRate ?? 0) > 50 ? 'text-green-400' : 'text-gray-400'}">
+                {(spinsData?.winRate ?? 0).toFixed(1)}%
+              </div>
+              <div class="stat-label">Win Rate</div>
+            </div>
           </div>
         </div>
-      </div>
-
-      <!-- Spins table/list -->
-      <div class="spins-container">
         {#if filteredSpins.length === 0 && searchTerm}
           <div class="empty-search">
             <Search class="w-8 h-8 text-gray-500 mx-auto mb-2" />
@@ -451,86 +451,84 @@
             >
               <!-- Mobile layout -->
               <div class="mobile-spin-item md:hidden">
-                <div class="flex items-start justify-between mb-2">
-                  <div class="flex items-center gap-2">
+                <!-- Compact header with win/loss indicator, transaction ID, and action buttons -->
+                <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center gap-2 min-w-0 flex-1">
                     {#if spin.is_win}
-                      <TrendingUp class="w-4 h-4 text-green-400" />
+                      <TrendingUp class="w-4 h-4 text-green-400 flex-shrink-0" />
                     {:else}
-                      <TrendingDown class="w-4 h-4 text-red-400" />
+                      <TrendingDown class="w-4 h-4 text-red-400 flex-shrink-0" />
                     {/if}
-                    <span class="text-sm font-mono text-gray-300">
+                    <span class="text-sm font-mono text-gray-300 truncate">
                       {formatTxId(spin.txid)}
                     </span>
                     <button
                       on:click={() => copyTxId(spin.txid)}
-                      class="text-gray-400 hover:text-theme p-1"
+                      class="mobile-action-btn-small"
                       title="Copy transaction ID"
                     >
                       <Copy class="w-3 h-3" />
                     </button>
                   </div>
-                  <button
-                    on:click={() => openReplayLink(spin)}
-                    class="text-gray-400 hover:text-green-400 p-1"
-                    title="Play replay"
-                  >
-                    <Play class="w-4 h-4" />
-                  </button>
-                  <button
-                    on:click={() => openSpinDetails(spin)}
-                    class="text-gray-400 hover:text-voi-400 p-1"
-                    title="View spin details"
-                  >
-                    <Info class="w-4 h-4" />
-                  </button>
-                  <a
-                    href={getExplorerUrl(spin.txid)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="text-gray-400 hover:text-voi-400 p-1"
-                    title="View on explorer"
-                  >
-                    <ExternalLink class="w-4 h-4" />
-                  </a>
+                  
+                  <!-- Action buttons moved to top row -->
+                  <div class="flex items-center gap-1">
+                    <button
+                      on:click={() => openReplayLink(spin)}
+                      class="mobile-action-btn-small text-green-400 hover:text-green-300"
+                      title="Play replay"
+                    >
+                      <Play class="w-4 h-4" />
+                    </button>
+                    <button
+                      on:click={() => openSpinDetails(spin)}
+                      class="mobile-action-btn-small text-gray-400 hover:text-voi-400"
+                      title="View spin details"
+                    >
+                      <Info class="w-4 h-4" />
+                    </button>
+                    <a
+                      href={getExplorerUrl(spin.txid)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="mobile-action-btn-small text-gray-400 hover:text-voi-400"
+                      title="View on explorer"
+                    >
+                      <ExternalLink class="w-4 h-4" />
+                    </a>
+                  </div>
                 </div>
                 
-                <div class="grid grid-cols-2 gap-2 text-sm mb-2">
-                  <div>
-                    <span class="text-gray-500">Bet:</span>
-                    <span class="text-theme font-semibold ml-1">
-                      {formatVOI(Number(spin.total_bet_amount))} VOI
+                <!-- Simplified betting information in one compact row -->
+                <div class="flex items-center justify-between text-sm">
+                  <div class="flex items-center gap-4">
+                    <div>
+                      <span class="text-xs text-gray-500">Bet:</span>
+                      <span class="text-theme font-semibold ml-1">
+                        {formatVOI(Number(spin.total_bet_amount))} VOI
+                      </span>
+                    </div>
+                    <div>
+                      <span class="text-xs text-gray-500">Lines:</span>
+                      <span class="text-gray-300 ml-1">{spin.paylines_count}</span>
+                    </div>
+                    <div>
+                      <span class="text-xs text-gray-500">Payout:</span>
+                      <span class="text-gray-300 ml-1">
+                        {spin.is_win ? formatVOI(Number(spin.payout)) : '0'} VOI
+                      </span>
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <span class="font-semibold {spin.is_win ? 'text-green-400' : 'text-red-400'}">
+                      {spin.is_win ? '+' : ''}{formatVOI(Number(spin.net_result))} VOI
                     </span>
                   </div>
-                  <div>
-                    <span class="text-gray-500">Paylines:</span>
-                    <span class="text-gray-300 ml-1">{spin.paylines_count}</span>
-                  </div>
-                  {#if spin.is_win}
-                    <div>
-                      <span class="text-gray-500">Won:</span>
-                      <span class="text-green-400 font-semibold ml-1">
-                        {formatVOI(Number(spin.payout))} VOI
-                      </span>
-                    </div>
-                    <div>
-                      <span class="text-gray-500">Profit:</span>
-                      <span class="text-green-400 font-semibold ml-1">
-                        +{formatVOI(Number(spin.net_result))} VOI
-                      </span>
-                    </div>
-                  {:else}
-                    <div class="col-span-2">
-                      <span class="text-gray-500">Loss:</span>
-                      <span class="text-red-400 font-semibold ml-1">
-                        {formatVOI(Number(spin.net_result))} VOI
-                      </span>
-                    </div>
-                  {/if}
                 </div>
                 
-                <div class="flex items-center justify-between text-xs text-gray-500">
-                  <span>Round {spin.round.toString()}</span>
-                  <span>{formatDate(spin.created_at)}</span>
+                <!-- Round and date info in small text -->
+                <div class="text-xs text-gray-500 mt-2">
+                  Round {spin.round.toString()} • {formatDate(spin.created_at)}
                 </div>
               </div>
 
@@ -671,16 +669,10 @@
   {/if}
 </div>
 
-<!-- Spin Details Modal -->
-<SpinDetailsModal 
-  isVisible={showSpinDetailsModal}
-  spin={selectedSpin}
-  on:close={closeSpinDetails}
-/>
 
 <style>
   .player-history-container {
-    @apply bg-slate-800 rounded-xl border border-slate-700 overflow-hidden;
+    @apply bg-slate-800 rounded-xl border border-slate-700;
   }
 
   .compact {
@@ -740,15 +732,53 @@
   }
 
   .spin-item {
-    @apply bg-slate-700/30 rounded-lg p-4 border border-slate-600/50 hover:bg-slate-700/50 transition-colors;
+    @apply bg-slate-700/30 rounded-lg border border-slate-600/50 hover:bg-slate-700/50 transition-colors;
+  }
+  
+  /* Desktop layout - ensure it's completely hidden on mobile */
+  @media (max-width: 767px) {
+    .desktop-spin-item {
+      @apply !hidden;
+    }
+  }
+  
+  .mobile-spin-item {
+    @apply p-3 space-y-2;
   }
 
-  .mobile-spin-item {
-    @apply space-y-2;
+  /* Compact mobile action buttons */
+  .mobile-action-btn-small {
+    @apply p-2 rounded-md hover:bg-slate-700/50 transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center;
+  }
+
+  /* Additional mobile responsiveness improvements */
+  @media (max-width: 380px) {
+    .mobile-spin-item {
+      @apply space-y-3;
+    }
+    
+    .mobile-spin-item .flex.items-center.gap-4 {
+      @apply flex-col items-start gap-2;
+    }
+  }
+
+  /* Improved stats summary for mobile */
+  @media (max-width: 640px) {
+    .stats-summary .grid {
+      @apply grid-cols-2 gap-3;
+    }
+    
+    .stat-item {
+      @apply text-left;
+    }
+    
+    .stat-value {
+      @apply text-base;
+    }
   }
 
   .desktop-spin-item {
-    @apply grid gap-4 items-center;
+    @apply hidden md:grid gap-4 items-center p-4;
     grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr auto;
   }
 

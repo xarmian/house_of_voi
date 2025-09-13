@@ -23,6 +23,7 @@
   import { ensureBase32TxId, formatTxIdForDisplay } from '$lib/utils/transactionUtils';
   import type { PlayerSpin } from '$lib/types/hovStats';
   import SpinDetailsModal from '$lib/components/modals/SpinDetailsModal.svelte';
+    import { goto } from '$app/navigation';
 
   // Props
   export let appId: bigint;
@@ -354,12 +355,11 @@
     }
   }
 
-  async function copyAddress(address: string) {
+  async function gotoProfile(address: string) {
     try {
-      await navigator.clipboard.writeText(address);
-      dispatch('copied', { type: 'address', value: address });
+      goto(`/profile/${address}`);
     } catch (error) {
-      console.error('Failed to copy address:', error);
+      console.error('Failed to go to profile:', error);
     }
   }
 
@@ -463,6 +463,13 @@
     dispatch('exported', { format: 'csv', count: events.length });
   }
 </script>
+
+<!-- Event Details Modal moved outside to prevent positioning issues -->
+<SpinDetailsModal 
+  isVisible={showSpinDetailsModal}
+  spin={selectedEvent}
+  on:close={closeEventDetails}
+/>
 
 <div class="machine-history-container {compact ? 'compact' : ''}">
   <!-- Header -->
@@ -571,93 +578,102 @@
             >
               <!-- Mobile layout -->
               <div class="mobile-event-item md:hidden">
-                <div class="flex items-start justify-between mb-2">
-                  <div class="flex items-center gap-2">
-                    <TrendingUp class="w-4 h-4 text-green-400" />
-                    <span class="text-sm font-mono text-gray-300">
+                <!-- Compact header with win indicator, transaction ID, and action buttons -->
+                <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <TrendingUp class="w-4 h-4 text-green-400 flex-shrink-0" />
+                    <span class="text-sm font-mono text-gray-300 truncate">
                       {formatTxId(event.txid)}
                     </span>
                     <button
                       on:click={() => copyTxId(event.txid)}
-                      class="text-gray-400 hover:text-theme p-1"
+                      class="mobile-action-btn-small"
                       title="Copy transaction ID"
                     >
                       <Copy class="w-3 h-3" />
                     </button>
                   </div>
-                  <button
-                    on:click={() => openReplayLink(event)}
-                    class="text-gray-400 hover:text-green-400 p-1"
-                    title="Play replay"
-                  >
-                    <Play class="w-4 h-4" />
-                  </button>
-                  <button
-                    on:click={() => openEventDetails(event)}
-                    class="text-gray-400 hover:text-voi-400 p-1"
-                    title="View event details"
-                  >
-                    <Info class="w-4 h-4" />
-                  </button>
-                  <a
-                    href={getExplorerUrl(event.txid)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="text-gray-400 hover:text-voi-400 p-1"
-                    title="View on explorer"
-                  >
-                    <ExternalLink class="w-4 h-4" />
-                  </a>
-                  <button
-                    on:click={() => copyReplayLink(event)}
-                    class="text-gray-400 hover:text-voi-400 p-1"
-                    title="Share replay link"
-                  >
-                    <Share class="w-4 h-4" />
-                  </button>
+                  
+                  <!-- Action buttons moved to top row -->
+                  <div class="flex items-center gap-1">
+                    <button
+                      on:click={() => openReplayLink(event)}
+                      class="mobile-action-btn-small text-green-400 hover:text-green-300"
+                      title="Play replay"
+                    >
+                      <Play class="w-4 h-4" />
+                    </button>
+                    <button
+                      on:click={() => openEventDetails(event)}
+                      class="mobile-action-btn-small text-gray-400 hover:text-voi-400"
+                      title="View event details"
+                    >
+                      <Info class="w-4 h-4" />
+                    </button>
+                    <a
+                      href={getExplorerUrl(event.txid)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="mobile-action-btn-small text-gray-400 hover:text-voi-400"
+                      title="View on explorer"
+                    >
+                      <ExternalLink class="w-4 h-4" />
+                    </a>
+                    <button
+                      on:click={() => copyReplayLink(event)}
+                      class="mobile-action-btn-small text-gray-400 hover:text-voi-400"
+                      title="Share replay link"
+                    >
+                      <Share class="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 
+                <!-- Player info if available -->
                 {#if event.who}
                   <div class="mb-2">
-                    <span class="text-gray-500 text-sm">Player:</span>
+                    <span class="text-xs text-gray-500">Player:</span>
                     <button
-                      on:click={() => copyAddress(event.who)}
+                      on:click={() => gotoProfile(event.who)}
                       class="text-voi-400 hover:text-voi-300 font-mono text-sm ml-1"
-                      title="Copy player address"
+                      title="Go to player profile"
                     >
                       {formatAddress(event.who)}
                     </button>
                   </div>
                 {/if}
                 
-                <div class="grid grid-cols-2 gap-2 text-sm mb-2">
-                  <div>
-                    <span class="text-gray-500">Bet:</span>
-                    <span class="text-theme font-semibold ml-1">
-                      {formatVOI(Number(event.total_bet_amount))} VOI
-                    </span>
+                <!-- Simplified betting information in one compact row -->
+                <div class="flex items-center justify-between text-sm gap-4">
+                  <div class="flex items-center gap-4">
+                    <div class="text-center">
+                      <div class="text-xs text-gray-500">Bet</div>
+                      <div class="text-theme font-semibold">
+                        {formatVOI(Number(event.total_bet_amount))} VOI
+                      </div>
+                    </div>
+                    <div class="text-center">
+                      <div class="text-xs text-gray-500">Lines</div>
+                      <div class="text-gray-300">{event.paylines_count}</div>
+                    </div>
+                    <div class="text-center">
+                      <div class="text-xs text-gray-500">Won</div>
+                      <div class="text-gray-300">
+                        {formatVOI(Number(event.payout))} VOI
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <span class="text-gray-500">Lines:</span>
-                    <span class="text-gray-300 ml-1">{event.paylines_count}</span>
-                  </div>
-                  <div>
-                    <span class="text-gray-500">Won:</span>
-                    <span class="text-green-400 font-semibold ml-1">
-                      {formatVOI(Number(event.payout))} VOI
-                    </span>
-                  </div>
-                  <div>
-                    <span class="text-gray-500">Multiplier:</span>
-                    <span class="text-green-400 font-semibold ml-1">
+                  <div class="text-center">
+                    <div class="text-xs text-gray-500">Multiplier</div>
+                    <div class="font-semibold text-green-400">
                       {(Number(event.payout) / Number(event.total_bet_amount)).toFixed(2)}x
-                    </span>
+                    </div>
                   </div>
                 </div>
                 
-                <div class="flex items-center justify-between text-xs text-gray-500">
-                  <span>Round {event.round.toString()}</span>
-                  <span>{formatDate(event.created_at)}</span>
+                <!-- Round and date info in small text -->
+                <div class="text-xs text-gray-500 mt-2">
+                  Round {event.round.toString()} • {formatDate(event.created_at)}
                 </div>
               </div>
 
@@ -680,9 +696,9 @@
                 {#if event.who}
                   <div class="min-w-0">
                     <button
-                      on:click={() => copyAddress(event.who)}
+                      on:click={() => gotoProfile(event.who)}
                       class="text-voi-400 hover:text-voi-300 font-mono text-sm truncate block"
-                      title="Copy player address: {event.who}"
+                      title="Go to player profile"
                     >
                       {formatAddress(event.who)}
                     </button>
@@ -816,16 +832,9 @@
   {/if}
 </div>
 
-<!-- Event Details Modal -->
-<SpinDetailsModal 
-  isVisible={showSpinDetailsModal}
-  spin={selectedEvent}
-  on:close={closeEventDetails}
-/>
-
 <style>
   .machine-history-container {
-    @apply bg-slate-800 rounded-xl border border-slate-700 overflow-hidden;
+    @apply bg-slate-800 rounded-xl border border-slate-700;
   }
 
   .compact {
@@ -883,7 +892,12 @@
   }
 
   .event-item {
-    @apply bg-slate-700/30 rounded-lg p-4 border border-slate-600/50 hover:bg-slate-700/50 transition-colors;
+    @apply bg-slate-700/30 rounded-lg border border-slate-600/50 hover:bg-slate-700/50 transition-colors;
+  }
+  
+  
+  .mobile-event-item {
+    @apply p-3 space-y-2;
   }
 
   .highlighted-new {
@@ -906,12 +920,13 @@
     }
   }
 
-  .mobile-event-item {
-    @apply space-y-2;
+  /* Compact mobile action buttons */
+  .mobile-action-btn-small {
+    @apply p-2 rounded-md hover:bg-slate-700/50 transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center;
   }
 
   .desktop-event-item {
-    @apply grid gap-4 items-center;
+    @apply hidden md:grid gap-4 items-center p-4;
     grid-template-columns: 2fr 1.5fr 1fr 1fr 1fr 1fr auto;
   }
 

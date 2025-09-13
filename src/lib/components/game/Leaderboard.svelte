@@ -171,6 +171,10 @@
     currentPage = Math.max(0, Math.min(page, totalPages - 1));
   }
 
+  function gotoProfile(address: string) {
+    goto(`/profile/${address}`);
+  }
+
   function getRankIcon(rank: bigint) {
     const rankNum = Number(rank);
     if (rankNum === 1) return Crown;
@@ -427,9 +431,13 @@
                 {/if}
                 
                 <!-- Player Address -->
-                <div class="player-address" title={entry.who}>
-                  <span class="text-sm font-mono inline-block min-w-[8ch] max-w-full">{formatAddress(entry.who)}</span>
-                </div>
+                <button 
+                  on:click={() => gotoProfile(entry.who)}
+                  class="text-sm font-mono inline-block min-w-[8ch] max-w-full hover:text-voi-400 transition-colors"
+                  title="Go to player profile"
+                >
+                  {formatAddress(entry.who)}
+                </button>
               </div>
               
               <!-- Action Buttons -->
@@ -458,7 +466,7 @@
                 {#if playerAddress === entry.who}
                 <span class="you-badge">YOU</span>
               {/if}
-      </div>
+           </div>
               
               <!-- Metric value -->
               <div class="text-right">
@@ -489,7 +497,13 @@
             <!-- Player info -->
             <div class="flex-1 min-w-0">
               <div class="player-address" title={entry.who}>
-                <span class="inline-block min-w-[12ch] max-w-full">{formatAddress(entry.who)}</span>
+                <button 
+                  on:click={() => gotoProfile(entry.who)}
+                  class="text-sm font-mono inline-block min-w-[12ch] max-w-full hover:text-voi-400 transition-colors"
+                  title="Go to player profile"
+                >
+                  {formatAddress(entry.who)}
+                </button>
               </div>
               <div class="player-stats">
                 <span class="stat-item">

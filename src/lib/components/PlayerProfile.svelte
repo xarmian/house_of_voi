@@ -23,6 +23,7 @@
 	import PlayerStats from '$lib/components/game/PlayerStats.svelte';
 	import PlayerHistory from '$lib/components/game/PlayerHistory.svelte';
 	import PlayerAchievements from '$lib/components/game/PlayerAchievements.svelte';
+	import SpinDetailsModal from '$lib/components/modals/SpinDetailsModal.svelte';
 	import { hovStatsStore, connectionStatus } from '$lib/stores/hovStats';
 	import { hovStatsService } from '$lib/services/hovStats';
 	import { MULTI_CONTRACT_CONFIG } from '$lib/constants/network';
@@ -67,6 +68,10 @@
 	let showFullAddress = false;
 	let activeTab: 'stats' | 'history' | 'achievements' = 'stats';
 	let searchAddress = '';
+	
+	// Modal state for SpinDetailsModal
+	let showSpinDetailsModal = false;
+	let selectedSpin = null;
 	let showSearch = false;
 
 	// Computed values
@@ -179,7 +184,18 @@
 	}
 
 	function goBack() {
-		goto('/profile');
+		history.back();
+	}
+	
+	// Modal handlers for SpinDetailsModal
+	function handleOpenSpinDetails(event) {
+		selectedSpin = event.detail;
+		showSpinDetailsModal = true;
+	}
+	
+	function handleCloseSpinDetails() {
+		selectedSpin = null;
+		showSpinDetailsModal = false;
 	}
 
   // Search handled by AddressSearch popover in header actions
@@ -476,7 +492,16 @@
 					</div>
 				{:else if activeTab === 'history'}
 					<div class="history-tab" transition:fade={{ duration: 200 }}>
-						<PlayerHistory playerAddress={address} compact={false} pageSize={50} hideHeader={false} />
+						<PlayerHistory 
+							playerAddress={address} 
+							compact={false} 
+							pageSize={50} 
+							hideHeader={false}
+							bind:showSpinDetailsModal
+							bind:selectedSpin
+							on:openSpinDetails={handleOpenSpinDetails}
+							on:closeSpinDetails={handleCloseSpinDetails}
+						/>
 					</div>
 				{:else if activeTab === 'achievements'}
 					<div class="achievements-tab" transition:fade={{ duration: 200 }}>
@@ -487,6 +512,13 @@
 		</div>
 	{/if}
 </div>
+
+<!-- SpinDetailsModal rendered outside tab-content to avoid clipping -->
+<SpinDetailsModal 
+	isVisible={showSpinDetailsModal}
+	spin={selectedSpin}
+	on:close={handleCloseSpinDetails}
+/>
 
 <style>
 	.profile-page {
