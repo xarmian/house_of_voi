@@ -47,6 +47,7 @@
   $: walletBal = $isWalletConnected ? $walletBalance : (publicBalance || 0);
   $: reserved = $reservedBalance || 0;
   const minTransactionCost = 50500 + 30000 + 28500 + 15000 + 1000000; // spin + 1 payline + box + network + buffer
+  // Gross available excludes only active reservations; pending on-chain deductions are reflected when confirmed
   $: grossAvailable = Math.max(0, walletBal - reserved);
   $: availableForBetting = Math.max(0, grossAvailable - minTransactionCost);
   $: formattedAvailableCredits = Math.floor(availableForBetting / 1e6);

@@ -285,8 +285,12 @@ class BalanceManager {
       for (const tx of pending) {
         if (released >= deductedAmount - tolerance) break;
 
-        // Find the spin by txId
-        const spin = queue.spins.find((s: any) => s.txId === tx.transactionId || s.data?.txId === tx.transactionId);
+        // Find the spin by any known tx identifier (app call or payment)
+        const spin = queue.spins.find((s: any) => 
+          s.txId === tx.transactionId ||
+          s.data?.txId === tx.transactionId ||
+          s.data?.paymentTxId === tx.transactionId
+        );
         if (!spin) continue;
 
         // Release the bet amount reservation (display-oriented). Full fee effects are shown by the balance delta itself.

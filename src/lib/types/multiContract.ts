@@ -75,6 +75,21 @@ export interface ContractMetadata {
   /** Contract-specific symbols */
   symbols: string[];
   
+  /** Reel data for deterministic grid generation (optional) */
+  reelData?: string;
+  
+  /** Length of each reel (optional) */
+  reelLength?: number;
+  
+  /** Number of reels (optional) */
+  reelCount?: number;
+  
+  /** Window length for reel display (optional) */
+  windowLength?: number;
+  
+  /** Paylines configuration (optional) */
+  paylines?: number[][];
+  
   /** Custom payouts table */
   payouts?: Record<string, Record<number, number>>;
   

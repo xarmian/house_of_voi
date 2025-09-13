@@ -26,7 +26,7 @@
   const initialPaylines: number | null = data.initialPaylines || null;
   const initialTimestamp: number = data.initialTimestamp || Date.now();
   const slotAppId: number | null = data.slotAppId || null;
-  
+
   // Helper: convert grid string (15 chars) to 5x3 outcome grid
   function gridStringToOutcome(gridString: string): string[][] {
     const grid: string[][] = [];
@@ -90,9 +90,9 @@
     timestamp: replayData.timestamp || Date.now(),
     txId: replayData.txId || txId,
     contractId: replayData.contractId,
-    betKey: betKey, // Pass the bet key we already have
-    claimRound: claimRound, // Pass the claim round we already have
-    outcome: replayData.outcome // Pass the outcome grid
+    betKey: replayData.betKey, // Use betKey from server data
+    claimRound: replayData.claimRound, // Use claimRound from server data
+    outcome: replayData.outcome, // Pass the outcome grid
   } : null;
 
   function goHome() {
@@ -199,26 +199,14 @@
       }
     }
 
-    // New: compute replay data client-side from bet key + claim round
-    if (!replayData && betKey) {
+    // Compute replay data client-side from bet key + claim round
+    // Only needed for bet key URLs without transaction ID (txId cases are handled server-side)
+    if (!replayData && betKey && !txId) {
       try {
         isLoading = true;
 
-        let round = claimRound;
-        if (!round && txId) {
-          // Derive claim round as confirmed round + 1
-          try {
-            const client = algorandService.getClient();
-            const pendingInfo = await client.pendingTransactionInformation(txId).do();
-            const confirmed = pendingInfo['confirmed-round'] || 0;
-            if (confirmed > 0) round = confirmed + 1;
-          } catch (e) {
-            console.warn('Failed to derive round from txId; require claim round param');
-          }
-        }
-
-        if (!round) {
-          error = 'Missing claim round (cr). Provide cr=round or tx=txId in URL.';
+        if (!claimRound) {
+          error = 'Missing claim round (cr). Provide cr=round parameter in URL for bet key replays.';
           isLoading = false;
           return;
         }
@@ -234,7 +222,7 @@
             algorandService.updateAppId(contract.slotMachineAppId);
           }
         }
-        const gridString = await algorandService.getBetGridDeterministic(betKey, round, userAddress);
+        const gridString = await algorandService.getBetGridDeterministic(betKey, claimRound, userAddress);
         const outcome = gridStringToOutcome(gridString);
         // Derive bet-per-line and paylines from params or fall back to bet key
         let paylinesCount = initialPaylines ?? undefined;

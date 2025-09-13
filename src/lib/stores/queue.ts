@@ -70,8 +70,9 @@ function createQueueStore() {
         
         // Calculate reserved balance from active pending spins
         const activePendingSpins = filterActivePendingSpins(limitedSpins);
+        // Reserve only the bet amount (not fees), matching runtime behavior
         const totalReservedBalance = activePendingSpins.reduce((total, spin) => {
-          return total + (spin.estimatedTotalCost || estimateSpinTransactionCost(spin.betPerLine, spin.selectedPaylines));
+          return total + (spin.totalBet || 0);
         }, 0);
         
         return {
@@ -171,8 +172,7 @@ function createQueueStore() {
           totalPendingValue -= spin.totalBet;
         }
 
-        // Update reserved balance - release funds when spin leaves pending/active states
-        // Keep funds reserved until the spin is actually processed (PROCESSING or later)
+        // Update reserved balance - release funds when spin leaves pending/submitting states
         let totalReservedBalance = state.totalReservedBalance;
         const needsReservedFunds = (status: SpinStatus) => 
           [SpinStatus.PENDING, SpinStatus.SUBMITTING].includes(status);
@@ -187,18 +187,10 @@ function createQueueStore() {
           totalReservedBalance += reservedAmount;
           console.log(`💰 RESERVING funds: ${(reservedAmount / 1000000).toFixed(6)} VOI for spin ${spin.id.slice(-8)}. Total reserved now: ${(totalReservedBalance / 1000000).toFixed(6)} VOI`);
         } else if (wasReserved && !shouldBeReserved) {
-          // Spin no longer needs reserved funds
+          // Spin no longer needs reserved funds (left PENDING/SUBMITTING). Release immediately.
           const releaseAmount = spin.totalBet;
-          
-          // For failed/expired spins, immediately release reserved funds since no blockchain transaction occurred
-          // For completed spins, also release since the transaction cycle is finished
-          if ([SpinStatus.FAILED, SpinStatus.EXPIRED, SpinStatus.COMPLETED].includes(spinUpdate.status)) {
-            totalReservedBalance = Math.max(0, totalReservedBalance - releaseAmount);
-            console.log(`💸 RELEASING reserved funds: ${(releaseAmount / 1000000).toFixed(6)} VOI for ${spinUpdate.status} spin ${spin.id.slice(-8)}. Total reserved now: ${(totalReservedBalance / 1000000).toFixed(6)} VOI`);
-          } else {
-            // For other status changes (e.g., WAITING, PROCESSING), let balance manager handle when blockchain deduction occurs
-            console.log(`⏳ Spin ${spin.id.slice(-8)} no longer needs reserved funds (${oldStatus} → ${spinUpdate.status}) - letting balance manager handle release`);
-          }
+          totalReservedBalance = Math.max(0, totalReservedBalance - releaseAmount);
+          console.log(`💸 RELEASING reserved funds: ${(releaseAmount / 1000000).toFixed(6)} VOI for ${spinUpdate.status} spin ${spin.id.slice(-8)}. Total reserved now: ${(totalReservedBalance / 1000000).toFixed(6)} VOI`);
         }
 
         const newSpins = [...state.spins];
@@ -316,10 +308,10 @@ function createQueueStore() {
         
         const spin = state.spins[spinIndex];
         
-        // Don't double-release for terminal spins - they should have already released their funds
-        const terminalStates = [SpinStatus.COMPLETED, SpinStatus.FAILED, SpinStatus.EXPIRED];
-        if (terminalStates.includes(spin.status)) {
-          console.log(`⚠️ Attempted to force release funds for ${spin.status} spin ${spin.id.slice(-8)} - already released`);
+        // Only release if this spin is currently in a state that holds a reservation
+        const reservingStates = [SpinStatus.PENDING, SpinStatus.SUBMITTING];
+        if (!reservingStates.includes(spin.status)) {
+          console.log(`⚠️ Skipping force release for spin ${spin.id.slice(-8)} in state ${spin.status} (no reservation held)`);
           return state;
         }
         

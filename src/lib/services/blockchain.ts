@@ -118,6 +118,13 @@ export class BlockchainService {
       
       console.log(`💰 Spin ${spin.id.slice(-8)} moved to WAITING - reserved balance should now be released`);
 
+      // Proactively refresh balance to align UI with reservation release
+      try {
+        await balanceManager.getBalance(account.address, true);
+      } catch (e) {
+        console.warn('Failed to refresh balance after WAITING transition:', e);
+      }
+
       // Kick off immediate outcome processing to avoid queue polling delay
       ;(async () => {
         try {
