@@ -5,6 +5,7 @@
   import { bettingStore } from '$lib/stores/betting';
   import { queueStore, pendingSpins } from '$lib/stores/queue';
   import { queueProcessor } from '$lib/services/queueProcessor';
+  import { preferencesStore } from '$lib/stores/preferences';
   import { loadingStates } from '$lib/stores/animations';
   import { SpinStatus } from '$lib/types/queue';
   import { formatVOI } from '$lib/constants/betting';
@@ -561,6 +562,8 @@
     
     // Show win/loss celebration
     setTimeout(() => {
+      const isRapidMode = preferencesStore.getSnapshot().betting.rapidQueueMode;
+      
       if (spin.winnings > 0) {
         const winLevel = spin.winnings >= 100000000 ? 'jackpot' : 
                        spin.winnings >= 50000000 ? 'large' : 
@@ -587,16 +590,25 @@
           document.dispatchEvent(new CustomEvent('spin-animation-complete', { detail: { spinId: spin.id } }));
         }, durationMs + 100);
       } else {
-        playLoss().catch(() => {});
-        triggerLossFeedback({
-          id: spin.id,
-          totalBet: spin.totalBet
-        });
+        // In Rapid mode, skip loss animations and complete immediately
+        if (isRapidMode) {
+          // Skip loss sound and feedback in Rapid mode, signal immediate completion
+          setTimeout(() => {
+            document.dispatchEvent(new CustomEvent('spin-animation-complete', { detail: { spinId: spin.id } }));
+          }, 50); // Minimal delay for smooth flow
+        } else {
+          // Normal mode: show full loss animation
+          playLoss().catch(() => {});
+          triggerLossFeedback({
+            id: spin.id,
+            totalBet: spin.totalBet
+          });
 
-        // Loss feedback auto-hides after 2 seconds; then signal completion
-        setTimeout(() => {
-          document.dispatchEvent(new CustomEvent('spin-animation-complete', { detail: { spinId: spin.id } }));
-        }, 2000 + 100);
+          // Loss feedback auto-hides after 2 seconds; then signal completion
+          setTimeout(() => {
+            document.dispatchEvent(new CustomEvent('spin-animation-complete', { detail: { spinId: spin.id } }));
+          }, 2000 + 100);
+        }
       }
       
       // The animation queue will handle completion timing - no need to manually complete here
@@ -829,6 +841,12 @@
   }
 
   function triggerLossFeedback(spin: any) {
+    // Skip loss feedback entirely in Rapid mode
+    const isRapidMode = preferencesStore.getSnapshot().betting.rapidQueueMode;
+    if (isRapidMode) {
+      return;
+    }
+    
     // Clear any existing loss feedback timeout
     if (lossFeedbackTimeout) {
       clearTimeout(lossFeedbackTimeout);

@@ -5,6 +5,7 @@ import { queueStore } from '$lib/stores/queue';
 import { blockchainService } from './blockchain';
 import { SpinStatus } from '$lib/types/queue';
 import type { QueuedSpin } from '$lib/types/queue';
+import { preferencesStore } from '$lib/stores/preferences';
 
 export class QueueProcessor {
   private isRunning = false;
@@ -234,8 +235,8 @@ export class QueueProcessor {
       // Always start the spin animation for this spin
       document.dispatchEvent(new CustomEvent('start-spin-animation', { detail: { spinId: spin.id } }));
       
-      // For subsequent spins, add delay to allow animation
-      if (this.displayed.size > 0) {
+      // For subsequent spins, add delay to allow animation (unless rapid mode is enabled)
+      if (this.displayed.size > 0 && !this.isRapidModeEnabled()) {
         const revealMs = 2200; // 2.2s abbreviated spin
         await this.sleep(revealMs);
       }
@@ -248,8 +249,9 @@ export class QueueProcessor {
 
       // Mark as displayed
       this.displayed.add(spin.id);
-      // Small gap to avoid visual overlap (slightly longer for clarity)
-      await this.sleep(1200);
+      // Small gap to avoid visual overlap (reduce gap in rapid mode)
+      const gapMs = this.isRapidModeEnabled() ? 200 : 1200;
+      await this.sleep(gapMs);
     } finally {
       this.isDisplaying = false;
       // Continue with any remaining displays
@@ -309,6 +311,11 @@ export class QueueProcessor {
 
   private sleep(ms: number) {
     return new Promise((r) => setTimeout(r, ms));
+  }
+
+  private isRapidModeEnabled(): boolean {
+    const preferences = preferencesStore.getSnapshot();
+    return preferences.betting.rapidQueueMode;
   }
 
   // Public helpers preserved for compatibility

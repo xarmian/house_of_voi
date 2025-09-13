@@ -139,12 +139,15 @@ function createQueueStore() {
 
         spins.push(newSpin);
 
+        const newReservedBalance = totalReservedBalance + totalBet;
+        console.log(`💰 NEW SPIN QUEUED: ${(totalBet / 1000000).toFixed(6)} VOI bet reservation for spin ${spinId.slice(-8)}. Total reserved now: ${(newReservedBalance / 1000000).toFixed(6)} VOI`);
+
         return {
           ...state,
           spins,
           totalPendingValue: totalPendingValue + totalBet,
           // Reserve only the bet amount during PENDING/SUBMITTING
-          totalReservedBalance: totalReservedBalance + totalBet,
+          totalReservedBalance: newReservedBalance,
           lastUpdated: Date.now()
         };
       });
@@ -188,9 +191,10 @@ function createQueueStore() {
           const releaseAmount = spin.totalBet;
           
           // For failed/expired spins, immediately release reserved funds since no blockchain transaction occurred
-          if ([SpinStatus.FAILED, SpinStatus.EXPIRED].includes(spinUpdate.status)) {
+          // For completed spins, also release since the transaction cycle is finished
+          if ([SpinStatus.FAILED, SpinStatus.EXPIRED, SpinStatus.COMPLETED].includes(spinUpdate.status)) {
             totalReservedBalance = Math.max(0, totalReservedBalance - releaseAmount);
-            console.log(`💸 RELEASING reserved funds: ${(releaseAmount / 1000000).toFixed(6)} VOI for FAILED/EXPIRED spin ${spin.id.slice(-8)}. Total reserved now: ${(totalReservedBalance / 1000000).toFixed(6)} VOI`);
+            console.log(`💸 RELEASING reserved funds: ${(releaseAmount / 1000000).toFixed(6)} VOI for ${spinUpdate.status} spin ${spin.id.slice(-8)}. Total reserved now: ${(totalReservedBalance / 1000000).toFixed(6)} VOI`);
           } else {
             // For other status changes (e.g., WAITING, PROCESSING), let balance manager handle when blockchain deduction occurs
             console.log(`⏳ Spin ${spin.id.slice(-8)} no longer needs reserved funds (${oldStatus} → ${spinUpdate.status}) - letting balance manager handle release`);
@@ -311,10 +315,18 @@ function createQueueStore() {
         if (spinIndex === -1) return state;
         
         const spin = state.spins[spinIndex];
+        
+        // Don't double-release for terminal spins - they should have already released their funds
+        const terminalStates = [SpinStatus.COMPLETED, SpinStatus.FAILED, SpinStatus.EXPIRED];
+        if (terminalStates.includes(spin.status)) {
+          console.log(`⚠️ Attempted to force release funds for ${spin.status} spin ${spin.id.slice(-8)} - already released`);
+          return state;
+        }
+        
         const releasedAmount = spin.totalBet;
         const newReservedBalance = Math.max(0, state.totalReservedBalance - releasedAmount);
         
-        console.log(`🔀 FORCE RELEASING bet reservation: ${(releasedAmount / 1000000).toFixed(6)} VOI for spin ${spin.id.slice(-8)} BEFORE UI update. Total reserved now: ${(newReservedBalance / 1000000).toFixed(6)} VOI`);
+        console.log(`🔀 FORCE RELEASING bet reservation: ${(releasedAmount / 1000000).toFixed(6)} VOI for spin ${spin.id.slice(-8)}. Total reserved now: ${(newReservedBalance / 1000000).toFixed(6)} VOI`);
         
         return {
           ...state,
@@ -335,12 +347,60 @@ function createQueueStore() {
       });
       
       return foundSpin;
+    },
+
+    // Validate reserved balance consistency (debug helper)
+    validateReservedBalance() {
+      update(state => {
+        const activeReservations = state.spins
+          .filter(spin => [SpinStatus.PENDING, SpinStatus.SUBMITTING].includes(spin.status))
+          .reduce((total, spin) => total + spin.totalBet, 0);
+        
+        if (activeReservations !== state.totalReservedBalance) {
+          console.warn(`⚠️ RESERVATION MISMATCH: Expected ${(activeReservations / 1000000).toFixed(6)} VOI but have ${(state.totalReservedBalance / 1000000).toFixed(6)} VOI reserved`);
+          console.warn('Active reservations by spin:', state.spins
+            .filter(spin => [SpinStatus.PENDING, SpinStatus.SUBMITTING].includes(spin.status))
+            .map(spin => `${spin.id.slice(-8)}: ${(spin.totalBet / 1000000).toFixed(6)} VOI (${spin.status})`)
+          );
+          
+          // Auto-correct the reserved balance
+          return {
+            ...state,
+            totalReservedBalance: Math.max(0, activeReservations),
+            lastUpdated: Date.now()
+          };
+        }
+        
+        console.log(`✅ Reserved balance validated: ${(state.totalReservedBalance / 1000000).toFixed(6)} VOI`);
+        return state;
+      });
     }
   };
 }
 
 export const queueStore = createQueueStore();
 
+// Export debug helpers to global window for troubleshooting
+if (typeof window !== 'undefined') {
+  (window as any).validateQueueReservations = () => queueStore.validateReservedBalance();
+  (window as any).debugQueueState = () => {
+    let state: any;
+    const unsub = queueStore.subscribe(s => { state = s; });
+    unsub();
+    console.log('Queue State:', {
+      totalSpins: state.spins.length,
+      pendingSpins: state.spins.filter((s: any) => s.status === 'pending').length,
+      completedSpins: state.spins.filter((s: any) => s.status === 'completed').length,
+      totalReservedBalance: `${(state.totalReservedBalance / 1000000).toFixed(6)} VOI`,
+      spins: state.spins.map((s: any) => ({
+        id: s.id.slice(-8),
+        status: s.status,
+        totalBet: `${(s.totalBet / 1000000).toFixed(6)} VOI`,
+        winnings: s.winnings ? `${(s.winnings / 1000000).toFixed(6)} VOI` : '0'
+      }))
+    });
+  };
+}
 
 // Derived stores for convenience
 export const queueStats = derived(

@@ -293,6 +293,13 @@ export class BlockchainService {
           }
         });
 
+        // Force balance refresh immediately when outcome is detected
+        // This ensures balance updates promptly regardless of claim status
+        if (account) {
+          console.log(`💰 Forcing balance refresh for winnings: ${(winnings / 1000000).toFixed(6)} VOI`);
+          balanceManager.getBalance(account.address, true);
+        }
+
         // Auto-claim immediately once outcome is known
         try {
           const spinForClaim: any = { ...spin, outcome: grid, winnings };

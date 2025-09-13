@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { fly, fade } from 'svelte/transition';
-  import { Clock, RefreshCw, TrendingUp, TrendingDown, X, Check, Loader, Info, Share2 } from 'lucide-svelte';
+  import { Clock, RefreshCw, TrendingUp, TrendingDown, X, Check, Loader, Info, Share2, Zap } from 'lucide-svelte';
   import { queueStore, queueStats, pendingSpins, recentSpins, allSpins } from '$lib/stores/queue';
   import { currentSpinId } from '$lib/stores/game';
   import { formatVOI } from '$lib/constants/betting';
+  import { preferencesStore, bettingPreferences } from '$lib/stores/preferences';
   import { ensureBase32TxId, formatTxIdForDisplay } from '$lib/utils/transactionUtils';
   import { SpinStatus } from '$lib/types/queue';
   import type { QueuedSpin } from '$lib/types/queue';
@@ -196,6 +197,17 @@
     queueStore.clearOldSpins(0); // Clear all completed spins
     currentPage = 0; // Reset pagination after clearing
   }
+
+  function toggleRapidMode() {
+    preferencesStore.updateBettingPreferences({
+      rapidQueueMode: !$bettingPreferences.rapidQueueMode
+    });
+    
+    // Play button click sound
+    playButtonClick().catch(() => {
+      // Ignore sound errors
+    });
+  }
   
   
   function goToPage(page: number) {
@@ -318,6 +330,17 @@
       </div>
       
       <div class="flex items-center gap-2">
+        <!-- Rapid Mode Toggle -->
+        <button
+          on:click={toggleRapidMode}
+          class="rapid-toggle"
+          class:rapid-toggle-active={$bettingPreferences.rapidQueueMode}
+          title={$bettingPreferences.rapidQueueMode ? 'Disable Rapid Mode' : 'Enable Rapid Mode - Skip delays between spins'}
+        >
+          <Zap class="w-3 h-3" />
+          <span class="rapid-text">Rapid</span>
+        </button>
+        
         {#if $queueStats.totalSpins > 0}
           <button
             on:click={clearCompleted}
@@ -662,5 +685,27 @@
   
   .pagination-info {
     @apply flex items-center;
+  }
+  
+  .rapid-toggle {
+    @apply flex items-center gap-1 px-2 py-1 rounded-full bg-slate-700 hover:bg-slate-600 text-theme-text opacity-60 hover:opacity-100 transition-all duration-200;
+  }
+  
+  .rapid-text {
+    @apply text-xs font-medium;
+  }
+  
+  .rapid-toggle-active {
+    @apply bg-voi-600 hover:bg-voi-500 text-theme opacity-100;
+    animation: rapidPulse 2s ease-in-out infinite;
+  }
+  
+  @keyframes rapidPulse {
+    0%, 100% {
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.6);
+    }
   }
 </style>
