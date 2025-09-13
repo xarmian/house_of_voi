@@ -127,7 +127,7 @@
     
     <!-- Tournament Banner -->
     <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-600 p-8 mb-8">
-      <div class="absolute inset-0 bg-black/20"></div>
+      <div class="absolute inset-0 bg-black/20 pointer-events-none"></div>
       <div class="relative z-10 text-center text-white">
         <div class="flex items-center justify-center gap-3 mb-4">
           <Crown class="w-12 h-12" />

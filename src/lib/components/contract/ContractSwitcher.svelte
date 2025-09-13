@@ -160,10 +160,21 @@
       : null;
   });
 
-  // Setup click outside handler
-  $: if (typeof document !== 'undefined') {
-    document.addEventListener('click', handleClickOutside);
-  }
+  // Setup/cleanup click outside handler once
+  import { onMount, onDestroy } from 'svelte';
+  let hasBoundClickOutside = false;
+  onMount(() => {
+    if (typeof document !== 'undefined' && !hasBoundClickOutside) {
+      document.addEventListener('click', handleClickOutside);
+      hasBoundClickOutside = true;
+    }
+  });
+  onDestroy(() => {
+    if (typeof document !== 'undefined' && hasBoundClickOutside) {
+      document.removeEventListener('click', handleClickOutside);
+      hasBoundClickOutside = false;
+    }
+  });
 </script>
 
 {#if shouldShow}

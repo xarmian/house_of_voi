@@ -2,6 +2,7 @@
   import '../app.css';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
   import { fade } from 'svelte/transition';
   import { MetaTags, deepMerge } from 'svelte-meta-tags';
   import { soundService } from '$lib/services/soundService';
@@ -10,6 +11,7 @@
   import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
   import { checkForPurchaseResult, clearPurchaseParams, showPurchaseNotification } from '$lib/utils/voiPurchase';
   import { updateDetector } from '$lib/services/updateDetector';
+  import { cleanupAnimations } from '$lib/stores/animations';
   import { winFeedStore } from '$lib/stores/winFeed';
   import { supabaseService } from '$lib/services/supabase';
   import { themeStore } from '$lib/stores/theme';
@@ -24,6 +26,47 @@
   $: isTournamentRoute = $page.route.id?.startsWith('/tournament');
   $: showUnifiedHeader = isGameRoute || isHouseRoute || isProfileRoute || isTournamentRoute;
   $: metaTags = deepMerge(data.baseMetaTags, $page.data.pageMetaTags || {});
+
+  // Ensure any game overlays/animations are cleaned up when leaving the app route
+  $: if (!isGameRoute) {
+    try { cleanupAnimations(); } catch (e) { /* no-op */ }
+  }
+  
+  // NAVIGATION FIX: Enhanced cleanup when leaving app routes
+  // Track previous route to detect route changes
+  let previousRoute = '';
+  $: if (browser && $page.route.id) {
+    const currentRoute = $page.route.id;
+    const wasAppRoute = previousRoute.startsWith('/app');
+    const isNowAppRoute = currentRoute.startsWith('/app');
+    
+    // If we were on an app route and now we're not, ensure thorough cleanup
+    if (wasAppRoute && !isNowAppRoute) {
+      console.log('🧹 Navigation cleanup: leaving app route', previousRoute, '->', currentRoute);
+      
+      try {
+        // Import and stop global services that might interfere with navigation
+        import('$lib/services/queueProcessor').then(({ queueProcessor }) => {
+          queueProcessor.stop();
+        }).catch(() => {});
+        
+        import('$lib/stores/houseBalance').then(({ houseBalanceActions }) => {
+          houseBalanceActions.reset();
+        }).catch(() => {});
+        
+        import('$lib/services/balanceManager').then(({ balanceManager }) => {
+          balanceManager.reset();
+        }).catch(() => {});
+        
+        // Clean up any remaining animations
+        cleanupAnimations();
+      } catch (e) {
+        console.warn('Navigation cleanup warning:', e);
+      }
+    }
+    
+    previousRoute = currentRoute;
+  }
   
   let mounted = false;
   

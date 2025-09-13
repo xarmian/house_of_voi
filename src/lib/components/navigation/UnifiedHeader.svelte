@@ -10,16 +10,20 @@
   
   const gamingWalletData = walletService.getPublicWalletData();
 
+  const profileHref = gamingWalletData?.address
+    ? `/profile/${gamingWalletData.address}`
+    : '/profile';
+
   const navItems = [
     { href: '/', label: 'Home', icon: Home, exact: true },
     { href: '/app', label: 'Play', icon: Gamepad2, exact: false },
     { href: '/house', label: 'House', icon: Building, exact: false },
     { href: '/tournament/weekend-2025-09-12', label: 'Tournament', icon: Trophy, exact: false },
-    { href: '/profile/' + gamingWalletData?.address || '', label: 'Profiles', icon: User, exact: false }
+    { href: profileHref, label: 'Profiles', icon: User, exact: false }
   ];  
 </script>
 
-<header class="backdrop-blur-md border-b sticky top-0 z-40" 
+<header class="backdrop-blur-md border-b sticky top-0 z-50" 
         style="background: var(--theme-surface-primary, rgb(30 41 59 / 0.95)); border-color: var(--theme-surface-border, #475569);">
   <div class="max-w-7xl mx-auto px-4 py-3">
     <div class="flex items-center justify-between">

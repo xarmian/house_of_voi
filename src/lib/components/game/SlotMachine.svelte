@@ -125,6 +125,10 @@
   // Track if we're in replay mode to prevent queue auto-start
   let isReplayMode = false;
   
+  // Outcome display queue state
+  let outcomeDisplayQueue: any[] = [];
+  let isDisplayingOutcome = false;
+  
   
   
   // Get current contract for operations - use prop override or global selected contract
@@ -245,27 +249,6 @@
       handleQueueUpdate(queueState);
     });
 
-    // Listen for replay events from GameQueue
-    const handleReplayEvent = (event: CustomEvent) => {
-      handleReplaySpin(event.detail);
-    };
-
-    // Listen for queue processor animation start events
-    const handleStartAnimation = (event: CustomEvent) => {
-      const { spinId } = event.detail;
-      console.log(`🎬 SlotMachine: Queue requested animation for ${spinId.slice(-8)}`);
-      startContinuousSpinning(spinId);
-    };
-
-    // Listen for outcome display events from queue processor
-    const handleDisplayOutcome = (event: CustomEvent) => {
-      const { spin, outcome, winnings, betAmount } = event.detail;
-      console.log(`🎯 SlotMachine: Displaying outcome for ${spin.id.slice(-8)}`);
-      
-      // Display the outcome (stop reels and show results)
-      displayOutcome({ ...spin, outcome, winnings, totalBet: betAmount });
-    };
-
     // @ts-ignore
     document.addEventListener('replay-spin', handleReplayEvent);
     // @ts-ignore
@@ -342,32 +325,94 @@
     if (autoSpinStopTimeout) clearTimeout(autoSpinStopTimeout);
     
     // Clear outcome display queue
-    outcomeDisplayQueue = [];
-    isDisplayingOutcome = false;
+    try {
+      if (typeof outcomeDisplayQueue !== 'undefined') {
+        outcomeDisplayQueue = [];
+      }
+      if (typeof isDisplayingOutcome !== 'undefined') {
+        isDisplayingOutcome = false;
+      }
+    } catch (e) {
+      // Ignore cleanup errors
+    }
     
     // Clear all replay timeouts
-    replayTimeouts.forEach(timeout => clearTimeout(timeout));
-    replayTimeouts = [];
+    try {
+      if (typeof replayTimeouts !== 'undefined' && Array.isArray(replayTimeouts)) {
+        replayTimeouts.forEach(timeout => clearTimeout(timeout));
+        replayTimeouts = [];
+      }
+    } catch (e) {
+      // Ignore cleanup errors
+    }
     
     // Clear all active celebration timeouts
-    activeCelebrations.forEach(celebration => {
-      clearTimeout(celebration.timeout);
-    });
-    activeCelebrations.clear();
+    try {
+      if (typeof activeCelebrations !== 'undefined' && activeCelebrations instanceof Map) {
+        activeCelebrations.forEach(celebration => {
+          clearTimeout(celebration.timeout);
+        });
+        activeCelebrations.clear();
+      }
+    } catch (e) {
+      // Ignore cleanup errors
+    }
     
     // MEMORY LEAK FIX: Clean up global deduplication set periodically
-    if (GLOBAL_PROCESSED_REPLAYS.size > 50) {
-      GLOBAL_PROCESSED_REPLAYS.clear();
+    try {
+      if (typeof GLOBAL_PROCESSED_REPLAYS !== 'undefined' && GLOBAL_PROCESSED_REPLAYS instanceof Set && GLOBAL_PROCESSED_REPLAYS.size > 50) {
+        GLOBAL_PROCESSED_REPLAYS.clear();
+      }
+    } catch (e) {
+      // Ignore cleanup errors
     }
     
     // MEMORY LEAK FIX: Clear auto-celebrated spin IDs to prevent memory bloat
-    autoCelebratedSpinIds.clear();
+    try {
+      if (typeof autoCelebratedSpinIds !== 'undefined' && autoCelebratedSpinIds instanceof Set) {
+        autoCelebratedSpinIds.clear();
+      }
+    } catch (e) {
+      // Ignore cleanup errors
+    }
     
     // Stop any spinning sounds
     soundService.stopLoopingSound('spin-loop', { fadeOut: 0.1 }).catch(() => {
       // Ignore sound errors
     });
+    
+    // NAVIGATION FIX: Ensure document event listeners are removed
+    // This is critical for preventing navigation issues
+    try {
+      // @ts-ignore
+      document.removeEventListener('replay-spin', handleReplayEvent);
+      // @ts-ignore
+      document.removeEventListener('start-spin-animation', handleStartAnimation);
+      // @ts-ignore
+      document.removeEventListener('display-spin-outcome', handleDisplayOutcome);
+    } catch (e) {
+      // Ignore errors if handlers are undefined
+    }
   });
+  
+  // Document event handlers - defined at component scope for proper cleanup
+  const handleReplayEvent = (event: CustomEvent) => {
+    handleReplaySpin(event.detail);
+  };
+  
+  const handleStartAnimation = (event: CustomEvent) => {
+    const { spinId } = event.detail;
+    console.log(`🎬 SlotMachine: Queue requested animation for ${spinId.slice(-8)}`);
+    startContinuousSpinning(spinId);
+  };
+  
+  const handleDisplayOutcome = (event: CustomEvent) => {
+    const { spin, outcome, winnings, betAmount } = event.detail;
+    console.log(`🎯 SlotMachine: Displaying outcome for ${spin.id.slice(-8)}`);
+    
+    // Display the outcome (stop reels and show results)
+    displayOutcome({ ...spin, outcome, winnings, totalBet: betAmount });
+  };
   
   function handleSpin(event: CustomEvent) {
     const { betPerLine, selectedPaylines, totalBet } = event.detail;
