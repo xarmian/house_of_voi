@@ -140,9 +140,61 @@
     }
   }
 
-  // Check if player is in top 3
-  function isTop3(rank: number): boolean {
-    return rank <= 3;
+  // Calculate display ranks with tie handling
+  function calculateDisplayRanks(players: TournamentPlayer[], categoryKey: string): TournamentPlayer[] {
+    if (!players || players.length === 0) return players;
+    
+    // Create a copy to avoid mutating the original
+    const playersWithDisplayRank = players.map(p => ({ ...p }));
+    
+    let currentRank = 1;
+    for (let i = 0; i < playersWithDisplayRank.length; i++) {
+      if (i === 0) {
+        // First player always gets rank 1
+        playersWithDisplayRank[i].displayRank = currentRank;
+      } else {
+        const currentPlayer = playersWithDisplayRank[i];
+        const previousPlayer = playersWithDisplayRank[i - 1];
+        
+        // Check if current player has same value as previous player
+        const hasSameValue = compareMetricValues(currentPlayer, previousPlayer, categoryKey);
+        
+        if (hasSameValue) {
+          // Same value = same rank
+          playersWithDisplayRank[i].displayRank = playersWithDisplayRank[i - 1].displayRank;
+        } else {
+          // Different value = new rank (skip numbers for tied players)
+          currentRank = i + 1;
+          playersWithDisplayRank[i].displayRank = currentRank;
+        }
+      }
+    }
+    
+    return playersWithDisplayRank;
+  }
+  
+  // Compare metric values for tie detection
+  function compareMetricValues(player1: TournamentPlayer, player2: TournamentPlayer, categoryKey: string): boolean {
+    switch (categoryKey) {
+      case 'volume':
+        return player1.total_volume === player2.total_volume;
+      case 'rtp':
+        // Round to 1 decimal for comparison to handle floating point precision
+        const rtp1 = Math.round((player1.rtp_percent || 0) * 10) / 10;
+        const rtp2 = Math.round((player2.rtp_percent || 0) * 10) / 10;
+        return rtp1 === rtp2;
+      case 'win_streak':
+        return (player1.longest_win_streak || 0) === (player2.longest_win_streak || 0);
+      case 'overall':
+        return (player1.combined_rank || 0) === (player2.combined_rank || 0);
+      default:
+        return false;
+    }
+  }
+
+  // Check if player is in top 3 (using display rank)
+  function isTop3(displayRank: number): boolean {
+    return displayRank <= 3;
   }
 
   // Navigate to player profile
@@ -222,7 +274,7 @@
     <!-- Category Leaderboards Grid -->
     <div class="grid lg:grid-cols-2 gap-6">
       {#each Object.entries(categories) as [categoryKey, category]}
-        {@const players = getPlayersForCategory(categoryKey)}
+        {@const players = calculateDisplayRanks(getPlayersForCategory(categoryKey), categoryKey)}
         {@const currentPlayer = players.find(p => p.who === playerAddress)}
         
         <div class="category-card">
@@ -260,9 +312,10 @@
               <!-- All Players (with max height and scroll) -->
               <div class="space-y-2 max-h-80 overflow-y-auto">
                 {#each players as player (player.who)}
-                  {@const trophy = getTrophyDisplay(player.rank)}
+                  {@const displayRank = player.displayRank || player.rank}
+                  {@const trophy = getTrophyDisplay(displayRank)}
                   {@const isCurrentPlayer = player.who === playerAddress}
-                  {@const isTopThree = isTop3(player.rank)}
+                  {@const isTopThree = isTop3(displayRank)}
                   
                   <div class="player-row {isCurrentPlayer ? 'current-player' : ''} {isTopThree ? 'top-three' : ''}">
                     <div class="flex items-center gap-4">
@@ -272,7 +325,7 @@
                           <svelte:component this={trophy.icon} class="w-5 h-5 {trophy.color}" />
                         {:else}
                           <div class="w-5 h-5 flex items-center justify-center">
-                            <span class="text-xs font-bold text-gray-500">#{player.rank}</span>
+                            <span class="text-xs font-bold text-gray-500">#{displayRank}</span>
                           </div>
                         {/if}
                       </div>
@@ -330,7 +383,7 @@
                     <div class="flex items-center gap-4">
                       <div class="flex items-center gap-2">
                         <Target class="w-4 h-4 text-voi-400" />
-                        <span class="text-sm font-bold text-voi-400">#{currentPlayer.rank}</span>
+                        <span class="text-sm font-bold text-voi-400">#{currentPlayer.displayRank || currentPlayer.rank}</span>
                       </div>
                       
                       <div class="flex-1">

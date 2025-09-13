@@ -19,6 +19,7 @@ export interface TournamentPlayer {
   volume_rank?: number;
   rtp_rank?: number;
   streak_rank?: number;
+  displayRank?: number; // For frontend tie handling
 }
 
 export interface TournamentCategories {
