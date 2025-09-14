@@ -444,9 +444,20 @@
     const spinId = queueStore.addSpin(betPerLine, selectedPaylines, totalBet, undefined, $selectedContract?.id);
     console.log(`📝 Spin ${spinId.slice(-8)} added to queue - queue will handle all processing`);
 
-    // Start animation immediately if no current spin is being displayed
+    // Start animation for the correct next spin (head-of-line), not necessarily the newly added one.
+    // This prevents auto mode from highlighting the newest spin instead of the next in queue.
     if (!$currentSpinId || !$isSpinning) {
-      document.dispatchEvent(new CustomEvent('start-spin-animation', { detail: { spinId } }));
+      // Grab a synchronous snapshot of the queue
+      let snapshot: { spins: any[] } = { spins: [] };
+      const unsub = queueStore.subscribe((s) => { snapshot = s; });
+      unsub();
+
+      // Find the oldest non-terminal spin (the one that should be animated/displayed next)
+      const nonTerminal = snapshot.spins.filter((s) => ![SpinStatus.COMPLETED, SpinStatus.FAILED, SpinStatus.EXPIRED].includes(s.status));
+      const nextSpin = nonTerminal.sort((a, b) => a.timestamp - b.timestamp)[0];
+
+      const targetSpinId = nextSpin?.id || spinId;
+      document.dispatchEvent(new CustomEvent('start-spin-animation', { detail: { spinId: targetSpinId } }));
     }
 
     // Mark this spin as user-initiated so queue knows to reveal immediately when ready

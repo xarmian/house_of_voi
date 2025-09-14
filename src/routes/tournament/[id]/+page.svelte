@@ -261,7 +261,11 @@
                       <span>{prize.place === 1 ? '1st' : prize.place === 2 ? '2nd' : '3rd'}</span>
                     </div>
                     <span class="text-gray-300">
+                      {#if category.id === 'losing_streak'}
+                      TBD
+                    {:else}
                       {prize.voi > 0 ? `${prize.voi.toLocaleString()} VOI + ` : ''}{prize.trophy}
+                    {/if}
                     </span>
                   </div>
                 {/each}

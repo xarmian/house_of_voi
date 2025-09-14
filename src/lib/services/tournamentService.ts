@@ -15,10 +15,12 @@ export interface TournamentPlayer {
   total_volume: number;
   rtp_percent?: number;
   longest_win_streak?: number;
+  longest_losing_streak?: number;
   combined_rank?: number;
   volume_rank?: number;
   rtp_rank?: number;
   streak_rank?: number;
+  losing_streak_rank?: number;
   displayRank?: number; // For frontend tie handling
 }
 
@@ -26,6 +28,7 @@ export interface TournamentCategories {
   volume: TournamentPlayer[];
   rtp: TournamentPlayer[];
   win_streak: TournamentPlayer[];
+  losing_streak: TournamentPlayer[];
   overall: TournamentPlayer[];
 }
 
@@ -116,6 +119,7 @@ class TournamentService {
         volumePlayers: tournamentData.categories.volume.length,
         rtpPlayers: tournamentData.categories.rtp.length,
         streakPlayers: tournamentData.categories.win_streak.length,
+        losingStreakPlayers: tournamentData.categories.losing_streak?.length || 0,
         overallPlayers: tournamentData.categories.overall.length
       });
 
@@ -140,12 +144,14 @@ class TournamentService {
     volume: TournamentPlayer | null;
     rtp: TournamentPlayer | null;
     win_streak: TournamentPlayer | null;
+    losing_streak: TournamentPlayer | null;
     overall: TournamentPlayer | null;
   } {
     return {
       volume: data.categories.volume.find(p => p.who === playerAddress) || null,
       rtp: data.categories.rtp.find(p => p.who === playerAddress) || null,
       win_streak: data.categories.win_streak.find(p => p.who === playerAddress) || null,
+      losing_streak: data.categories.losing_streak.find(p => p.who === playerAddress) || null,
       overall: data.categories.overall.find(p => p.who === playerAddress) || null
     };
   }

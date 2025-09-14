@@ -34,6 +34,12 @@ export const load: PageLoad = async ({ params, url }) => {
         description: 'Longest consecutive wins',
         icon: 'zap'
       },
+      {
+        id: 'losing_streak',
+        name: 'Losing Streak',
+        description: 'Longest consecutive losses (20 lines only)',
+        icon: 'trending-down'
+      }
     ],
     prizes: {
       overall: [
@@ -45,7 +51,7 @@ export const load: PageLoad = async ({ params, url }) => {
         { place: 1, voi: 5000, trophy: 'Gold', description: '5,000 Voi + Gold Trophy' },
         { place: 2, voi: 0, trophy: 'Silver', description: 'Silver Trophy' },
         { place: 3, voi: 0, trophy: 'Bronze', description: 'Bronze Trophy' }
-      ]
+      ],
     },
     rules: [
       'One Wallet per Player!!',

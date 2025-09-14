@@ -13,6 +13,7 @@
     RefreshCw,
     Star,
     TrendingUp,
+    TrendingDown,
     AlertCircle,
     CheckCircle
   } from 'lucide-svelte';
@@ -55,6 +56,13 @@
       icon: Zap,
       color: 'from-purple-500 to-violet-500', 
       iconColor: 'text-purple-400'
+    },
+    losing_streak: {
+      name: 'Losing Streak Champion',
+      description: 'Longest consecutive losses (20 lines only)',
+      icon: TrendingDown,
+      color: 'from-red-500 to-rose-500',
+      iconColor: 'text-red-400'
     },
     overall: {
       name: 'Overall Champion',
@@ -120,6 +128,8 @@
         return `${player.rtp_percent?.toFixed(1) || '0.0'}%`;
       case 'win_streak':
         return `${player.longest_win_streak || 0} wins`;
+      case 'losing_streak':
+        return `${player.longest_losing_streak || 0} losses`;
       case 'overall':
         return `Combined: ${player.combined_rank}`;
       default:
@@ -135,6 +145,7 @@
       case 'volume': return tournamentData.categories.volume || [];
       case 'rtp': return tournamentData.categories.rtp || [];
       case 'win_streak': return tournamentData.categories.win_streak || [];
+      case 'losing_streak': return tournamentData.categories.losing_streak || [];
       case 'overall': return tournamentData.categories.overall || [];
       default: return [];
     }
@@ -185,6 +196,8 @@
         return rtp1 === rtp2;
       case 'win_streak':
         return (player1.longest_win_streak || 0) === (player2.longest_win_streak || 0);
+      case 'losing_streak':
+        return (player1.longest_losing_streak || 0) === (player2.longest_losing_streak || 0);
       case 'overall':
         return (player1.combined_rank || 0) === (player2.combined_rank || 0);
       default:
@@ -353,7 +366,7 @@
                             <span>
                               Vol: #{player.volume_rank} | 
                               RTP: #{player.rtp_rank} | 
-                              Streak: #{player.streak_rank}
+                              Win Streak: #{player.streak_rank}
                             </span>
                           {/if}
                         </div>

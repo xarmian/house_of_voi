@@ -42,7 +42,8 @@
 
   // Auto Spin state - now using centralized store
   let autoSpinInterval: NodeJS.Timeout | null = null;
-  let autoSpinDelay = 3000; // 3 seconds between spins - intentionally rapid queuing
+  let autoSpinDelay = 4000; // Default: 4s between spins
+  let lastAutoSpinDelay = autoSpinDelay;
 
   // Subscribe to animation preferences
   $: preferences = $animationPreferences;
@@ -52,6 +53,16 @@
   $: bettingPrefs = $bettingPreferences;
   $: customQuickBets = bettingPrefs.quickBets;
   $: defaultQuickBet = bettingPrefs.defaultQuickBet;
+  // Adjust auto spin interval based on Rapid mode preference
+  $: autoSpinDelay = bettingPrefs.rapidQueueMode ? 3000 : 4000;
+  // If auto spin is active and delay changes, restart interval with new delay
+  $: if ($isAutoSpinning && autoSpinDelay !== lastAutoSpinDelay) {
+    lastAutoSpinDelay = autoSpinDelay;
+    if (autoSpinInterval) clearInterval(autoSpinInterval);
+    autoSpinInterval = setInterval(() => {
+      executeAutoSpin();
+    }, autoSpinDelay);
+  }
   
   // Detect when wallet exists but is locked
   $: walletExistsButLocked = $hasExistingWallet && !$isWalletConnected;
@@ -260,7 +271,8 @@
     // Execute first spin immediately
     executeAutoSpin();
     
-    // Start the interval for subsequent spins - rapid queuing every 5 seconds
+    // Start the interval for subsequent spins using current mode's delay
+    lastAutoSpinDelay = autoSpinDelay;
     autoSpinInterval = setInterval(() => {
       executeAutoSpin();
     }, autoSpinDelay);
