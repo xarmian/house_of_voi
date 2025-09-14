@@ -193,7 +193,11 @@
               </div>
               <div class="text-sm text-right">
                 <div class="font-bold text-voi-400">
-                  {prize.voi > 0 ? `${prize.voi.toLocaleString()} VOI` : ''}
+                  {#if prize.voi > 0}
+                    <span class="line-through text-gray-500">{prize.voi.toLocaleString()} VOI</span>
+                    <br>
+                    <span class="text-green-400">now {(prize.voi * 2).toLocaleString()} VOI</span>
+                  {/if}
                 </div>
                 <div class="text-xs text-gray-400">{prize.trophy} Trophy</div>
               </div>
@@ -263,8 +267,11 @@
                     <span class="text-gray-300">
                       {#if category.id === 'losing_streak'}
                       TBD
+                    {:else if prize.voi > 0}
+                      <span class="line-through text-gray-500">{prize.voi.toLocaleString()} VOI</span>
+                      <span class="text-green-400"> now {(prize.voi * 2).toLocaleString()} VOI</span> + {prize.trophy}
                     {:else}
-                      {prize.voi > 0 ? `${prize.voi.toLocaleString()} VOI + ` : ''}{prize.trophy}
+                      {prize.trophy}
                     {/if}
                     </span>
                   </div>
