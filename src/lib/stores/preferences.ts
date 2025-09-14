@@ -15,6 +15,7 @@ export interface BettingPreferences {
   defaultPaylines: number; // Custom default paylines if not max
   defaultQuickBet: QuickBet | null; // Optional default quick bet to use on initialization
   rapidQueueMode: boolean; // Whether to use rapid queue processing (remove delays)
+  winOnlyMode: boolean; // Whether to skip animations for losing spins
 }
 
 export interface FeedPreferences {
@@ -64,7 +65,8 @@ const defaultBettingPreferences: BettingPreferences = {
   defaultMaxPaylines: false,
   defaultPaylines: 20,
   defaultQuickBet: { amount: 25, lines: 20 },
-  rapidQueueMode: false
+  rapidQueueMode: false,
+  winOnlyMode: false
 };
 
 const defaultAnimationPreferences: AnimationPreferences = {

@@ -230,6 +230,20 @@ export class QueueProcessor {
       return;
     }
 
+    // Win Only Mode: Skip non-winning spins completely
+    const isWinOnlyMode = this.isWinOnlyModeEnabled();
+    const isLosingSpinInWinOnlyMode = isWinOnlyMode && (spin.winnings === 0 || !spin.winnings);
+    
+    if (isLosingSpinInWinOnlyMode) {
+      // Skip animation entirely for losing spins in Win Only mode
+      this.displayed.add(spin.id);
+      queueStore.updateSpin({ id: spin.id, status: spin.status, data: { revealed: true } });
+      
+      // Immediately continue to next spin without any display/animation
+      this.maybeDisplayNext();
+      return;
+    }
+
     this.isDisplaying = true;
     try {
       // Always start the spin animation for this spin
@@ -316,6 +330,11 @@ export class QueueProcessor {
   private isRapidModeEnabled(): boolean {
     const preferences = preferencesStore.getSnapshot();
     return preferences.betting.rapidQueueMode;
+  }
+
+  private isWinOnlyModeEnabled(): boolean {
+    const preferences = preferencesStore.getSnapshot();
+    return preferences.betting.winOnlyMode;
   }
 
   // Public helpers preserved for compatibility

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { fly, fade } from 'svelte/transition';
-  import { Clock, RefreshCw, TrendingUp, TrendingDown, X, Check, Loader, Info, Share2, Zap } from 'lucide-svelte';
+  import { Clock, RefreshCw, TrendingUp, TrendingDown, X, Check, Loader, Info, Share2, Zap, Trophy } from 'lucide-svelte';
   import { queueStore, queueStats, pendingSpins, recentSpins, allSpins } from '$lib/stores/queue';
   import { currentSpinId } from '$lib/stores/game';
   import { formatVOI } from '$lib/constants/betting';
@@ -208,6 +208,17 @@
       // Ignore sound errors
     });
   }
+
+  function toggleWinOnlyMode() {
+    preferencesStore.updateBettingPreferences({
+      winOnlyMode: !$bettingPreferences.winOnlyMode
+    });
+    
+    // Play button click sound
+    playButtonClick().catch(() => {
+      // Ignore sound errors
+    });
+  }
   
   
   function goToPage(page: number) {
@@ -330,6 +341,17 @@
       </div>
       
       <div class="flex items-center gap-2">
+        <!-- Win Only Mode Toggle -->
+        <button
+          on:click={toggleWinOnlyMode}
+          class="win-only-toggle"
+          class:win-only-toggle-active={$bettingPreferences.winOnlyMode}
+          title={$bettingPreferences.winOnlyMode ? 'Disable Win Only Mode' : 'Enable Win Only Mode - Skip animations for losing spins'}
+        >
+          <Trophy class="w-3 h-3" />
+          <span class="win-only-text">Win Only</span>
+        </button>
+        
         <!-- Rapid Mode Toggle -->
         <button
           on:click={toggleRapidMode}
@@ -687,6 +709,28 @@
     @apply flex items-center;
   }
   
+  .win-only-toggle {
+    @apply flex items-center gap-1 px-2 py-1 rounded-full bg-slate-700 hover:bg-slate-600 text-theme-text opacity-60 hover:opacity-100 transition-all duration-200;
+  }
+  
+  .win-only-text {
+    @apply text-xs font-medium;
+  }
+  
+  .win-only-toggle-active {
+    @apply bg-yellow-600 hover:bg-yellow-500 text-theme opacity-100;
+    animation: winOnlyPulse 2s ease-in-out infinite;
+  }
+  
+  @keyframes winOnlyPulse {
+    0%, 100% {
+      box-shadow: 0 0 10px rgba(234, 179, 8, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 20px rgba(234, 179, 8, 0.6);
+    }
+  }
+
   .rapid-toggle {
     @apply flex items-center gap-1 px-2 py-1 rounded-full bg-slate-700 hover:bg-slate-600 text-theme-text opacity-60 hover:opacity-100 transition-all duration-200;
   }
