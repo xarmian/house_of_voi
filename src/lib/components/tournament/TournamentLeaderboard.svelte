@@ -59,7 +59,7 @@
     },
     losing_streak: {
       name: 'Losing Streak Champion',
-      description: 'Longest consecutive losses (20 lines only)',
+      description: 'Longest consecutive losses (20 lines, 5 VOI/line minimum)',
       icon: TrendingDown,
       color: 'from-red-500 to-rose-500',
       iconColor: 'text-red-400'

@@ -37,7 +37,7 @@ export const load: PageLoad = async ({ params, url }) => {
       {
         id: 'losing_streak',
         name: 'Losing Streak',
-        description: 'Longest consecutive losses (20 lines only)',
+        description: 'Longest consecutive losses (20 lines, 5 VOI/line minimum)',
         icon: 'trending-down'
       }
     ],
