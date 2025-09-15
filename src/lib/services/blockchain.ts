@@ -145,8 +145,17 @@ export class BlockchainService {
       const retryInfo = spin.retryCount ? ` (attempt ${spin.retryCount + 1})` : '';
       console.error(`Error submitting spin${retryInfo}:`, error);
       
-      // Don't directly mark as FAILED here - let the queueProcessor handle retries
-      // The queueProcessor will catch this error and decide whether to retry or fail
+      // Reset status from SUBMITTING to PENDING so queueProcessor can handle retries
+      // This prevents spins from getting stuck in SUBMITTING status
+      queueStore.updateSpin({
+        id: spin.id,
+        status: SpinStatus.PENDING,
+        data: {
+          error: error instanceof Error ? error.message : String(error)
+        }
+      });
+      
+      // Re-throw so queueProcessor can handle retry logic
       throw error;
     } finally {
       this.processingSpins.delete(spin.id);
@@ -243,8 +252,8 @@ export class BlockchainService {
       if (!claimRound) {
         throw new Error('Missing commitmentRound; cannot derive claimRound');
       }
-      // Wait exactly for the block after commitment round
-      await algorandService.waitForBlockAfter(commitmentRound);
+      // Wait exactly for the block after commitment round (with timeout)
+      await algorandService.waitForBlockAfter(commitmentRound, 45000); // 45s timeout
 
       // Compute deterministic grid at claim round
       const gridString = await algorandService.getBetGridDeterministic(spin.betKey, claimRound, userAddr);
@@ -318,6 +327,11 @@ export class BlockchainService {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('Error checking bet outcome:', errorMessage);
       
+      // Check if this is a timeout error that should trigger retry
+      const isTimeoutError = errorMessage.includes('Timeout waiting for block') ||
+                            errorMessage.includes('timeout') ||
+                            errorMessage.includes('ETIMEDOUT');
+      
       // Check if this is a "box not found" error that should terminate the spin
       const isBoxNotFound = errorMessage.includes('box not found') || 
                            errorMessage.includes('Bet not found') ||
@@ -336,7 +350,15 @@ export class BlockchainService {
             terminatedDueToMissingBox: true
           }
         });
+        console.error(`💀 Spin ${spin.id.slice(-8)} marked as FAILED - bet box not found`);
         return;
+      }
+      
+      if (isTimeoutError) {
+        console.warn(`⏰ Spin ${spin.id.slice(-8)} outcome check timeout - will be retried by queue processor`);
+        // Don't update status here - let the queue processor's retry mechanism handle it
+        // Just re-throw so the immediate outcome processing knows it failed
+        throw error;
       }
       
       console.log('📦 Other error - treating as already completed');

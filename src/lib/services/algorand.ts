@@ -1208,9 +1208,18 @@ export class AlgorandService {
    * Wait for the block after a given round using Algod's statusAfterBlock endpoint.
    * Returns the node status when it has advanced past the given round.
    */
-  async waitForBlockAfter(round: number): Promise<number> {
-    const status = await this.client.statusAfterBlock(round).do();
-    return status['last-round'] || round + 1;
+  async waitForBlockAfter(round: number, timeoutMs: number = 30000): Promise<number> {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Timeout waiting for block after round ${round} (${timeoutMs}ms)`));
+      }, timeoutMs);
+    });
+
+    const blockPromise = this.client.statusAfterBlock(round).do().then(status => {
+      return status['last-round'] || round + 1;
+    });
+
+    return Promise.race([blockPromise, timeoutPromise]);
   }
 
   /**

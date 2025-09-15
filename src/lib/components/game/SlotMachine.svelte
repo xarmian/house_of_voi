@@ -254,6 +254,8 @@
     // @ts-ignore
     document.addEventListener('start-spin-animation', handleStartAnimation);
     // @ts-ignore
+    document.addEventListener('stop-spin-animation', handleStopAnimation);
+    // @ts-ignore
     document.addEventListener('display-spin-outcome', handleDisplayOutcome);
     
     // Auto-start replay if initialReplayData is provided
@@ -309,6 +311,8 @@
       document.removeEventListener('replay-spin', handleReplayEvent);
       // @ts-ignore
       document.removeEventListener('start-spin-animation', handleStartAnimation);
+      // @ts-ignore
+      document.removeEventListener('stop-spin-animation', handleStopAnimation);
       // @ts-ignore
       document.removeEventListener('display-spin-outcome', handleDisplayOutcome);
     };
@@ -389,6 +393,8 @@
       // @ts-ignore
       document.removeEventListener('start-spin-animation', handleStartAnimation);
       // @ts-ignore
+      document.removeEventListener('stop-spin-animation', handleStopAnimation);
+      // @ts-ignore
       document.removeEventListener('display-spin-outcome', handleDisplayOutcome);
     } catch (e) {
       // Ignore errors if handlers are undefined
@@ -405,6 +411,33 @@
     console.log(`🎬 SlotMachine: Queue requested animation for ${spinId.slice(-8)}`);
     startContinuousSpinning(spinId);
   };
+  
+  const handleStopAnimation = (event: CustomEvent) => {
+    console.log('🛑 SlotMachine: Queue requested to stop animation (win-only mode, no more spins)');
+    stopSpinning();
+  };
+  
+  async function stopSpinning() {
+    console.log('🛑 Stopping spinning animation');
+    
+    // Stop spinning sound
+    await soundService.forceStopWithVerification('spin-loop', 3);
+    
+    // Play reel stop sound
+    playReelStop().catch(() => {});
+    
+    // Stop reel animations
+    callReelGrid('stopSpin');
+    
+    // Reset game state
+    gameStore.reset();
+    
+    // Clear spinning interval if it exists
+    if (spinningInterval) {
+      clearInterval(spinningInterval);
+      spinningInterval = null;
+    }
+  }
   
   const handleDisplayOutcome = (event: CustomEvent) => {
     const { spin, outcome, winnings, betAmount } = event.detail;
