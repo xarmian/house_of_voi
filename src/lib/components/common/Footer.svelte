@@ -1,6 +1,4 @@
-<script lang="ts">
-  import { Twitter } from 'lucide-svelte';
-</script>
+ 
 
 <footer class="bg-slate-900 border-t border-slate-800 py-12">
   <div class="max-w-6xl mx-auto px-4">
@@ -13,7 +11,9 @@
         </p>
         <div class="flex space-x-4">
           <a href="https://x.com/houseofvoi" class="text-gray-400 hover:text-theme transition-colors" aria-label="Twitter" target="_blank" rel="noopener noreferrer">
-            <Twitter class="w-5 h-5" />
+            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" class="w-5 h-5" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M12.6 0.75h2.454l-5.36 6.142L16 15.25h-4.937l-3.867 -5.07 -4.425 5.07H0.316l5.733 -6.57L0 0.75h5.063l3.495 4.633L12.601 0.75Zm-0.86 13.028h1.36L4.323 2.145H2.865z" stroke-width="1"></path>
+            </svg>
           </a>
           <a href="https://discord.gg/K9XdB4XpSR" class="text-gray-400 hover:text-theme transition-colors" aria-label="Discord" target="_blank" rel="noopener noreferrer">
             <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
