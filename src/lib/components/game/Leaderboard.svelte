@@ -223,7 +223,7 @@
     try {
       const startDate = new Date(selectedDate);
       const endDate = new Date(selectedDate);
-      endDate.setHours(23, 59, 59, 999); // End of day
+      endDate.setUTCHours(23, 59, 59, 999); // End of day in UTC
       
       const data = await hovStatsService.getLeaderboardByDate({
         p_app_id: contractId,
@@ -460,7 +460,7 @@
     <!-- Date Range Display (only for daily mode) -->
     {#if viewMode === 'daily' && !compact}
       <div class="text-xs text-gray-400 mb-4 text-center">
-        Showing results for {new Date(selectedDate).toLocaleDateString('en-US', { 
+        Showing results for {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { 
           weekday: 'long', 
           year: 'numeric', 
           month: 'long', 
