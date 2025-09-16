@@ -46,6 +46,11 @@
   let leaderboardData: LeaderboardEntry[] = [];
   let initialized = false;
 
+  // New state for Daily leaderboards - Daily is now default
+  let viewMode: 'all_time' | 'daily' = 'daily';
+  let selectedDate: string = new Date().toISOString().split('T')[0];
+  let isLoadingDateRange = false;
+
   // Modal element for focus management
   let modalElement: HTMLElement;
 
@@ -95,6 +100,9 @@
   
   // Update entries for template compatibility
   $: entries = paginatedEntries;
+  
+  // Combined loading state
+  $: isLoading = loading || isLoadingDateRange;
 
   // Load leaderboard data
   async function loadLeaderboard() {
@@ -121,11 +129,46 @@
     }
   }
 
+  // Load date-based leaderboard data
+  async function loadDateRangeData() {
+    if (!$connectionStatus.initialized || isLoadingDateRange) return;
+    
+    isLoadingDateRange = true;
+    leaderboardData = [];
+    
+    try {
+      const startDate = new Date(selectedDate);
+      const endDate = new Date(selectedDate);
+      endDate.setHours(23, 59, 59, 999); // End of day
+      
+      const data = await hovStatsService.getLeaderboardByDate({
+        p_app_id: contractId,
+        p_start_date: startDate,
+        p_end_date: endDate,
+        p_metric: selectedMetric as any,
+        p_limit: 100,
+        forceRefresh: true
+      });
+      
+      leaderboardData = data;
+      lastUpdated = new Date();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to load date range leaderboard';
+      leaderboardData = [];
+    } finally {
+      isLoadingDateRange = false;
+    }
+  }
+
   // Refresh leaderboard
   async function refresh() {
     refreshing = true;
     try {
-      await loadLeaderboard();
+      if (viewMode === 'daily') {
+        await loadDateRangeData();
+      } else {
+        await loadLeaderboard();
+      }
     } finally {
       refreshing = false;
     }
@@ -133,16 +176,46 @@
 
   // Change metric
   async function changeMetric(metric: string) {
-    if (loading) return;
+    if (loading || isLoadingDateRange) return;
     
     selectedMetric = metric;
     currentPage = 1; // Reset to first page
     
-    // Clear existing data immediately to show loading state
-    leaderboardData = [];
+    // Load data for the new metric based on view mode
+    if (viewMode === 'daily') {
+      await loadDateRangeData();
+    } else {
+      // Clear existing data immediately to show loading state
+      leaderboardData = [];
+      await loadLeaderboard();
+    }
+  }
+
+  // Change view mode
+  async function changeViewMode(mode: 'all_time' | 'daily') {
+    if (loading || isLoadingDateRange) return;
     
-    // Load data immediately for the new metric
-    await loadLeaderboard();
+    viewMode = mode;
+    currentPage = 1;
+    
+    
+    if (mode === 'daily') {
+      await loadDateRangeData();
+    } else {
+      await loadLeaderboard();
+    }
+  }
+
+  // Change date selection
+  async function changeDateSelection(newDate: string) {
+    if (isLoadingDateRange) return;
+    
+    selectedDate = newDate;
+    currentPage = 1;
+    
+    if (viewMode === 'daily') {
+      await loadDateRangeData();
+    }
   }
 
   // Pagination
@@ -240,8 +313,12 @@
   }
 
   // Load data when modal becomes visible
-  $: if (isVisible && $connectionStatus.initialized && !leaderboardData.length && !loading && !initialized) {
-    loadLeaderboard();
+  $: if (isVisible && $connectionStatus.initialized && !leaderboardData.length && !isLoading && !initialized) {
+    if (viewMode === 'daily') {
+      loadDateRangeData();
+    } else {
+      loadLeaderboard();
+    }
     initialized = true;
   }
 
@@ -252,7 +329,11 @@
 
   // Reload data when contractId changes
   $: if (contractId && isVisible && $connectionStatus.initialized && initialized) {
-    loadLeaderboard();
+    if (viewMode === 'daily') {
+      loadDateRangeData();
+    } else {
+      loadLeaderboard();
+    }
   }
 
   // Set up event listeners and body scroll management
@@ -338,6 +419,7 @@
               class="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors {selectedMetric === key 
                 ? 'bg-voi-600 text-white' 
                 : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}"
+              disabled={isLoading}
             >
               <svelte:component this={config.icon} class="w-4 h-4" />
               {config.label}
@@ -346,12 +428,96 @@
         </div>
       </div>
 
+      <!-- View Mode Toggle -->
+      <div class="p-4 border-b border-surface-border bg-surface-primary/30">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <!-- View Mode Buttons -->
+          <div class="flex items-center gap-1">
+            <button
+              on:click={() => changeViewMode('all_time')}
+              class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors {viewMode === 'all_time'
+                ? 'bg-voi-600 text-white' 
+                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}"
+              disabled={isLoading}
+            >
+              <Trophy class="w-4 h-4" />
+              All Time
+            </button>
+            <button
+              on:click={() => changeViewMode('daily')}
+              class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors {viewMode === 'daily'
+                ? 'bg-voi-600 text-white' 
+                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}"
+              disabled={isLoading}
+            >
+              <Calendar class="w-4 h-4" />
+              Daily
+            </button>
+          </div>
+
+          <!-- Date Picker (only shown for daily mode) -->
+          {#if viewMode === 'daily'}
+            <div class="flex items-center gap-2" transition:fly={{ x: -20, duration: 200 }}>
+              <button
+                on:click={() => {
+                  const prevDate = new Date(selectedDate);
+                  prevDate.setDate(prevDate.getDate() - 1);
+                  changeDateSelection(prevDate.toISOString().split('T')[0]);
+                }}
+                class="p-2 bg-slate-700 border border-slate-600 rounded-lg text-gray-300 hover:bg-slate-600 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isLoadingDateRange}
+                title="Previous day"
+              >
+                <ChevronLeft class="w-4 h-4" />
+              </button>
+              <input
+                type="date"
+                bind:value={selectedDate}
+                on:change={(e) => changeDateSelection((e.target as HTMLInputElement).value)}
+                class="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm text-white focus:border-voi-500 focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isLoadingDateRange}
+                max={new Date().toISOString().split('T')[0]}
+              />
+              <button
+                on:click={() => {
+                  const nextDate = new Date(selectedDate);
+                  nextDate.setDate(nextDate.getDate() + 1);
+                  const today = new Date().toISOString().split('T')[0];
+                  const nextDateStr = nextDate.toISOString().split('T')[0];
+                  if (nextDateStr <= today) {
+                    changeDateSelection(nextDateStr);
+                  }
+                }}
+                class="p-2 bg-slate-700 border border-slate-600 rounded-lg text-gray-300 hover:bg-slate-600 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isLoadingDateRange || selectedDate === new Date().toISOString().split('T')[0]}
+                title="Next day"
+              >
+                <ChevronRight class="w-4 h-4" />
+              </button>
+            </div>
+          {/if}
+        </div>
+        
+        <!-- Date Range Display -->
+        {#if viewMode === 'daily'}
+          <div class="text-xs text-gray-400 mt-2">
+            Showing results for {new Date(selectedDate).toLocaleDateString('en-US', { 
+              weekday: 'long', 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            })}
+          </div>
+        {/if}
+      </div>
+
       <!-- Content -->
       <div class="flex-1 overflow-y-auto">
-        {#if loading && leaderboardData.length === 0}
+        {#if isLoading && leaderboardData.length === 0}
           <!-- Loading -->
           <div class="flex items-center justify-center py-12">
             <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-voi-400 mb-4"></div>
+            <p class="text-gray-400">Loading {viewMode === 'daily' ? 'daily' : 'all-time'} leaderboard...</p>
           </div>
         {:else if error && leaderboardData.length === 0}
           <!-- Error -->
@@ -410,7 +576,9 @@
                     <th class="text-left py-3 px-4 text-sm font-medium text-gray-300">Player</th>
                     <th class="text-right py-3 px-4 text-sm font-medium text-gray-300">{metricConfig.label}</th>
                     <th class="text-right py-3 px-4 text-sm font-medium text-gray-300">Total Spins</th>
-                    <th class="text-right py-3 px-4 text-sm font-medium text-gray-300">Win Rate</th>
+                    {#if viewMode !== 'daily'}
+                      <th class="text-right py-3 px-4 text-sm font-medium text-gray-300">Win Rate</th>
+                    {/if}
                     <th class="text-right py-3 px-4 text-sm font-medium text-gray-300">Actions</th>
                   </tr>
                 </thead>
@@ -442,9 +610,11 @@
                       <td class="py-3 px-4 text-right text-gray-300">
                         {entry.total_spins.toString()}
                       </td>
-                      <td class="py-3 px-4 text-right text-gray-300">
-                        {entry.win_rate.toFixed(1)}%
-                      </td>
+                      {#if viewMode !== 'daily'}
+                        <td class="py-3 px-4 text-right text-gray-300">
+                          {entry.win_rate.toFixed(1)}%
+                        </td>
+                      {/if}
                       <td class="py-3 px-4 text-right">
                         <div class="flex gap-1 justify-end">
                           <button

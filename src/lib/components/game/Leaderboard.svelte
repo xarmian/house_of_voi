@@ -17,11 +17,13 @@
     BarChart3,
     Maximize2,
     Percent,
-    User
+    User,
+    Calendar
   } from 'lucide-svelte';
   import LeaderboardModal from './LeaderboardModal.svelte';
   import PlayerStatsModal from './PlayerStatsModal.svelte';
   import { hovStatsStore, connectionStatus } from '$lib/stores/hovStats';
+  import { hovStatsService } from '$lib/services/hovStats';
   import { walletStore } from '$lib/stores/wallet';
   import { goto } from '$app/navigation';
   import type { LeaderboardEntry } from '$lib/types/hovStats';
@@ -43,10 +45,16 @@
   let highlightedPlayer: string | null = null;
   let debounceTimer: NodeJS.Timeout | null = null;
   
-  // Use store data instead of local state
-  $: leaderboardData = $hovStatsStore.leaderboard.data || [];
-  $: leaderboardLoading = $hovStatsStore.leaderboard.loading;
-  $: leaderboardError = $hovStatsStore.leaderboard.error;
+  // New state for Daily leaderboards - Daily is now default
+  let viewMode: 'all_time' | 'daily' = 'daily';
+  let selectedDate: string = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+  let localLeaderboardData: LeaderboardEntry[] = [];
+  let isLoadingDateRange = false;
+  
+  // Use different data sources based on view mode
+  $: leaderboardData = viewMode === 'all_time' ? ($hovStatsStore.leaderboard.data || []) : localLeaderboardData;
+  $: leaderboardLoading = viewMode === 'all_time' ? $hovStatsStore.leaderboard.loading : isLoadingDateRange;
+  $: leaderboardError = viewMode === 'all_time' ? $hovStatsStore.leaderboard.error : null;
   let initialized = false;
   
   // Modal state
@@ -111,9 +119,16 @@
     }
   };
 
-  // onMount removed - using reactive statement to prevent double loading
 
-  // Store handles all data loading automatically - no need for reactive triggers
+  // Auto-load data when connection is ready and we haven't loaded yet
+  $: if ($connectionStatus.initialized && !initialized && !leaderboardLoading && !isLoadingDateRange && contractId) {
+    initialized = true;
+    if (viewMode === 'daily') {
+      loadDateRangeData();
+    } else {
+      // All-time mode is handled automatically by the store
+    }
+  }
 
   onDestroy(() => {
     // Clean up debounce timer
@@ -144,9 +159,13 @@
 
   async function refresh() {
     // Don't refresh if not initialized or already loading
-    if (!$connectionStatus.initialized || leaderboardLoading) return;
+    if (!$connectionStatus.initialized || (leaderboardLoading && isLoadingDateRange)) return;
     
-    await loadLeaderboardData();
+    if (viewMode === 'daily') {
+      await loadDateRangeData();
+    } else {
+      await loadLeaderboardData();
+    }
   }
 
   async function changeMetric(metric: typeof selectedMetric) {
@@ -160,11 +179,68 @@
       clearTimeout(debounceTimer);
     }
     
-    // Clear existing data immediately to show loading state
-    leaderboardData = [];
+    // Load data for the new metric based on view mode
+    if (viewMode === 'daily') {
+      await loadDateRangeData();
+    } else {
+      // Clear existing data immediately to show loading state
+      leaderboardData = [];
+      await loadLeaderboardData();
+    }
+  }
+
+  async function changeViewMode(mode: 'all_time' | 'daily') {
+    if (leaderboardLoading || isLoadingDateRange) return;
     
-    // Load data immediately for the new metric
-    await loadLeaderboardData();
+    viewMode = mode;
+    currentPage = 0;
+    
+    
+    if (mode === 'daily') {
+      await loadDateRangeData();
+    } else {
+      await loadLeaderboardData();
+    }
+  }
+
+  async function changeDateSelection(newDate: string) {
+    if (isLoadingDateRange) return;
+    
+    selectedDate = newDate;
+    currentPage = 0;
+    
+    if (viewMode === 'daily') {
+      await loadDateRangeData();
+    }
+  }
+
+  async function loadDateRangeData() {
+    if (!$connectionStatus.initialized || isLoadingDateRange) return;
+    
+    isLoadingDateRange = true;
+    localLeaderboardData = [];
+    
+    try {
+      const startDate = new Date(selectedDate);
+      const endDate = new Date(selectedDate);
+      endDate.setHours(23, 59, 59, 999); // End of day
+      
+      const data = await hovStatsService.getLeaderboardByDate({
+        p_app_id: contractId,
+        p_start_date: startDate,
+        p_end_date: endDate,
+        p_metric: selectedMetric,
+        p_limit: 100,
+        forceRefresh: true
+      });
+      
+      localLeaderboardData = data;
+    } catch (error) {
+      console.error('Failed to load date range leaderboard:', error);
+      localLeaderboardData = [];
+    } finally {
+      isLoadingDateRange = false;
+    }
   }
 
   function goToPage(page: number) {
@@ -259,8 +335,71 @@
       </div>
       
       <div class="flex items-center gap-1 sm:gap-2 flex-1 justify-end">
-        <!-- Search disabled - would break server-side sorting -->
-        <!-- TODO: Implement server-side search in the SQL function if needed -->
+        <!-- View Mode Toggle (only in non-compact mode) -->
+        {#if !compact}
+          <div class="flex items-center gap-1 mr-2">
+            <button
+              on:click={() => changeViewMode('all_time')}
+              class="view-mode-button-header {viewMode === 'all_time' ? 'active' : ''}"
+              disabled={leaderboardLoading || isLoadingDateRange}
+              title="All Time leaderboard"
+            >
+              <Trophy class="w-3 h-3 sm:w-4 sm:h-4" />
+              <span class="hidden sm:inline">All Time</span>
+            </button>
+            <button
+              on:click={() => changeViewMode('daily')}
+              class="view-mode-button-header {viewMode === 'daily' ? 'active' : ''}"
+              disabled={leaderboardLoading || isLoadingDateRange}
+              title="Daily leaderboard"
+            >
+              <Calendar class="w-3 h-3 sm:w-4 sm:h-4" />
+              <span class="hidden sm:inline">Daily</span>
+            </button>
+          </div>
+        {/if}
+
+        <!-- Date Picker (only shown for daily mode in header) -->
+        {#if viewMode === 'daily' && !compact}
+          <div class="flex items-center gap-1 mr-2" transition:fly={{ x: -20, duration: 200 }}>
+            <button
+              on:click={() => {
+                const prevDate = new Date(selectedDate);
+                prevDate.setDate(prevDate.getDate() - 1);
+                changeDateSelection(prevDate.toISOString().split('T')[0]);
+              }}
+              class="date-nav-button-header"
+              disabled={isLoadingDateRange}
+              title="Previous day"
+            >
+              <ChevronLeft class="w-3 h-3 sm:w-4 sm:h-4" />
+            </button>
+            <input
+              type="date"
+              bind:value={selectedDate}
+              on:change={(e) => changeDateSelection((e.target as HTMLInputElement).value)}
+              class="date-picker-header"
+              disabled={isLoadingDateRange}
+              max={new Date().toISOString().split('T')[0]}
+            />
+            <button
+              on:click={() => {
+                const nextDate = new Date(selectedDate);
+                nextDate.setDate(nextDate.getDate() + 1);
+                const today = new Date().toISOString().split('T')[0];
+                const nextDateStr = nextDate.toISOString().split('T')[0];
+                if (nextDateStr <= today) {
+                  changeDateSelection(nextDateStr);
+                }
+              }}
+              class="date-nav-button-header"
+              disabled={isLoadingDateRange || selectedDate === new Date().toISOString().split('T')[0]}
+              title="Next day"
+            >
+              <ChevronRight class="w-3 h-3 sm:w-4 sm:h-4" />
+            </button>
+          </div>
+        {/if}
 
         <!-- Expand -->
         <button
@@ -317,6 +456,18 @@
         </div>
       {/if}
     </div>
+
+    <!-- Date Range Display (only for daily mode) -->
+    {#if viewMode === 'daily' && !compact}
+      <div class="text-xs text-gray-400 mb-4 text-center">
+        Showing results for {new Date(selectedDate).toLocaleDateString('en-US', { 
+          weekday: 'long', 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        })}
+      </div>
+    {/if}
 
     <!-- Player rank highlight -->
     {#if showPlayerHighlight && playerRank && playerAddress}
@@ -760,5 +911,30 @@
 
   .skeleton-text {
     @apply bg-slate-600 rounded animate-pulse;
+  }
+
+  /* Header View Mode Toggle Styles */
+  .view-mode-button-header {
+    @apply flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-2 bg-slate-700 border border-slate-600 rounded-lg text-xs sm:text-sm transition-all duration-200 hover:bg-slate-600 hover:border-slate-500;
+  }
+
+  .view-mode-button-header.active {
+    @apply bg-voi-600 border-voi-500 text-white;
+  }
+
+  .view-mode-button-header:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .date-picker-header {
+    @apply px-2 sm:px-3 py-1 sm:py-2 bg-slate-700 border border-slate-600 rounded-lg text-xs sm:text-sm text-white focus:border-voi-500 focus:outline-none transition-all duration-200 min-w-[120px];
+  }
+
+  .date-picker-header:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .date-nav-button-header {
+    @apply p-1 sm:p-2 bg-slate-700 border border-slate-600 rounded-lg text-gray-300 hover:bg-slate-600 hover:border-slate-500 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 </style>

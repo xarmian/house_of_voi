@@ -4,6 +4,7 @@
  */
 
 import { supabaseService, type Database } from './supabase';
+import { tournamentService, type TournamentPlayer } from './tournamentService';
 import type {
   BalanceHistoryTick,
   PlatformStats,
@@ -21,6 +22,7 @@ import type {
   GetBalanceHistoryParams,
   GetPlatformStatsParams,
   GetLeaderboardParams,
+  GetLeaderboardByDateParams,
   GetPlayerStatsParams,
   GetPlayerSpinsParams,
   GetPlayerRankParams,
@@ -296,6 +298,78 @@ class HovStatsService {
       this.caches.leaderboard.set(cacheKey, leaderboard);
       return leaderboard;
     });
+  }
+
+  /**
+   * Get date-based leaderboard using tournament service
+   */
+  async getLeaderboardByDate(params: GetLeaderboardByDateParams): Promise<LeaderboardEntry[]> {
+    const { p_app_id, p_start_date, p_end_date, p_metric = 'total_won', p_limit = 100, p_min_spins = 1, p_min_volume_micro = 1000000n, forceRefresh = false } = params;
+    const cacheKey = `leaderboard_date_${p_app_id}_${p_start_date.toISOString()}_${p_end_date.toISOString()}_${p_metric}_${p_limit}`;
+
+    // Skip cache if forceRefresh is true
+    if (!forceRefresh) {
+      const cached = this.caches.leaderboard.get(cacheKey);
+      if (cached) return cached;
+    }
+
+    return this.withErrorHandling('getLeaderboardByDate', async () => {
+      // Use tournament service to get the data
+      const tournamentData = await tournamentService.getTournamentData({
+        appId: Number(p_app_id),
+        startDate: p_start_date,
+        endDate: p_end_date,
+        limit: p_limit,
+        minSpins: p_min_spins,
+        minVolumeMicroVOI: Number(p_min_volume_micro)
+      });
+
+      // Convert tournament player data to leaderboard entries based on selected metric
+      const tournamentPlayers = this.getTournamentPlayersForMetric(tournamentData, p_metric);
+      const leaderboard = tournamentPlayers.map((player: any, index): LeaderboardEntry => ({
+        rank_position: BigInt(index + 1),
+        who: player.who,
+        total_spins: BigInt(player.total_spins),
+        total_amount_bet: BigInt(player.total_volume),
+        total_amount_won: BigInt(player.total_amount_won || Math.floor(player.total_volume * (player.rtp_percent || 0) / 100)),
+        net_result: BigInt((player.total_amount_won || Math.floor(player.total_volume * (player.rtp_percent || 0) / 100)) - player.total_volume),
+        largest_single_win: BigInt(player.largest_single_win || 0),
+        win_rate: player.rtp_percent || 0,
+        longest_streak: player.longest_win_streak || 0,
+        avg_bet_size: player.total_volume / Math.max(player.total_spins, 1)
+      }));
+
+      this.caches.leaderboard.set(cacheKey, leaderboard);
+      return leaderboard;
+    });
+  }
+
+  /**
+   * Helper method to get tournament players for specific metric
+   */
+  private getTournamentPlayersForMetric(tournamentData: any, metric: string): TournamentPlayer[] {
+    if (!tournamentData?.categories) {
+      return [];
+    }
+
+    switch (metric) {
+      case 'total_bet':
+        return tournamentData.categories.volume || [];
+      case 'rtp':
+        return tournamentData.categories.rtp || [];
+      case 'win_streak':
+        return tournamentData.categories.win_streak || [];
+      case 'total_won':
+        return tournamentData.categories.total_won || [];
+      case 'largest_win':
+        return tournamentData.categories.biggest_win || [];
+      case 'total_spins':
+        // For total_spins, use volume data since it has spin counts
+        return tournamentData.categories.volume || [];
+      default:
+        // For other metrics, use volume-based ranking
+        return tournamentData.categories.volume || [];
+    }
   }
 
   /**

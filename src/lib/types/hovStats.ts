@@ -203,6 +203,17 @@ export interface GetLeaderboardParams {
   p_offset?: number;
 }
 
+export interface GetLeaderboardByDateParams {
+  p_app_id: bigint;
+  p_start_date: Date;
+  p_end_date: Date;
+  p_metric?: 'net_result' | 'rtp' | 'total_won' | 'largest_win' | 'total_spins' | 'win_rate' | 'total_bet';
+  p_limit?: number;
+  p_min_spins?: number;
+  p_min_volume_micro?: bigint;
+  forceRefresh?: boolean;
+}
+
 export interface GetPlayerStatsParams {
   p_app_id: bigint | null; // Allow null to fetch stats for all machines
   p_player_address: string;

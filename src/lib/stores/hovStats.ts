@@ -788,6 +788,26 @@ function createHovStatsStore() {
     return await hovStatsService.healthCheck();
   }
 
+  /**
+   * Get date-based leaderboard (direct access to hovStatsService method)
+   */
+  async function getLeaderboardByDate(params: { 
+    startDate: Date; 
+    endDate: Date; 
+    metric?: string; 
+    limit?: number 
+  }): Promise<LeaderboardEntry[]> {
+    const appId = await getCurrentSlotMachineAppId();
+    return await hovStatsService.getLeaderboardByDate({
+      p_app_id: appId,
+      p_start_date: params.startDate,
+      p_end_date: params.endDate,
+      p_metric: params.metric as any || 'total_won',
+      p_limit: params.limit || 100,
+      forceRefresh: true
+    });
+  }
+
   return {
     subscribe,
     // Actions
@@ -803,6 +823,7 @@ function createHovStatsStore() {
     getPlayerStats,
     refreshPlayerStats,
     getLeaderboard,
+    getLeaderboardByDate,
     // Player spins actions
     loadPlayerSpins,
     loadNextPlayerSpinsPage,
