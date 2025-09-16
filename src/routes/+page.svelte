@@ -4,7 +4,6 @@
   import HeroSection from '$lib/components/landing/HeroSection.svelte';
   import FeaturesSection from '$lib/components/landing/FeaturesSection.svelte';
   import HowItWorksSection from '$lib/components/landing/HowItWorksSection.svelte';
-  import Footer from '$lib/components/common/Footer.svelte';
   import WarningBanner from '$lib/components/ui/WarningBanner.svelte';
   
   export let data;
@@ -30,7 +29,6 @@
   
   <FeaturesSection />
   <HowItWorksSection />
-  <Footer />
 </main>
 
 <style>

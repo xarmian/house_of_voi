@@ -17,6 +17,7 @@
   import { themeStore } from '$lib/stores/theme';
   import { isMasterSoundEnabled, soundPreferences } from '$lib/stores/sound';
   import VoiRadioPlayer from '$lib/components/app/VoiRadioPlayer.svelte';
+  import Footer from '$lib/components/common/Footer.svelte';
   
   export let data;
   
@@ -128,6 +129,9 @@
     <div class="{showUnifiedHeader ? 'pt-0' : ''}">
       <slot />
     </div>
+    
+    <!-- Footer -->
+    <Footer />
     
     <!-- Global warning provider -->
     <WarningProvider />
