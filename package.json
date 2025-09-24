@@ -45,6 +45,7 @@
     "@types/qrcode": "^1.5.5",
     "@typescript-eslint/eslint-plugin": "^8.39.1",
     "@typescript-eslint/parser": "^8.39.1",
+    "@vite-pwa/sveltekit": "^1.0.0",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.33.0",
     "playwright": "^1.54.2",

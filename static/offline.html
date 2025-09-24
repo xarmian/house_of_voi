@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Offline - House of Voi</title>
+  <link rel="icon" href="/favicon.ico" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            'voi': {
+              100: '#f0f9ff',
+              600: '#0284c7',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      min-height: 100vh;
+    }
+  </style>
+</head>
+<body class="dark">
+  <div class="min-h-screen flex items-center justify-center p-4">
+    <div class="text-center max-w-md mx-auto">
+      <!-- Logo/Icon -->
+      <div class="mb-8">
+        <div class="w-20 h-20 mx-auto rounded-full bg-gradient-to-r from-voi-600 to-blue-500 flex items-center justify-center">
+          <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18.5l-7-7 7-7 7 7z" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Title -->
+      <h1 class="text-3xl font-bold text-white mb-4">
+        House of Voi
+      </h1>
+
+      <!-- Offline message -->
+      <div class="mb-6">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+          <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
+          </svg>
+        </div>
+
+        <h2 class="text-xl font-semibold text-white mb-2">
+          You're offline
+        </h2>
+
+        <p class="text-gray-300 mb-6">
+          House of Voi requires an internet connection to play blockchain-powered slot machines.
+          Please check your network connection and try again.
+        </p>
+      </div>
+
+      <!-- Retry button -->
+      <button
+        onclick="window.location.reload()"
+        class="inline-flex items-center px-6 py-3 bg-voi-600 hover:bg-voi-700 text-white font-medium rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-voi-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+      >
+        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        Try again
+      </button>
+
+      <!-- Additional info -->
+      <div class="mt-8 text-sm text-gray-400">
+        <p>Network connection required for:</p>
+        <ul class="mt-2 space-y-1">
+          <li>• Blockchain transactions</li>
+          <li>• Real-time game data</li>
+          <li>• Wallet connectivity</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Auto-reload when online
+    window.addEventListener('online', function() {
+      window.location.reload();
+    });
+
+    // Update UI when offline/online
+    function updateOnlineStatus() {
+      if (navigator.onLine) {
+        window.location.reload();
+      }
+    }
+
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+  </script>
+</body>
+</html>

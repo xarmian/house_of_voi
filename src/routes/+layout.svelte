@@ -18,6 +18,7 @@
   import { isMasterSoundEnabled, soundPreferences } from '$lib/stores/sound';
   import VoiRadioPlayer from '$lib/components/app/VoiRadioPlayer.svelte';
   import Footer from '$lib/components/common/Footer.svelte';
+  import InstallPrompt from '$lib/components/pwa/InstallPrompt.svelte';
   
   export let data;
   
@@ -143,6 +144,9 @@
     {#if $isMasterSoundEnabled && $soundPreferences.voiRadioEnabled}
       <VoiRadioPlayer />
     {/if}
+
+    <!-- PWA Install Prompt -->
+    <InstallPrompt />
   </div>
 {:else}
   <!-- Loading screen -->
