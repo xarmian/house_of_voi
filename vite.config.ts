@@ -14,7 +14,7 @@ export default defineConfig({
       manifest: {
         short_name: 'House of Voi',
         name: 'House of Voi - Blockchain Slot Machine',
-        start_url: '/',
+        start_url: '/app/40879920',
         scope: '/',
         display: 'standalone',
         theme_color: '#1e293b',
@@ -22,14 +22,24 @@ export default defineConfig({
         description: 'Play blockchain-powered slot machines on the Voi network',
         icons: [
           {
-            src: '/android-chrome-192x192.png',
+            src: '/house_of_voi.jpg',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/jpeg'
           },
           {
-            src: '/android-chrome-512x512.png',
+            src: '/house_of_voi.jpg',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/jpeg'
+          },
+          {
+            src: '/house_of_voi.jpg',
+            sizes: '144x144',
+            type: 'image/jpeg'
+          },
+          {
+            src: '/house_of_voi.jpg',
+            sizes: '72x72',
+            type: 'image/jpeg'
           }
         ]
       },
