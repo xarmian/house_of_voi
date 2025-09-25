@@ -8,10 +8,40 @@
   html {
     font-family: 'Inter', system-ui, sans-serif;
   }
-  
+
   body {
     @apply bg-slate-900;
     color: var(--theme-text, #ffffff);
+  }
+
+  /* PWA Safe Area Support for iOS */
+  .safe-area-layout {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Ensure full viewport height with safe areas */
+  .min-h-screen {
+    min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile */
+  }
+
+  /* Additional PWA fixes for iOS standalone mode */
+  @media (display-mode: standalone) {
+    body {
+      /* Prevent overscroll bounce effect */
+      overscroll-behavior: none;
+      /* Ensure proper height calculation */
+      height: 100vh;
+      height: 100dvh;
+    }
+
+    /* Fix for status bar overlap in standalone mode */
+    .safe-area-layout {
+      padding-top: max(env(safe-area-inset-top), 44px);
+    }
   }
 }
 

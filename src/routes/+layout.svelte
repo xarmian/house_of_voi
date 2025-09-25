@@ -117,8 +117,8 @@
 </svelte:head>
 
 {#if mounted}
-  <div 
-    class="min-h-screen bg-slate-900 relative"
+  <div
+    class="min-h-screen bg-slate-900 relative safe-area-layout"
     in:fade={{ duration: 300 }}
   >
     <!-- Unified Header for app and house routes -->
