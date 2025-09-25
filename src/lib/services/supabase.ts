@@ -145,6 +145,28 @@ export interface Database {
           };
         };
       };
+      envoi_lookup_names_by_owner: {
+        Args: {
+          p_addresses: string;
+          p_app_id: string;
+          p_limit?: number;
+        };
+        Returns: Array<{
+          name: string;
+          address: string;
+          metadata: Record<string, any>;
+        }>;
+      };
+      envoi_resolve_name: {
+        Args: {
+          names: string;
+        };
+        Returns: Array<{
+          name: string;
+          address: string;
+          metadata: Record<string, any>;
+        }>;
+      };
       // ... add other function definitions as needed
     };
   };

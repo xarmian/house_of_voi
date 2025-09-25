@@ -22,6 +22,7 @@
   } from 'lucide-svelte';
   import LeaderboardModal from './LeaderboardModal.svelte';
   import PlayerStatsModal from './PlayerStatsModal.svelte';
+  import AddressDisplay from '$lib/components/ui/AddressDisplay.svelte';
   import { hovStatsStore, connectionStatus } from '$lib/stores/hovStats';
   import { hovStatsService } from '$lib/services/hovStats';
   import { walletStore } from '$lib/stores/wallet';
@@ -582,13 +583,13 @@
                 {/if}
                 
                 <!-- Player Address -->
-                <button 
-                  on:click={() => gotoProfile(entry.who)}
-                  class="text-sm font-mono inline-block min-w-[8ch] max-w-full hover:text-voi-400 transition-colors"
-                  title="Go to player profile"
-                >
-                  {formatAddress(entry.who)}
-                </button>
+                <AddressDisplay
+                  address={entry.who}
+                  showProfileLink={false}
+                  maxLength="short"
+                  className="address-display-compact"
+                  linkClassName="text-sm hover:text-voi-400 transition-colors"
+                />
               </div>
               
               <!-- Action Buttons -->
@@ -647,14 +648,13 @@
 
             <!-- Player info -->
             <div class="flex-1 min-w-0">
-              <div class="player-address" title={entry.who}>
-                <button 
-                  on:click={() => gotoProfile(entry.who)}
-                  class="text-sm font-mono inline-block min-w-[12ch] max-w-full hover:text-voi-400 transition-colors"
-                  title="Go to player profile"
-                >
-                  {formatAddress(entry.who)}
-                </button>
+              <div class="player-address">
+                <AddressDisplay
+                  address={entry.who}
+                  showProfileLink={false}
+                  maxLength="medium"
+                  linkClassName="text-sm hover:text-voi-400 transition-colors"
+                />
               </div>
               <div class="player-stats">
                 <span class="stat-item">

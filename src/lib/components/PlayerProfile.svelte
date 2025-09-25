@@ -28,6 +28,8 @@
 	import { hovStatsService } from '$lib/services/hovStats';
 	import { MULTI_CONTRACT_CONFIG } from '$lib/constants/network';
   import AddressSearch from '$lib/components/ui/AddressSearch.svelte';
+  import AddressDisplay from '$lib/components/ui/AddressDisplay.svelte';
+  import { nameResolutionService } from '$lib/services/nameResolution';
 
 	// Get the default slot machine app ID from multi-contract config
 	function getDefaultSlotMachineAppId(): bigint {
@@ -68,6 +70,7 @@
 	let showFullAddress = false;
 	let activeTab: 'stats' | 'history' | 'achievements' = 'stats';
 	let searchAddress = '';
+	let resolvedName: string | null = null;
 	
 	// Modal state for SpinDetailsModal
 	let showSpinDetailsModal = false;
@@ -79,6 +82,7 @@
 	$: mediumAddress = `${address.slice(0, 12)}...${address.slice(-8)}`;
 	$: mobileAddress = `${address.slice(0, 4)}...${address.slice(-3)}`;
 	$: isOwnProfile = address === walletService.getPublicWalletData()?.address;
+	$: displayTitle = resolvedName || shortAddress;
 
 	// Player card data
 	$: playerCardData = stats ? {
@@ -108,29 +112,34 @@
 		try {
 			// Ensure hovStatsService is initialized (fallback in case store didn't initialize)
 			await hovStatsService.initialize();
-			
+
 			// Ensure we have hovStats store initialized for this profile page
 			if (!$connectionStatus || $connectionStatus === 'disconnected') {
 				await hovStatsStore.initialize({ includePlatformStats: false });
 			}
-			// Load player stats, rank, and biggest wins in parallel
-			const [statsResult, rankResult, biggestWinsResult] = await Promise.allSettled([
-				hovStatsService.getPlayerStats({
-					p_app_id: getDefaultSlotMachineAppId(),
-					p_player_address: address
-				}),
+
+			// First, get player stats to check if they exist
+			const statsResult = await hovStatsService.getPlayerStats({
+				p_app_id: getDefaultSlotMachineAppId(),
+				p_player_address: address
+			});
+
+			// Check if player has any game data - if not, bail out immediately
+			if (!statsResult || Number(statsResult.total_spins) === 0) {
+				throw new Error('Player profile not found. This address has no gaming history on House of Voi.');
+			}
+
+			stats = statsResult;
+
+			// Only if player exists, load the rest of the data
+			const [rankResult, biggestWinsResult, nameResult] = await Promise.allSettled([
 				hovStatsService.getPlayerRank({
 					p_app_id: getDefaultSlotMachineAppId(),
 					p_player_address: address
 				}),
-				hovStatsService.getPlayerBiggestWins(address, getDefaultSlotMachineAppId())
+				hovStatsService.getPlayerBiggestWins(address, getDefaultSlotMachineAppId()),
+				nameResolutionService.resolveAddress(address)
 			]);
-
-			if (statsResult.status === 'fulfilled') {
-				stats = statsResult.value;
-			} else {
-				console.warn('Failed to load player stats:', statsResult.reason);
-			}
 
 			if (rankResult.status === 'fulfilled') {
 				rank = rankResult.value;
@@ -144,9 +153,12 @@
 				console.warn('Failed to load biggest wins:', biggestWinsResult.reason);
 			}
 
-			// If all core data failed, show error
-			if (statsResult.status === 'rejected' && rankResult.status === 'rejected') {
-				throw new Error('Failed to load player profile data');
+			if (nameResult.status === 'fulfilled') {
+				const resolved = nameResult.value;
+				resolvedName = resolved.hasName ? resolved.name : null;
+			} else {
+				console.warn('Failed to resolve name:', nameResult.reason);
+				resolvedName = null;
 			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load player profile';
@@ -271,10 +283,10 @@
 </script>
 
 <svelte:head>
-	<title>{shortAddress} - Player Profile | House of Voi</title>
-	<meta name="description" content="View {shortAddress}'s gaming statistics and history on House of Voi" />
-	<meta property="og:title" content="{shortAddress} - Player Profile | House of Voi" />
-	<meta property="og:description" content="Gaming stats and history for player {shortAddress}" />
+	<title>{displayTitle} - Player Profile | House of Voi</title>
+	<meta name="description" content="View {displayTitle}'s gaming statistics and history on House of Voi" />
+	<meta property="og:title" content="{displayTitle} - Player Profile | House of Voi" />
+	<meta property="og:description" content="Gaming stats and history for player {displayTitle}" />
 	<meta property="og:type" content="profile" />
 </svelte:head>
 
@@ -285,20 +297,25 @@
 			<div class="loading-card">
 				<div class="loading-spinner"></div>
 				<h2 class="loading-title">Loading Player Profile</h2>
-				<p class="loading-text">Fetching {shortAddress}'s gaming data...</p>
+				<p class="loading-text">Fetching {displayTitle}'s gaming data...</p>
 			</div>
 		</div>
 	{:else if error && !stats}
 		<!-- Error state -->
 		<div class="error-container" transition:fade={{ duration: 300 }}>
 			<div class="error-card">
-				<div class="error-icon">⚠️</div>
-				<h2 class="error-title">Profile Not Found</h2>
-				<p class="error-text">{error}</p>
-				<button on:click={goBack} class="back-button">
-					<ArrowLeft class="w-4 h-4" />
-					Back to Search
-				</button>
+				<div class="error-icon">🎰</div>
+				<h2 class="error-title">No Gaming History</h2>
+				<p class="error-text">This address hasn't played any games on House of Voi yet.</p>
+				<div class="error-actions">
+					<button on:click={() => goto('/profile')} class="back-button secondary">
+						<ArrowLeft class="w-4 h-4" />
+						Back to Search
+					</button>
+					<button on:click={() => goto('/app')} class="back-button primary">
+						Start Playing
+					</button>
+				</div>
 			</div>
 		</div>
 	{:else}
@@ -341,16 +358,14 @@
 									{isOwnProfile ? 'Your Profile' : 'Player Profile'}
 								</h1>
 								<div class="address-section">
-									<button 
-										on:click={() => showFullAddress = !showFullAddress}
-										class="address-display"
-										title={showFullAddress ? 'Click to shorten' : 'Click to expand'}
-									>
-										{formatAddress(address, showFullAddress)}
-									</button>
-									<button on:click={copyAddress} class="copy-btn" title="Copy address">
-										<Copy class="w-4 h-4" />
-									</button>
+									<AddressDisplay
+										{address}
+										showCopyButton={true}
+										clickToToggle={true}
+										maxLength="medium"
+										className="address-display-large"
+										linkClassName="address-display"
+									/>
 								</div>
 							</div>
 
@@ -431,12 +446,28 @@
 			{#if showSearch}
 				<div class="search-overlay" transition:fade={{ duration: 150 }}>
 					<div class="search-box">
-            <AddressSearch 
+            <AddressSearch
               bind:value={searchAddress}
               autofocus={true}
-              placeholder="Search wallet address..."
+              placeholder="Search wallet address or domain name..."
               on:select={(e) => { showSearch = false; searchAddress = ''; goto(`/profile/${e.detail.address}`); }}
-              on:enter={(e) => { const v = e.detail.value.trim(); if (v) { showSearch = false; searchAddress = ''; goto(`/profile/${v}`); } }}
+              on:enter={(e) => {
+                const v = e.detail.value.trim();
+                if (v) {
+                  // Basic validation - check if it looks like an address (58 chars, base32) or a domain
+                  const isAddress = /^[A-Z2-7]{58}$/.test(v);
+                  const isDomain = /^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*$/.test(v);
+
+                  if (isAddress || isDomain) {
+                    showSearch = false;
+                    searchAddress = '';
+                    goto(`/profile/${v}`);
+                  } else {
+                    // Invalid input - do nothing or show error
+                    console.warn('Invalid address or domain name format');
+                  }
+                }
+              }}
             />
 						<div class="search-actions mt-3">
 							<button on:click={() => { showSearch = false; searchAddress = ''; }} class="search-cancel-btn">Cancel</button>
@@ -593,6 +624,31 @@
 	.back-button:hover {
 		transform: translateY(-2px);
 		box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+	}
+
+	.error-actions {
+		display: flex;
+		gap: 1rem;
+		justify-content: center;
+		flex-wrap: wrap;
+	}
+
+	.back-button.secondary {
+		background: rgba(148, 163, 184, 0.2);
+		border: 1px solid rgba(148, 163, 184, 0.3);
+	}
+
+	.back-button.secondary:hover {
+		background: rgba(148, 163, 184, 0.3);
+		box-shadow: 0 4px 12px rgba(148, 163, 184, 0.2);
+	}
+
+	.back-button.primary {
+		background: linear-gradient(135deg, #10b981, #059669);
+	}
+
+	.back-button.primary:hover {
+		box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
 	}
 
 	.profile-container {

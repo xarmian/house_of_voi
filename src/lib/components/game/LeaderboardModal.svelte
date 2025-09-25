@@ -24,6 +24,7 @@
   import type { LeaderboardEntry } from '$lib/types/hovStats';
   import { formatVOI } from '$lib/constants/betting';
   import { goto } from '$app/navigation';
+  import AddressDisplay from '$lib/components/ui/AddressDisplay.svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -594,13 +595,12 @@
                         </div>
                       </td>
                       <td class="py-3 px-4">
-                        <button 
-                          on:click={() => gotoProfile(entry.who)}
-                          class="font-mono text-sm text-theme hover:text-voi-400 transition-colors"
-                          title="Go to player profile"
-                        >
-                          {formatAddress(entry.who)}
-                        </button>
+                        <AddressDisplay
+                          address={entry.who}
+                          showProfileLink={false}
+                          maxLength="medium"
+                          linkClassName="text-sm text-theme hover:text-voi-400 transition-colors"
+                        />
                       </td>
                       <td class="py-3 px-4 text-right">
                         <div class="font-semibold {metricConfig.color}">

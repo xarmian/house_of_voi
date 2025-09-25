@@ -23,6 +23,7 @@
   import { ensureBase32TxId, formatTxIdForDisplay } from '$lib/utils/transactionUtils';
   import type { PlayerSpin } from '$lib/types/hovStats';
   import SpinDetailsModal from '$lib/components/modals/SpinDetailsModal.svelte';
+  import AddressDisplay from '$lib/components/ui/AddressDisplay.svelte';
     import { goto } from '$app/navigation';
 
   // Props
@@ -273,7 +274,10 @@
 
   async function loadEvents() {
     if (!appId || appId === 0n) return;
-    
+
+    // Ensure currentPage is never negative
+    if (currentPage < 0) currentPage = 0;
+
     const offset = currentPage * pageSize;
     const result = await hovStatsService.getMachineEvents(appId, pageSize, offset, searchTerm || undefined);
     
@@ -315,14 +319,21 @@
   }
 
   function previousPage() {
-    if (!hasPreviousPage || loading || !appId) return;
+    if (!hasPreviousPage || loading || !appId || currentPage <= 0) return;
     currentPage--;
   }
 
   function goToPage() {
     const pageNum = parseInt(pageInputValue);
     if (isNaN(pageNum) || pageNum < 1 || (totalPages > 0 && pageNum > totalPages)) return;
-    currentPage = pageNum - 1;
+
+    const newPage = pageNum - 1;
+    // Ensure the page is within valid bounds
+    if (newPage < 0) {
+      currentPage = 0;
+    } else {
+      currentPage = newPage;
+    }
   }
 
   function handlePageInputKeydown(event: KeyboardEvent) {
@@ -633,13 +644,15 @@
                 {#if event.who}
                   <div class="mb-2">
                     <span class="text-xs text-gray-500">Player:</span>
-                    <button
-                      on:click={() => gotoProfile(event.who)}
-                      class="text-voi-400 hover:text-voi-300 font-mono text-sm ml-1"
-                      title="Go to player profile"
-                    >
-                      {formatAddress(event.who)}
-                    </button>
+                    <div class="ml-1 inline-block">
+                      <AddressDisplay
+                        address={event.who}
+                        showProfileLink={true}
+                        maxLength="short"
+                        className="address-display-compact"
+                        linkClassName="text-voi-400 hover:text-voi-300 text-sm"
+                      />
+                    </div>
                   </div>
                 {/if}
                 
@@ -695,13 +708,13 @@
 
                 {#if event.who}
                   <div class="min-w-0">
-                    <button
-                      on:click={() => gotoProfile(event.who)}
-                      class="text-voi-400 hover:text-voi-300 font-mono text-sm truncate block"
-                      title="Go to player profile"
-                    >
-                      {formatAddress(event.who)}
-                    </button>
+                    <AddressDisplay
+                      address={event.who}
+                      showProfileLink={true}
+                      maxLength="short"
+                      className="address-display-compact"
+                      linkClassName="text-voi-400 hover:text-voi-300 text-sm truncate block"
+                    />
                   </div>
                 {:else}
                   <div class="text-gray-500 text-sm">-</div>

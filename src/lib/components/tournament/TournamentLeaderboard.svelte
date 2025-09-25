@@ -18,6 +18,7 @@
     CheckCircle
   } from 'lucide-svelte';
   import { walletStore } from '$lib/stores/wallet';
+  import AddressDisplay from '$lib/components/ui/AddressDisplay.svelte';
   import { tournamentService, type TournamentData, type TournamentPlayer } from '$lib/services/tournamentService';
 
   // Props
@@ -346,13 +347,13 @@
                       <!-- Player Info -->
                       <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2">
-                          <button 
-                            class="player-address-link font-mono text-sm text-theme truncate hover:text-voi-400 transition-colors"
-                            on:click={() => goToProfile(player.who)}
-                            title="View {tournamentService.formatAddress(player.who)} profile"
-                          >
-                            {tournamentService.formatAddress(player.who)}
-                          </button>
+                          <AddressDisplay
+                            address={player.who}
+                            showProfileLink={true}
+                            maxLength="short"
+                            className="address-display-compact"
+                            linkClassName="font-mono text-sm text-theme truncate hover:text-voi-400 transition-colors"
+                          />
                           {#if isCurrentPlayer}
                             <span class="you-badge">YOU</span>
                           {/if}
@@ -401,13 +402,13 @@
                       
                       <div class="flex-1">
                         <div class="flex items-center gap-2">
-                          <button 
-                            class="player-address-link font-mono text-sm text-theme hover:text-voi-400 transition-colors"
-                            on:click={() => goToProfile(currentPlayer.who)}
-                            title="View {tournamentService.formatAddress(currentPlayer.who)} profile"
-                          >
-                            {tournamentService.formatAddress(currentPlayer.who)}
-                          </button>
+                          <AddressDisplay
+                            address={currentPlayer.who}
+                            showProfileLink={true}
+                            maxLength="short"
+                            className="address-display-compact"
+                            linkClassName="font-mono text-sm text-theme hover:text-voi-400 transition-colors"
+                          />
                           <span class="you-badge">YOU</span>
                         </div>
                       </div>

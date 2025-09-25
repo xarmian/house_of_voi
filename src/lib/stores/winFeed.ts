@@ -13,6 +13,7 @@ import { PUBLIC_DEBUG_MODE } from '$env/static/public';
 import { BLOCKCHAIN_CONFIG } from '$lib/constants/network';
 import { formatVOI } from '$lib/constants/betting';
 import { ensureBase32TxId } from '$lib/utils/transactionUtils';
+import { nameResolutionService } from '$lib/services/nameResolution';
 
 export interface WinFeedState {
   isActive: boolean;
@@ -99,7 +100,10 @@ function createWinFeedStore() {
 
         // Subscribe to win events
         unsubscribeWinEvents = winFeedService.onWinEvent((winEvent) => {
-          this.handleWinEvent(winEvent);
+          // Handle async name resolution without blocking
+          this.handleWinEvent(winEvent).catch(error => {
+            console.error('Failed to handle win event:', error);
+          });
         });
 
         update(state => ({
@@ -144,7 +148,7 @@ function createWinFeedStore() {
     /**
      * Handle incoming win events
      */
-    handleWinEvent(winEvent: WinEvent): void {
+    async handleWinEvent(winEvent: WinEvent): Promise<void> {
       const prefs = get(feedPreferences);
       const currentState = get({ subscribe });
 
@@ -159,8 +163,8 @@ function createWinFeedStore() {
         };
       });
 
-      // Create and show win toast
-      this.showWinToast(winEvent, prefs);
+      // Create and show win toast with name resolution
+      await this.showWinToast(winEvent, prefs);
 
       if (PUBLIC_DEBUG_MODE === 'true') {
         console.log('Win event handled:', {
@@ -174,7 +178,7 @@ function createWinFeedStore() {
     /**
      * Show a win toast notification
      */
-    showWinToast(winEvent: WinEvent, prefs: any): void {
+    async showWinToast(winEvent: WinEvent, prefs: any): Promise<void> {
       const payoutVOI = Number(winEvent.payout) / 1000000;
       const betAmountVOI = Number(winEvent.amount) / 1000000;
       const lines = Number(winEvent.max_payline_index) + 1;
@@ -198,10 +202,10 @@ function createWinFeedStore() {
         return;
       }
       
-      // Format winner address
-      const winner = this.formatWinnerAddress(winEvent.who);
-      
-      // Create win toast using the convenience method  
+      // Format winner address with name resolution
+      const winner = await this.formatWinnerAddress(winEvent.who);
+
+      // Create win toast using the convenience method
       const toastId = toastStore.win(
         `${winner} won ${payoutVOI.toFixed(0)} VOI!`,
         `${multiplier.toFixed(1)}x multiplier on ${betAmountVOI.toFixed(1)} × ${lines} lines`,
@@ -220,18 +224,31 @@ function createWinFeedStore() {
     },
 
     /**
-     * Format winner address for display
+     * Format winner address for display with name resolution
      */
-    formatWinnerAddress(address: string): string {
+    async formatWinnerAddress(address: string): Promise<string> {
       const currentWallet = get(walletStore);
-      
+
       // Check if it's the current user
       if (currentWallet?.address === address) {
         return 'You';
       }
-      
-      // Return shortened address
-      return `${address.slice(0, 4)}...${address.slice(-4)}`;
+
+      try {
+        // Attempt name resolution (with caching)
+        const resolved = await nameResolutionService.resolveAddress(address);
+
+        if (resolved.hasName && resolved.name) {
+          return resolved.name;
+        }
+
+        // Fallback to shortened address
+        return `${address.slice(0, 4)}...${address.slice(-4)}`;
+      } catch (error) {
+        // If name resolution fails, fallback to shortened address
+        console.warn('Name resolution failed for win feed:', error);
+        return `${address.slice(0, 4)}...${address.slice(-4)}`;
+      }
     },
 
     /**
