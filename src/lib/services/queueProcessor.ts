@@ -337,8 +337,14 @@ export class QueueProcessor {
         return !!s.outcome; // Only count spins with outcomes
       });
       
-      // If no more spins to display, stop the reels
-      if (remainingSpins.length === 0) {
+      // Check if there are still spins being processed in the queue
+      const queueSnapshot = this.getQueueSnapshot();
+      const stillProcessing = queueSnapshot.some(spin =>
+        [SpinStatus.PENDING, SpinStatus.SUBMITTING, SpinStatus.WAITING, SpinStatus.PROCESSING].includes(spin.status)
+      );
+
+      // Only stop reels when there are no more spins to display AND no spins being processed
+      if (remainingSpins.length === 0 && !stillProcessing) {
         document.dispatchEvent(new CustomEvent('stop-spin-animation'));
       }
       
