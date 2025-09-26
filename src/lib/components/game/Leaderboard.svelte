@@ -25,6 +25,7 @@
   import AddressDisplay from '$lib/components/ui/AddressDisplay.svelte';
   import { hovStatsStore, connectionStatus } from '$lib/stores/hovStats';
   import { hovStatsService } from '$lib/services/hovStats';
+  import { tournamentService } from '$lib/services/tournamentService';
   import { walletStore } from '$lib/stores/wallet';
   import { goto } from '$app/navigation';
   import type { LeaderboardEntry } from '$lib/types/hovStats';
@@ -217,15 +218,19 @@
 
   async function loadDateRangeData() {
     if (!$connectionStatus.initialized || isLoadingDateRange) return;
-    
+
     isLoadingDateRange = true;
     localLeaderboardData = [];
-    
+
     try {
+      // Clear cache to force fresh data
+      hovStatsService.clearCache();
+      tournamentService.clearCache();
+
       const startDate = new Date(selectedDate);
       const endDate = new Date(selectedDate);
       endDate.setUTCHours(23, 59, 59, 999); // End of day in UTC
-      
+
       const data = await hovStatsService.getLeaderboardByDate({
         p_app_id: contractId,
         p_start_date: startDate,
@@ -234,7 +239,7 @@
         p_limit: 100,
         forceRefresh: true
       });
-      
+
       localLeaderboardData = data;
     } catch (error) {
       console.error('Failed to load date range leaderboard:', error);

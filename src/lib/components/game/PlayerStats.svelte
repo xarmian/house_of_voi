@@ -22,6 +22,7 @@
     ChevronRight
   } from 'lucide-svelte';
   import { hovStatsStore, connectionStatus } from '$lib/stores/hovStats';
+import { hovStatsService } from '$lib/services/hovStats';
   import { walletStore } from '$lib/stores/wallet';
   import { walletService } from '$lib/services/wallet';
   import { queueStats } from '$lib/stores/queue';
@@ -208,6 +209,9 @@
     error = null;
 
     try {
+      // Clear cache to force fresh data
+      hovStatsService.clearCache();
+
       const startDate = new Date(selectedDate);
       const endDate = new Date(selectedDate);
       endDate.setUTCHours(23, 59, 59, 999); // End of day in UTC
