@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount, createEventDispatcher } from 'svelte';
   import { fly, fade } from 'svelte/transition';
-  import { 
-    User, 
-    Trophy, 
-    Target, 
-    TrendingUp, 
+  import {
+    User,
+    Trophy,
+    Target,
+    TrendingUp,
     TrendingDown,
     Zap,
     Calendar,
@@ -17,7 +17,9 @@
     Activity,
     Award,
     Percent,
-    History
+    History,
+    ChevronLeft,
+    ChevronRight
   } from 'lucide-svelte';
   import { hovStatsStore, connectionStatus } from '$lib/stores/hovStats';
   import { walletStore } from '$lib/stores/wallet';
@@ -39,6 +41,7 @@
   // Use wallet address if no specific address provided
   // Try connected wallet first, then public wallet data for locked wallets
   $: targetAddress = playerAddress || $walletStore.account?.address || walletService.getPublicWalletData()?.address;
+
   
   // Reset hasLoaded when target address changes (unless initialStats provided)
   $: if (targetAddress && !initialStats) {
@@ -55,6 +58,10 @@
   let hasLoaded = !!initialStats;
   let showHistoryModal = false;
 
+  // View mode state for Daily/All Time functionality
+  let viewMode: 'all_time' | 'daily' = 'daily';
+  let selectedDate: string = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+  let isLoadingDateRange = false;
 
   // Computed values
   $: roi = stats && Number(stats.total_amount_bet) > 0 
@@ -128,7 +135,7 @@
   });
 
   // Reactive statements for address changes
-  $: if (targetAddress && !loading && !hasLoaded && !initialStats) {
+  $: if (targetAddress && !loading && !isLoadingDateRange && !hasLoaded && !initialStats) {
     loadPlayerStats();
   }
 
@@ -151,38 +158,95 @@
   async function loadPlayerStats() {
     if (!targetAddress || !$connectionStatus.initialized) return;
 
-    loading = true;
-    error = null;
+    if (viewMode === 'daily') {
+      await loadDateRangeStats();
+    } else {
+      loading = true;
+      error = null;
 
-    try {
-      stats = await hovStatsStore.getPlayerStats(targetAddress);
-      lastUpdated = new Date();
-      hasLoaded = true;
-      dispatch('statsLoaded', { stats, address: targetAddress });
-    } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to load player statistics';
-      stats = null;
-      dispatch('statsError', { error, address: targetAddress });
-    } finally {
-      loading = false;
+      try {
+        stats = await hovStatsStore.getPlayerStats(targetAddress);
+        lastUpdated = new Date();
+        hasLoaded = true;
+        dispatch('statsLoaded', { stats, address: targetAddress });
+      } catch (err) {
+        error = err instanceof Error ? err.message : 'Failed to load player statistics';
+        stats = null;
+        dispatch('statsError', { error, address: targetAddress });
+      } finally {
+        loading = false;
+      }
     }
   }
 
   async function refresh() {
     if (!targetAddress) return;
-    
-    refreshing = true;
+
+    if (viewMode === 'daily') {
+      await loadDateRangeStats();
+    } else {
+      refreshing = true;
+      try {
+        stats = await hovStatsStore.refreshPlayerStats(targetAddress);
+        lastUpdated = new Date();
+        hasLoaded = true;
+        dispatch('statsLoaded', { stats, address: targetAddress });
+      } catch (err) {
+        error = err instanceof Error ? err.message : 'Failed to refresh player statistics';
+        stats = null;
+        dispatch('statsError', { error, address: targetAddress });
+      } finally {
+        refreshing = false;
+      }
+    }
+  }
+
+  async function loadDateRangeStats() {
+    if (!targetAddress || isLoadingDateRange) return;
+
+    isLoadingDateRange = true;
+    error = null;
+
     try {
-      stats = await hovStatsStore.refreshPlayerStats(targetAddress);
+      const startDate = new Date(selectedDate);
+      const endDate = new Date(selectedDate);
+      endDate.setUTCHours(23, 59, 59, 999); // End of day in UTC
+
+      stats = await hovStatsStore.getPlayerStats(targetAddress, {
+        startDate,
+        endDate
+      });
       lastUpdated = new Date();
       hasLoaded = true;
       dispatch('statsLoaded', { stats, address: targetAddress });
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to refresh player statistics';
+      error = err instanceof Error ? err.message : 'Failed to load player statistics for selected date';
       stats = null;
       dispatch('statsError', { error, address: targetAddress });
     } finally {
-      refreshing = false;
+      isLoadingDateRange = false;
+    }
+  }
+
+  async function changeViewMode(mode: 'all_time' | 'daily') {
+    if (loading || isLoadingDateRange) return;
+
+    viewMode = mode;
+
+    if (mode === 'daily') {
+      await loadDateRangeStats();
+    } else {
+      await loadPlayerStats();
+    }
+  }
+
+  async function changeDateSelection(newDate: string) {
+    if (isLoadingDateRange) return;
+
+    selectedDate = newDate;
+
+    if (viewMode === 'daily') {
+      await loadDateRangeStats();
     }
   }
 
@@ -241,15 +305,105 @@
         </button>
         <button
           on:click={refresh}
-          disabled={loading || refreshing || !targetAddress}
+          disabled={loading || refreshing || isLoadingDateRange || !targetAddress}
           class="btn-secondary text-sm"
           title="Refresh statistics"
         >
-          <RefreshCw class="w-4 h-4 {(loading || refreshing) ? 'animate-spin' : ''}" />
+          <RefreshCw class="w-4 h-4 {(loading || refreshing || isLoadingDateRange) ? 'animate-spin' : ''}" />
         </button>
       </div>
     </div>
+
   </div>
+    <!-- View Mode Controls -->
+    {#if targetAddress}
+      <div class="px-4 pt-4">
+        <!-- Combined Layout: Toggle and Date Picker (horizontal on larger screens, vertical on mobile) -->
+        <div class="flex {compact ? 'flex-col' : 'flex-row'} lg:items-center justify-center gap-3">
+          <!-- View Mode Toggle Slider -->
+          <div class="flex items-center justify-center lg:justify-start">
+            <div class="relative bg-surface-secondary rounded-lg p-1 border border-surface-border flex">
+              <div
+                class="absolute top-1 bottom-1 bg-voi-600 rounded-md transition-all duration-200 ease-in-out"
+                style="left: {viewMode === 'daily' ? '50%' : '4px'}; right: {viewMode === 'daily' ? '4px' : '50%'};"
+              ></div>
+              <button
+                on:click={() => changeViewMode('all_time')}
+                class="relative z-10 flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors duration-200 {viewMode === 'all_time' ? 'text-white' : 'text-theme-text hover:text-theme'}"
+                disabled={loading || isLoadingDateRange}
+                title="All Time statistics"
+              >
+                <Trophy class="w-4 h-4" />
+                <span class="text-nowrap">All Time</span>
+              </button>
+              <button
+                on:click={() => changeViewMode('daily')}
+                class="relative z-10 flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors duration-200 {viewMode === 'daily' ? 'text-white' : 'text-theme-text hover:text-theme'}"
+                disabled={loading || isLoadingDateRange}
+                title="Daily statistics"
+              >
+                <Calendar class="w-4 h-4" />
+                <span>Daily</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Date Picker (only shown for daily mode) -->
+          {#if viewMode === 'daily'}
+            <div class="flex items-center justify-center lg:justify-end gap-2" transition:fly={{ y: -10, duration: 200 }}>
+              <button
+                on:click={() => {
+                  const prevDate = new Date(selectedDate);
+                  prevDate.setDate(prevDate.getDate() - 1);
+                  changeDateSelection(prevDate.toISOString().split('T')[0]);
+                }}
+                class="btn-secondary text-sm p-2"
+                disabled={isLoadingDateRange}
+                title="Previous day"
+              >
+                <ChevronLeft class="w-4 h-4" />
+              </button>
+              <input
+                type="date"
+                bind:value={selectedDate}
+                on:change={(e) => changeDateSelection((e.target as HTMLInputElement).value)}
+                class="px-3 py-2 bg-surface-secondary border border-surface-border rounded-lg text-sm text-theme focus:border-theme-primary focus:outline-none transition-all duration-200"
+                disabled={isLoadingDateRange}
+                max={new Date().toISOString().split('T')[0]}
+              />
+              <button
+                on:click={() => {
+                  const nextDate = new Date(selectedDate);
+                  nextDate.setDate(nextDate.getDate() + 1);
+                  const today = new Date().toISOString().split('T')[0];
+                  const nextDateStr = nextDate.toISOString().split('T')[0];
+                  if (nextDateStr <= today) {
+                    changeDateSelection(nextDateStr);
+                  }
+                }}
+                class="btn-secondary text-sm p-2"
+                disabled={isLoadingDateRange || selectedDate === new Date().toISOString().split('T')[0]}
+                title="Next day"
+              >
+                <ChevronRight class="w-4 h-4" />
+              </button>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Date Display (only for daily mode) -->
+        {#if viewMode === 'daily'}
+          <div class="text-xs text-gray-400 mt-3 text-center">
+            Showing statistics for {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            })}
+          </div>
+        {/if}
+      </div>
+    {/if}
 
   {#if !targetAddress}
     <!-- No address -->
@@ -257,13 +411,13 @@
       <User class="w-16 h-16 text-gray-600 mx-auto mb-4" />
       <p class="text-gray-400 text-center">Connect your wallet to view player statistics</p>
     </div>
-  {:else if loading && !stats}
+  {:else if (loading || isLoadingDateRange) && !stats}
     <!-- Loading -->
     <div class="loading-state">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-voi-400 mx-auto mb-4"></div>
       <p class="text-gray-400 text-center">Loading player statistics...</p>
     </div>
-  {:else if loading && stats}
+  {:else if (loading || isLoadingDateRange) && stats}
     <!-- Loading with skeleton placeholders -->
     <div class="stats-content">
       <div class="stats-grid">

@@ -20,8 +20,8 @@ export const OPTIONS: RequestHandler = async () => {
 };
 
 // Shared function to prepare parameters for the RPC call
-function prepareRpcParams(params: Record<string, any>): { p_app_id: number; p_player_address: string } {
-  const rpcParams: { p_app_id?: number; p_player_address?: string } = {};
+function prepareRpcParams(params: Record<string, any>): { p_app_id: number; p_player_address: string; p_start_ts?: string; p_end_ts?: string } {
+  const rpcParams: { p_app_id?: number; p_player_address?: string; p_start_ts?: string; p_end_ts?: string } = {};
 
   // Convert appId to number if present
   if (params.appId !== undefined && params.appId !== null) {
@@ -38,7 +38,16 @@ function prepareRpcParams(params: Record<string, any>): { p_app_id: number; p_pl
     throw new Error('address is required');
   }
 
-  return rpcParams as { p_app_id: number; p_player_address: string };
+  // Handle optional date range parameters
+  if (params.startTs !== undefined && params.startTs !== null) {
+    rpcParams.p_start_ts = String(params.startTs);
+  }
+
+  if (params.endTs !== undefined && params.endTs !== null) {
+    rpcParams.p_end_ts = String(params.endTs);
+  }
+
+  return rpcParams as { p_app_id: number; p_player_address: string; p_start_ts?: string; p_end_ts?: string };
 }
 
 // Handle POST request for Hov player stats with JSON body
@@ -86,6 +95,8 @@ export const GET: RequestHandler = async ({ url }: { url: URL }) => {
     const queryParams = {
       appId: url.searchParams.get('appId'),
       address: url.searchParams.get('address'),
+      startTs: url.searchParams.get('startTs'),
+      endTs: url.searchParams.get('endTs'),
     };
 
     // Prepare parameters for RPC call

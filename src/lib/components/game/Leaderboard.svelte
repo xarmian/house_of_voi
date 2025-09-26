@@ -21,7 +21,7 @@
     Calendar
   } from 'lucide-svelte';
   import LeaderboardModal from './LeaderboardModal.svelte';
-  import PlayerStatsModal from './PlayerStatsModal.svelte';
+  import PlayerStats from './PlayerStats.svelte';
   import AddressDisplay from '$lib/components/ui/AddressDisplay.svelte';
   import { hovStatsStore, connectionStatus } from '$lib/stores/hovStats';
   import { hovStatsService } from '$lib/services/hovStats';
@@ -738,14 +738,36 @@
 {/if}
 
 {#if showPlayerStatsModal && selectedPlayerAddress}
-  <PlayerStatsModal
-    bind:isVisible={showPlayerStatsModal}
-    playerAddress={selectedPlayerAddress}
-    on:close={() => {
-      showPlayerStatsModal = false;
-      selectedPlayerAddress = null;
-    }}
-  />
+  <!-- Player Stats Modal -->
+  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-surface-primary rounded-xl border border-surface-border w-full max-w-4xl max-h-[90vh] overflow-hidden">
+      <!-- Header -->
+      <div class="flex items-center justify-between p-6 border-b border-surface-border">
+        <h2 class="text-xl font-bold text-theme">Player Statistics</h2>
+        <button
+          on:click={() => {
+            showPlayerStatsModal = false;
+            selectedPlayerAddress = null;
+          }}
+          class="btn-secondary p-2"
+          title="Close"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Content -->
+      <div class="max-h-[calc(90vh-120px)] overflow-y-auto">
+        <PlayerStats
+          playerAddress={selectedPlayerAddress}
+          compact={false}
+          autoRefresh={false}
+        />
+      </div>
+    </div>
+  </div>
 {/if}
 
 <style lang="postcss">

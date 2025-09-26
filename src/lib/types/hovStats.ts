@@ -217,6 +217,8 @@ export interface GetLeaderboardByDateParams {
 export interface GetPlayerStatsParams {
   p_app_id: bigint | null; // Allow null to fetch stats for all machines
   p_player_address: string;
+  p_start_ts?: Date; // Optional start timestamp for date range filtering
+  p_end_ts?: Date; // Optional end timestamp for date range filtering
 }
 
 export interface GetPlayerSpinsParams {

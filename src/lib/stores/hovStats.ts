@@ -400,12 +400,19 @@ function createHovStatsStore() {
   /**
    * Get player statistics
    */
-  async function getPlayerStats(playerAddress: string): Promise<PlayerStats | null> {
+  async function getPlayerStats(
+    playerAddress: string,
+    dateRange?: { startDate: Date; endDate: Date }
+  ): Promise<PlayerStats | null> {
     try {
       const appId = await getCurrentSlotMachineAppId();
       return await hovStatsService.getPlayerStats({
         p_app_id: appId,
-        p_player_address: playerAddress
+        p_player_address: playerAddress,
+        ...(dateRange && {
+          p_start_ts: dateRange.startDate,
+          p_end_ts: dateRange.endDate
+        })
       });
     } catch (error) {
       if (PUBLIC_DEBUG_MODE === 'true') {
@@ -418,15 +425,22 @@ function createHovStatsStore() {
   /**
    * Refresh player statistics (clears cache first)
    */
-  async function refreshPlayerStats(playerAddress: string): Promise<PlayerStats | null> {
+  async function refreshPlayerStats(
+    playerAddress: string,
+    dateRange?: { startDate: Date; endDate: Date }
+  ): Promise<PlayerStats | null> {
     try {
       // Clear cache first to force fresh data
       hovStatsService.clearCache();
-      
+
       const appId = await getCurrentSlotMachineAppId();
       return await hovStatsService.getPlayerStats({
         p_app_id: appId,
-        p_player_address: playerAddress
+        p_player_address: playerAddress,
+        ...(dateRange && {
+          p_start_ts: dateRange.startDate,
+          p_end_ts: dateRange.endDate
+        })
       });
     } catch (error) {
       if (PUBLIC_DEBUG_MODE === 'true') {

@@ -377,7 +377,12 @@ class HovStatsService {
    */
   async getPlayerStats(params: GetPlayerStatsParams): Promise<PlayerStats> {
     const appId = params.p_app_id !== null ? (params.p_app_id || this.config.defaultAppId) : null;
-    const cacheKey = `player_${appId || 'all'}_${params.p_player_address}`;
+
+    // Include date range in cache key if provided
+    const dateRange = params.p_start_ts && params.p_end_ts
+      ? `_${params.p_start_ts.toISOString()}_${params.p_end_ts.toISOString()}`
+      : '';
+    const cacheKey = `player_${appId || 'all'}_${params.p_player_address}${dateRange}`;
 
     const cached = this.caches.playerStats.get(cacheKey);
     if (cached) return cached;
@@ -387,10 +392,22 @@ class HovStatsService {
       await supabaseService.initialize();
     }
     const client = supabaseService.getClient();
-    const { data, error } = await client.rpc('get_player_stats', {
+
+    // Prepare RPC parameters with optional date range
+    const rpcParams: any = {
       p_app_id: appId ? appId.toString() : null,
       p_player_address: params.p_player_address
-    });
+    };
+
+    // Add date range parameters if provided
+    if (params.p_start_ts) {
+      rpcParams.p_start_ts = params.p_start_ts.toISOString();
+    }
+    if (params.p_end_ts) {
+      rpcParams.p_end_ts = params.p_end_ts.toISOString();
+    }
+
+    const { data, error } = await client.rpc('get_player_stats', rpcParams);
 
     if (error) throw error;
     if (!data || data.length === 0) {
