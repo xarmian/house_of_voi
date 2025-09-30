@@ -143,13 +143,15 @@
               From Voi Network
             </button>
             <button
-              class="flex-1 py-2 px-4 text-center text-sm transition-colors"
+              class="flex-1 py-2 px-4 text-center text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               class:bg-surface-secondary={transferSubTab === 'algorand'}
               class:text-theme={transferSubTab === 'algorand'}
               class:text-gray-400={transferSubTab !== 'algorand'}
               on:click={() => transferSubTab = 'algorand'}
+              disabled={true}
             >
               From Algorand Network
+              <span class="text-xs text-gray-400">Temporarily Disabled</span>
             </button>
           </div>
           
