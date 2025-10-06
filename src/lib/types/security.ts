@@ -8,11 +8,18 @@ export interface EncryptedWallet {
     createdAt: number;
     lastUsed: number;
     origin?: WalletOrigin;
+    nickname?: string;
   };
   salt: string;
   iv: string;
   version?: number; // 1 = fingerprint-encrypted (legacy), 2 = password-encrypted
   isPasswordless?: boolean; // true if wallet uses empty password (weak encryption)
+}
+
+export interface WalletCollection {
+  wallets: EncryptedWallet[];
+  activeAddress: string | null;
+  version: number; // Collection format version
 }
 
 export interface WalletSession {

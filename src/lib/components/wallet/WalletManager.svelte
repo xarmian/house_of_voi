@@ -10,6 +10,7 @@
 
   // Gateway modal state
   let showWalletGateway = false;
+  let gatewayMode: 'setup' | 'add' = 'setup';
 
   // Subscribe to wallet store
   $: wallet = $walletStore;
@@ -28,13 +29,21 @@
     handleStartWalletSetup();
   }
 
-  // Handle wallet setup initiation
-  function handleStartWalletSetup() {
+  // Handle wallet setup initiation (for new users or adding wallets)
+  function handleStartWalletSetup(event?: CustomEvent) {
+    // Check if this is an "add wallet" request vs initial setup
+    const detail = event?.detail;
+    if (detail?.mode === 'add' || ($wallet.availableWallets && $wallet.availableWallets.length > 0)) {
+      gatewayMode = 'add';
+    } else {
+      gatewayMode = 'setup';
+    }
     showWalletGateway = true;
   }
 
   // Handle unlock flow
   function handleUnlockWallet() {
+    gatewayMode = 'setup';
     showWalletGateway = true;
   }
 
@@ -56,9 +65,9 @@
   }
 </script>
 
-<!-- Main wallet display when connected or in guest mode -->
-{#if connected || wallet.isGuest}
-  <WalletDisplay 
+<!-- Main wallet display - always show if we have wallets or are connected -->
+{#if connected || wallet.isGuest || wallet.availableWallets.length > 0}
+  <WalletDisplay
     {compact}
     on:lock={handleLock}
     on:disconnect={handleDisconnect}
@@ -70,5 +79,6 @@
 <!-- Wallet setup gateway -->
 <WalletSetupGateway
   bind:isOpen={showWalletGateway}
+  mode={gatewayMode}
   on:close={handleGatewayClose}
 />

@@ -18,7 +18,9 @@ function createWalletStore() {
     isLoading: false,
     isLocked: false,
     error: null,
-    lastUpdated: null
+    lastUpdated: null,
+    availableWallets: [],
+    activeWalletAddress: null
   });
 
   // Balance change tracking is now handled by balanceManager
@@ -100,27 +102,34 @@ function createWalletStore() {
 
   return {
     subscribe,
-    
+
     async initialize() {
       if (!browser) return;
-      
+
       // Don't re-initialize if wallet is already connected - this prevents
       // the wallet from appearing "locked" during navigation
       const currentState = get({ subscribe });
       if (currentState.isConnected && currentState.account) {
         return;
       }
-      
+
       try {
-        if (walletService.hasStoredWallet()) {
-          // Check if wallet is passwordless and try to auto-unlock
-          if (walletService.isPasswordlessWallet()) {
+        // Load all available wallets
+        const availableWallets = walletService.getAllWallets();
+        const activeWalletAddress = walletService.getActiveWalletAddress();
+
+        if (availableWallets.length > 0 && activeWalletAddress) {
+          // Find active wallet
+          const activeWallet = availableWallets.find(w => w.address === activeWalletAddress);
+
+          // Check if active wallet is passwordless and try to auto-unlock
+          if (activeWallet?.isPasswordless) {
             try {
-              const account = await walletService.retrieveWallet(''); // Empty password
-              
+              const account = await walletService.retrieveWalletFromCollection(activeWalletAddress, '');
+
               if (account && algorandService) {
                 const balance = await balanceManager.getBalance(account.address);
-                
+
                 set({
                   account,
                   balance,
@@ -129,9 +138,11 @@ function createWalletStore() {
                   isLoading: false,
                   isLocked: false,
                   error: null,
-                  lastUpdated: Date.now()
+                  lastUpdated: Date.now(),
+                  availableWallets,
+                  activeWalletAddress
                 });
-                
+
                 startBalanceMonitoring(account.address);
                 return; // Successfully auto-unlocked
               }
@@ -140,7 +151,7 @@ function createWalletStore() {
               // Fall through to guest mode
             }
           }
-          
+
           // Wallet exists but stay in guest mode until user initiates setup
           set({
             account: null,
@@ -150,7 +161,9 @@ function createWalletStore() {
             isLoading: false,
             isLocked: false,
             error: null,
-            lastUpdated: null
+            lastUpdated: null,
+            availableWallets,
+            activeWalletAddress
           });
         } else {
           // No wallet exists - stay in guest mode
@@ -162,7 +175,9 @@ function createWalletStore() {
             isLoading: false,
             isLocked: false,
             error: null,
-            lastUpdated: null
+            lastUpdated: null,
+            availableWallets: [],
+            activeWalletAddress: null
           });
         }
       } catch (error) {
@@ -174,25 +189,30 @@ function createWalletStore() {
           isLoading: false,
           isLocked: false,
           error: error instanceof Error ? error.message : 'Failed to initialize wallet',
-          lastUpdated: null
+          lastUpdated: null,
+          availableWallets: [],
+          activeWalletAddress: null
         });
       }
     },
 
     async startWalletSetup() {
       if (!browser) return;
-      
+
       update(state => ({ ...state, isLoading: true, error: null }));
-      
+
       try {
-        // Check for existing wallet when user actually wants to set up
-        if (walletService.hasStoredWallet()) {
-          // Wallet exists - transition to locked state to prompt for password
+        // Check for existing wallets
+        const availableWallets = walletService.getAllWallets();
+
+        if (availableWallets.length > 0) {
+          // Wallets exist - transition to locked state to prompt for password
           update(state => ({
             ...state,
             isGuest: false,
             isLocked: true,
-            isLoading: false
+            isLoading: false,
+            availableWallets
           }));
           return 'existing';
         } else {
@@ -200,7 +220,8 @@ function createWalletStore() {
           update(state => ({
             ...state,
             isGuest: false,
-            isLoading: false
+            isLoading: false,
+            availableWallets: []
           }));
           return 'new';
         }
@@ -293,28 +314,42 @@ function createWalletStore() {
     lock() {
       walletService.lockWallet();
       stopBalanceMonitoring();
-      
+
       update(state => ({
         ...state,
         isGuest: true,
         isConnected: false,
         isLocked: false,
-        account: state.account ? { ...state.account, privateKey: '', mnemonic: '' } : null
+        account: state.account ? { ...state.account, privateKey: '', mnemonic: '' } : null,
+        // Keep wallet list and active address when locking
+        availableWallets: walletService.getAllWallets(),
+        activeWalletAddress: walletService.getActiveWalletAddress()
       }));
     },
 
-    async unlock(password: string) {
+    async unlock(password: string, address?: string) {
       update(state => ({ ...state, isLoading: true, error: null }));
-      
+
       try {
-        const account = await walletService.retrieveWallet(password);
-        
+        // Get the target wallet address (use provided or active)
+        const targetAddress = address || walletService.getActiveWalletAddress();
+
+        if (!targetAddress) {
+          throw new Error('No wallet address specified');
+        }
+
+        const account = await walletService.retrieveWalletFromCollection(targetAddress, password);
+
         if (account) {
           if (!algorandService) {
             throw new Error('AlgorandService not available');
           }
           const balance = await balanceManager.getBalance(account.address);
-          
+          const availableWallets = walletService.getAllWallets();
+
+          // Set as active wallet
+          walletService.setActiveWallet(account.address);
+
           set({
             account,
             balance,
@@ -323,9 +358,11 @@ function createWalletStore() {
             isLoading: false,
             isLocked: false,
             error: null,
-            lastUpdated: Date.now()
+            lastUpdated: Date.now(),
+            availableWallets,
+            activeWalletAddress: account.address
           });
-          
+
           startBalanceMonitoring(account.address);
         } else {
           throw new Error('Failed to unlock wallet');
@@ -341,9 +378,9 @@ function createWalletStore() {
     },
 
     disconnect() {
-      walletService.clearWallet();
+      walletService.clearAllWallets();
       stopBalanceMonitoring();
-      
+
       set({
         account: null,
         balance: 0,
@@ -352,7 +389,9 @@ function createWalletStore() {
         isLoading: false,
         isLocked: false,
         error: null,
-        lastUpdated: null
+        lastUpdated: null,
+        availableWallets: [],
+        activeWalletAddress: null
       });
     },
 
@@ -360,22 +399,34 @@ function createWalletStore() {
       update(state => ({ ...state, error: null }));
     },
 
-    async createWallet(password: string) {
+    async createWallet(password: string, nickname?: string) {
       if (!browser) return;
-      
+
       update(state => ({ ...state, isLoading: true, error: null }));
-      
+
       try {
         // Generate new wallet
         const account = await walletService.generateWallet();
-        
-        // Clear existing wallet first
-        walletService.clearWallet();
-        stopBalanceMonitoring();
-        
-        // Store the new wallet with password
-        await walletService.storeWallet(account, password);
-        
+
+        // Check if this is the first wallet
+        const isFirstWallet = walletService.getWalletCount() === 0;
+
+        if (isFirstWallet) {
+          // Clear legacy storage first
+          walletService.clearWallet();
+          stopBalanceMonitoring();
+        }
+
+        // Add wallet to collection
+        await walletService.addWalletToCollection(account, password, {
+          origin: 'generated',
+          nickname
+        });
+
+        // Set as active and connect
+        walletService.setActiveWallet(account.address);
+        const availableWallets = walletService.getAllWallets();
+
         set({
           account,
           balance: 0,
@@ -384,11 +435,13 @@ function createWalletStore() {
           isLoading: false,
           isLocked: false,
           error: null,
-          lastUpdated: Date.now()
+          lastUpdated: Date.now(),
+          availableWallets,
+          activeWalletAddress: account.address
         });
-        
+
         startBalanceMonitoring(account.address);
-        
+
       } catch (error) {
         update(state => ({
           ...state,
@@ -399,28 +452,45 @@ function createWalletStore() {
       }
     },
 
-    async importWallet(mnemonic: string, password: string) {
+    async importWallet(mnemonic: string, password: string, nickname?: string) {
       if (!browser) return;
-      
+
       update(state => ({ ...state, isLoading: true, error: null }));
-      
+
       try {
         // Import wallet from mnemonic
         const account = await walletService.importWallet(mnemonic);
-        
-        // Clear existing wallet first
-        walletService.clearWallet();
-        stopBalanceMonitoring();
-        
-        // Store the imported wallet with password
-        await walletService.storeWallet(account, password);
-        
+
+        // Check if wallet already exists
+        if (walletService.hasWalletInCollection(account.address)) {
+          throw new Error('This wallet already exists in your collection');
+        }
+
+        // Check if this is the first wallet
+        const isFirstWallet = walletService.getWalletCount() === 0;
+
+        if (isFirstWallet) {
+          // Clear legacy storage first
+          walletService.clearWallet();
+          stopBalanceMonitoring();
+        }
+
+        // Add wallet to collection
+        await walletService.addWalletToCollection(account, password, {
+          origin: 'imported',
+          nickname
+        });
+
         // Get balance for the imported wallet
         if (!algorandService) {
           throw new Error('AlgorandService not available');
         }
         const balance = await balanceManager.getBalance(account.address);
-        
+
+        // Set as active and connect
+        walletService.setActiveWallet(account.address);
+        const availableWallets = walletService.getAllWallets();
+
         set({
           account,
           balance,
@@ -429,11 +499,13 @@ function createWalletStore() {
           isLoading: false,
           isLocked: false,
           error: null,
-          lastUpdated: Date.now()
+          lastUpdated: Date.now(),
+          availableWallets,
+          activeWalletAddress: account.address
         });
-        
+
         startBalanceMonitoring(account.address);
-        
+
       } catch (error) {
         update(state => ({
           ...state,
@@ -446,11 +518,11 @@ function createWalletStore() {
 
     async resetWallet() {
       if (!browser) return;
-      
-      // Clear existing wallet and go back to setup mode
-      walletService.clearWallet();
+
+      // Clear all wallets and go back to setup mode
+      walletService.clearAllWallets();
       stopBalanceMonitoring();
-      
+
       set({
         account: null,
         balance: 0,
@@ -459,7 +531,9 @@ function createWalletStore() {
         isLoading: false,
         isLocked: false,
         error: null,
-        lastUpdated: null
+        lastUpdated: null,
+        availableWallets: [],
+        activeWalletAddress: null
       });
     },
 
@@ -496,7 +570,7 @@ function createWalletStore() {
       }
     },
 
-    async loginWithCDP(email: string, otpCode: string) {
+    async loginWithCDP(email: string, otpCode: string, nickname?: string) {
       if (!browser) return;
 
       update(state => ({ ...state, isLoading: true, error: null }));
@@ -508,18 +582,38 @@ function createWalletStore() {
         // Authenticate with CDP and derive Voi wallet
         const voiWallet = await cdpWalletService.authenticateAndDeriveWallet(email, otpCode);
 
-        // Clear existing wallet first
-        walletService.clearWallet();
-        stopBalanceMonitoring();
+        // Check if wallet already exists
+        if (walletService.hasWalletInCollection(voiWallet.address)) {
+          // Wallet exists, just switch to it
+          const result = await this.switchWallet(voiWallet.address, '');
+          updateCDPUserEmail();
+          return;
+        }
 
-        // Store the derived Voi wallet with empty password (passwordless for CDP login)
-        await walletService.storeWallet(voiWallet, '', { origin: 'cdp' });
+        // Check if this is the first wallet
+        const isFirstWallet = walletService.getWalletCount() === 0;
+
+        if (isFirstWallet) {
+          // Clear legacy storage first
+          walletService.clearWallet();
+          stopBalanceMonitoring();
+        }
+
+        // Add wallet to collection with empty password (passwordless for CDP login)
+        await walletService.addWalletToCollection(voiWallet, '', {
+          origin: 'cdp',
+          nickname
+        });
 
         // Get balance for the derived wallet
         if (!algorandService) {
           throw new Error('AlgorandService not available');
         }
         const balance = await balanceManager.getBalance(voiWallet.address);
+
+        // Set as active and connect
+        walletService.setActiveWallet(voiWallet.address);
+        const availableWallets = walletService.getAllWallets();
 
         set({
           account: voiWallet,
@@ -529,7 +623,9 @@ function createWalletStore() {
           isLoading: false,
           isLocked: false,
           error: null,
-          lastUpdated: Date.now()
+          lastUpdated: Date.now(),
+          availableWallets,
+          activeWalletAddress: voiWallet.address
         });
 
         startBalanceMonitoring(voiWallet.address);
@@ -551,37 +647,72 @@ function createWalletStore() {
       if (!browser) return;
 
       try {
+        const currentState = get({ subscribe });
+
         // Import CDP wallet service
         const { cdpWalletService } = await import('$lib/services/cdpWallet');
 
         // Sign out from CDP
         await cdpWalletService.signOut();
 
-        // Clear wallet and return to guest mode
-        walletService.clearWallet();
+        // Remove current CDP wallet from collection (if it's CDP)
+        if (currentState.account && currentState.account.origin === 'cdp') {
+          walletService.removeWalletFromCollection(currentState.account.address);
+        }
+
         stopBalanceMonitoring();
 
         // Clear CDP email
         cdpUserEmail.set(null);
 
-        set({
-          account: null,
-          balance: 0,
-          isConnected: false,
-          isGuest: true,
-          isLoading: false,
-          isLocked: false,
-          error: null,
-          lastUpdated: null
-        });
+        // Get remaining wallets
+        const availableWallets = walletService.getAllWallets();
+
+        if (availableWallets.length > 0) {
+          // Switch to guest mode with available wallets
+          set({
+            account: null,
+            balance: 0,
+            isConnected: false,
+            isGuest: true,
+            isLoading: false,
+            isLocked: false,
+            error: null,
+            lastUpdated: null,
+            availableWallets,
+            activeWalletAddress: walletService.getActiveWalletAddress()
+          });
+        } else {
+          // No wallets left
+          set({
+            account: null,
+            balance: 0,
+            isConnected: false,
+            isGuest: true,
+            isLoading: false,
+            isLocked: false,
+            error: null,
+            lastUpdated: null,
+            availableWallets: [],
+            activeWalletAddress: null
+          });
+        }
       } catch (error) {
         console.error('Failed to logout from CDP:', error);
-        // Still clear local wallet even if CDP logout fails
-        walletService.clearWallet();
+
+        const currentState = get({ subscribe });
+
+        // Still try to remove CDP wallet even if logout fails
+        if (currentState.account && currentState.account.origin === 'cdp') {
+          walletService.removeWalletFromCollection(currentState.account.address);
+        }
+
         stopBalanceMonitoring();
 
         // Clear CDP email
         cdpUserEmail.set(null);
+
+        const availableWallets = walletService.getAllWallets();
 
         set({
           account: null,
@@ -591,7 +722,9 @@ function createWalletStore() {
           isLoading: false,
           isLocked: false,
           error: null,
-          lastUpdated: null
+          lastUpdated: null,
+          availableWallets,
+          activeWalletAddress: walletService.getActiveWalletAddress()
         });
       }
     },
@@ -607,6 +740,231 @@ function createWalletStore() {
 
     getRecentBalanceIncreases(limitToLast: number = 10) {
       return balanceManager.getRecentBalanceIncreases(limitToLast);
+    },
+
+    // ============================================================================
+    // MULTI-WALLET MANAGEMENT METHODS
+    // ============================================================================
+
+    /**
+     * Switch to a different wallet
+     */
+    async switchWallet(address: string, password?: string) {
+      update(state => ({ ...state, isLoading: true, error: null }));
+
+      try {
+        // Stop monitoring current wallet
+        stopBalanceMonitoring();
+
+        // Find the wallet in collection
+        const wallets = walletService.getAllWallets();
+        const targetWallet = wallets.find(w => w.address === address);
+
+        if (!targetWallet) {
+          throw new Error('Wallet not found');
+        }
+
+        // Determine if password is needed
+        const needsPassword = !targetWallet.isPasswordless;
+
+        if (needsPassword && !password) {
+          // Return to locked state for this wallet
+          walletService.setActiveWallet(address);
+          update(state => ({
+            ...state,
+            isGuest: false,
+            isLocked: true,
+            isLoading: false,
+            activeWalletAddress: address,
+            availableWallets: wallets
+          }));
+          return 'needs_password';
+        }
+
+        // Unlock the wallet
+        const account = await walletService.retrieveWalletFromCollection(
+          address,
+          password || ''
+        );
+
+        if (!account || !algorandService) {
+          throw new Error('Failed to unlock wallet');
+        }
+
+        const balance = await balanceManager.getBalance(account.address);
+
+        // Set as active
+        walletService.setActiveWallet(account.address);
+
+        set({
+          account,
+          balance,
+          isConnected: true,
+          isGuest: false,
+          isLoading: false,
+          isLocked: false,
+          error: null,
+          lastUpdated: Date.now(),
+          availableWallets: walletService.getAllWallets(),
+          activeWalletAddress: account.address
+        });
+
+        startBalanceMonitoring(account.address);
+
+        return 'success';
+      } catch (error) {
+        update(state => ({
+          ...state,
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Failed to switch wallet'
+        }));
+        throw error;
+      }
+    },
+
+    /**
+     * Add a new wallet to the collection
+     */
+    async addWallet(account: WalletAccount, password: string, nickname?: string) {
+      if (!browser) return;
+
+      try {
+        await walletService.addWalletToCollection(account, password, {
+          origin: account.origin,
+          nickname
+        });
+
+        // Refresh available wallets
+        update(state => ({
+          ...state,
+          availableWallets: walletService.getAllWallets()
+        }));
+      } catch (error) {
+        console.error('Failed to add wallet:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Remove a wallet from the collection
+     */
+    async removeWallet(address: string) {
+      if (!browser) return;
+
+      try {
+        const currentState = get({ subscribe });
+
+        // Prevent removing the last wallet if it's active
+        if (currentState.availableWallets.length === 1 && currentState.activeWalletAddress === address) {
+          throw new Error('Cannot remove the only wallet. Disconnect instead.');
+        }
+
+        const removed = walletService.removeWalletFromCollection(address);
+
+        if (!removed) {
+          throw new Error('Failed to remove wallet');
+        }
+
+        // If we removed the active wallet, switch to another
+        if (currentState.activeWalletAddress === address) {
+          stopBalanceMonitoring();
+
+          const availableWallets = walletService.getAllWallets();
+
+          if (availableWallets.length > 0) {
+            // Set guest mode and show wallet selection
+            set({
+              account: null,
+              balance: 0,
+              isConnected: false,
+              isGuest: true,
+              isLoading: false,
+              isLocked: false,
+              error: null,
+              lastUpdated: null,
+              availableWallets,
+              activeWalletAddress: walletService.getActiveWalletAddress()
+            });
+          } else {
+            // No wallets left
+            set({
+              account: null,
+              balance: 0,
+              isConnected: false,
+              isGuest: true,
+              isLoading: false,
+              isLocked: false,
+              error: null,
+              lastUpdated: null,
+              availableWallets: [],
+              activeWalletAddress: null
+            });
+          }
+        } else {
+          // Just update the available wallets list
+          update(state => ({
+            ...state,
+            availableWallets: walletService.getAllWallets()
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to remove wallet:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Rename a wallet
+     */
+    async renameWallet(address: string, nickname: string) {
+      if (!browser) return;
+
+      try {
+        const updated = walletService.updateWalletNickname(address, nickname);
+
+        if (!updated) {
+          throw new Error('Failed to update wallet nickname');
+        }
+
+        // Refresh available wallets and update current account if needed
+        update(state => {
+          const availableWallets = walletService.getAllWallets();
+          const updatedState = {
+            ...state,
+            availableWallets
+          };
+
+          // Update current account nickname if it's the active wallet
+          if (state.account && state.account.address === address) {
+            updatedState.account = {
+              ...state.account,
+              nickname
+            };
+          }
+
+          return updatedState;
+        });
+      } catch (error) {
+        console.error('Failed to rename wallet:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Get all available wallets
+     */
+    getAvailableWallets() {
+      return walletService.getAllWallets();
+    },
+
+    /**
+     * Refresh available wallets list
+     */
+    refreshWalletList() {
+      update(state => ({
+        ...state,
+        availableWallets: walletService.getAllWallets()
+      }));
     }
   };
 }

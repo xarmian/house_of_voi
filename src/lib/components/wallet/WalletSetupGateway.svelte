@@ -5,6 +5,7 @@
   import WalletOnboardingWizard from './onboarding/WalletOnboardingWizard.svelte';
 
   export let isOpen = false;
+  export let mode: 'setup' | 'add' = 'setup'; // 'setup' for initial setup, 'add' for adding to collection
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -35,6 +36,13 @@
   }
 
   async function handleOpenFlow() {
+    // If in 'add' mode, always go to choose flow (adding a new wallet)
+    if (mode === 'add') {
+      initialFlow = 'choose';
+      return;
+    }
+
+    // Original setup flow logic
     if (wallet.isConnected) {
       // Already connected, close modal
       handleClose();

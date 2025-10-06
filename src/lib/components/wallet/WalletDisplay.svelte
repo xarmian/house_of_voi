@@ -9,16 +9,19 @@
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import WalletDetailsModal from './WalletDetailsModal.svelte';
   import GamingWalletStakingModal from './GamingWalletStakingModal.svelte';
+  import WalletSwitcher from './WalletSwitcher.svelte';
+  import WalletListModal from './WalletListModal.svelte';
   import BalanceUpdateAnimation from './BalanceUpdateAnimation.svelte';
   import { playDeposit, playBalanceIncrease } from '$lib/services/soundService';
   import { formatVOI } from '$lib/constants/betting';
 
   const dispatch = createEventDispatcher();
-  
+
   export let compact = false;
   
   let showDetailsModal = false;
   let showStakingModal = false;
+  let showWalletListModal = false;
   let isRefreshing = false;
   let copied = false;
   
@@ -65,8 +68,27 @@
   
   // Load public wallet data for guest mode with existing wallet
   async function loadPublicWalletData() {
-    publicWalletData = walletService.getPublicWalletData();
-    
+    // First try multi-wallet collection
+    const activeAddress = walletService.getActiveWalletAddress();
+    if (activeAddress) {
+      const wallets = walletService.getAllWallets();
+      const activeWallet = wallets.find(w => w.address === activeAddress);
+      if (activeWallet) {
+        publicWalletData = {
+          address: activeWallet.address,
+          createdAt: activeWallet.createdAt,
+          lastUsed: activeWallet.lastUsed,
+          origin: activeWallet.origin,
+          isPasswordless: activeWallet.isPasswordless
+        };
+      }
+    }
+
+    // Fall back to legacy single wallet if no multi-wallet found
+    if (!publicWalletData) {
+      publicWalletData = walletService.getPublicWalletData();
+    }
+
     if (publicWalletData?.address && algorandService) {
       loadingPublicBalance = true;
       try {
@@ -107,6 +129,11 @@
         pendingDeductions = 0;
       }
     }
+  }
+
+  // Reload public wallet data when active wallet changes
+  $: if ($walletStore.activeWalletAddress) {
+    loadPublicWalletData();
   }
 
   onMount(() => {
@@ -154,11 +181,14 @@
     if ($walletStore.isGuest && !$hasExistingWallet) {
       // True new user - start wallet setup
       dispatch('startSetup');
-    } else if ($walletStore.isGuest && $hasExistingWallet) {
-      // Existing wallet in guest mode - trigger unlock flow
+    } else if (!$isWalletConnected && ($walletStore.availableWallets.length > 0 || $hasExistingWallet)) {
+      // Have wallets but not connected - trigger unlock flow
       dispatch('unlock');
-    } else {
+    } else if ($isWalletConnected) {
       // Connected wallet - show details modal
+      showDetailsModal = true;
+    } else {
+      // Fallback - show details modal
       showDetailsModal = true;
     }
   }
@@ -191,284 +221,192 @@
       walletStore.lock();
     }
   }
+
+  // Multi-wallet handlers
+  function handleAddWallet() {
+    dispatch('startSetup', { mode: 'add' }); // Trigger wallet onboarding in add mode
+  }
+
+  function handleManageWallets() {
+    showWalletListModal = true;
+  }
+
+  async function handleSwitchWallet(event: CustomEvent<{ address: string }>) {
+    const { address } = event.detail;
+
+    // The WalletSwitcher dropdown is simple, just switch (passwordless only for now)
+    try {
+      await walletStore.switchWallet(address, '');
+    } catch (error) {
+      console.error('Failed to switch wallet:', error);
+      // If it fails, open the manage modal where they can enter password
+      showWalletListModal = true;
+    }
+  }
 </script>
 
 <!-- Unified Wallet Component - opens modal for all functionality -->
 {#if compact}
-  <!-- Compact Mobile View - Single Line -->
-  <div class="card-secondary px-3 py-2 flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      <Wallet class="w-4 h-4 text-voi-400" />
-      <span class="text-sm font-medium text-theme">
-        Credits: {formattedAvailableCredits} VOI
-        {#if hasPendingTransactions}
-          <span class="text-xs text-amber-400 ml-1" title="Transaction pending confirmation">●</span>
+  <!-- Compact Mobile View -->
+  <div class="card-secondary px-3 py-2">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <Wallet class="w-4 h-4 text-voi-400" />
+        <span class="text-sm font-medium text-theme">
+          {formattedAvailableCredits} VOI
+          {#if hasPendingTransactions}
+            <span class="text-xs text-amber-400 ml-1" title="Transaction pending confirmation">●</span>
+          {/if}
+        </span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <!-- Wallet Switcher -->
+        {#if $walletStore.availableWallets.length > 0}
+          <WalletSwitcher
+            compact={true}
+            on:addWallet={handleAddWallet}
+            on:manageWallets={handleManageWallets}
+            on:switchWallet={handleSwitchWallet}
+          />
         {/if}
-      </span>
-    </div>
-    
-    {#if $walletStore.isGuest && !$hasExistingWallet}
-      <button
-        on:click={openDetailsModal}
-        class="px-3 py-1 bg-green-600 hover:bg-green-700 text-theme text-xs font-medium rounded transition-colors"
-      >
-        Add Credits
-      </button>
-    {:else if $walletStore.isGuest && $hasExistingWallet}
-      <button
-        on:click={openDetailsModal}
-        class="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-theme text-xs font-medium rounded transition-colors flex items-center gap-1"
-      >
-        <Unlock class="w-3 h-3" />
-        Unlock
-      </button>
-    {:else if $walletStore.isLocked}
-      <button
-        on:click={openDetailsModal}
-        class="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-theme text-xs font-medium rounded transition-colors"
-      >
-        Unlock
-      </button>
-    {:else if $walletStore.error}
-      <button
-        on:click={() => walletStore.initialize()}
-        class="px-3 py-1 bg-red-600 hover:bg-red-700 text-theme text-xs font-medium rounded transition-colors"
-      >
-        Retry
-      </button>
-    {:else}
-      <div class="flex items-center gap-1">
-        <button
-          on:click={openStakingModal}
-          class="px-2 py-1 bg-voi-600 hover:bg-voi-700 text-white text-xs font-medium rounded transition-colors flex items-center gap-1"
-          title="Stake VOI"
-        >
-          <TrendingUp class="w-3 h-3" />
-          Stake
-        </button>
+
+        <!-- Menu Button -->
         <button
           on:click={openDetailsModal}
-          class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
+          class="p-1.5 text-theme-text opacity-70 hover:opacity-100 transition-colors"
           title="Wallet options"
         >
           <MoreHorizontal class="w-4 h-4" />
         </button>
       </div>
-    {/if}
+    </div>
   </div>
 {:else}
   <!-- Desktop View - Full Display -->
   <div class="card bg-gradient-to-b from-surface-primary to-surface-secondary rounded-2xl shadow-2xl h-fit p-4">
-    <div class="flex items-center justify-between mb-3">
-      <!-- Header Section -->
-      <div class="flex items-center gap-3">
-        <Wallet class="w-5 h-5 text-voi-400" />
-        <div>
-          {#if $isWalletConnected || publicBalance !== null}
-            <div class="flex items-center gap-2">
-              <h3 class="text-base font-semibold text-voi-400">
-                Available Credits: {formattedAvailableCredits} VOI
-                {#if hasPendingTransactions}
-                  <span class="text-xs text-amber-400 ml-2 animate-pulse" title="Transaction pending confirmation">●</span>
-                {/if}
-              </h3>
-            </div>
-            <div class="text-sm text-theme-text opacity-70 mt-0.5 hidden">
-              Wallet Balance: {#if loadingPublicBalance}
-                Loading...
-              {:else}
-                <BalanceUpdateAnimation 
-                  bind:this={balanceAnimationComponent}
-                  startBalance={$isWalletConnected ? $walletBalance : (publicBalance || 0)}
-                  endBalance={$isWalletConnected ? $walletBalance : (publicBalance || 0)}
-                  formatAsCurrency={true}
-                  isWinnings={false}
-                  on:animationStart={() => isAnimatingBalance = true}
-                  on:animationEnd={() => isAnimatingBalance = false}
-                />
+    <div class="space-y-3">
+      <!-- Row 2: Wallet Switcher and Actions (ALWAYS SHOW IF WALLETS EXIST) -->
+      {#if $walletStore.availableWallets.length > 0}
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <!-- Wallet Switcher -->
+            <WalletSwitcher
+              compact={true}
+              on:addWallet={handleAddWallet}
+              on:manageWallets={handleManageWallets}
+              on:switchWallet={handleSwitchWallet}
+            />
+
+            <!-- Quick Actions -->
+            <div class="flex items-center gap-1">
+              {#if $walletAddress}
+                <a
+                  href="/profile/{$walletAddress}"
+                  class="p-1.5 text-theme-text opacity-50 hover:text-voi-400 hover:opacity-100 transition-colors"
+                  title="View profile"
+                >
+                  <User class="w-3.5 h-3.5" />
+                </a>
+                <button
+                  on:click={copyAddress}
+                  class="p-1.5 text-theme-text opacity-50 hover:text-voi-400 hover:opacity-100 transition-colors"
+                  title="Copy address"
+                >
+                  {#if copied}
+                    <Check class="w-3.5 h-3.5 text-green-400" />
+                  {:else}
+                    <Copy class="w-3.5 h-3.5" />
+                  {/if}
+                </button>
+              {/if}
+
+              {#if $isWalletConnected}
+                <button
+                  on:click={refreshBalance}
+                  disabled={isRefreshing}
+                  class="p-1.5 text-theme-text opacity-50 hover:text-voi-400 hover:opacity-100 transition-colors disabled:opacity-30"
+                  title="Refresh balance"
+                >
+                  <RefreshCw class="w-3.5 h-3.5 {isRefreshing ? 'animate-spin' : ''}" />
+                </button>
+
+                <button
+                  on:click={$isCDPWallet ? handleLogout : () => walletStore.lock()}
+                  class="p-1.5 text-theme-text opacity-50 hover:text-red-400 hover:opacity-100 transition-colors"
+                  title={$isCDPWallet ? 'Logout' : 'Lock wallet'}
+                >
+                  {#if $isCDPWallet}
+                    <LogOut class="w-3.5 h-3.5" />
+                  {:else}
+                    <Lock class="w-3.5 h-3.5" />
+                  {/if}
+                </button>
+              {:else if $walletAddress}
+                <!-- Show unlock button when locked -->
+                <button
+                  on:click={openDetailsModal}
+                  class="p-1.5 text-amber-400 hover:text-amber-300 transition-colors"
+                  title="Unlock wallet"
+                >
+                  <Unlock class="w-3.5 h-3.5" />
+                </button>
               {/if}
             </div>
-          {:else}
-            <div class="flex items-center gap-2">
-              <h3 class="text-base font-medium text-theme">Available Credits</h3>
-            </div>
-          {/if}
-        </div>
+          </div>
+
       </div>
+      {/if}
       
-      <!-- Action Buttons -->
-      <div class="flex items-center gap-2">
-        <!-- Refresh Balance -->
-        {#if $isWalletConnected}
-          <button
-            on:click={refreshBalance}
-            disabled={isRefreshing}
-            class="p-2 text-theme-text opacity-70 hover:opacity-100 transition-colors disabled:opacity-50"
-            title="Refresh balance"
-          >
-            <RefreshCw class="w-4 h-4 {isRefreshing ? 'animate-spin' : ''}" />
-          </button>
+      <!-- Row 1: Balance and Menu (ALWAYS SHOW) -->
+      <div class="flex items-end justify-between">
+        <div class="flex items-center gap-2">
+          <Wallet class="w-5 h-5 text-voi-400" />
+          <div>
+            <h3 class="text-base font-semibold text-voi-400">
+              {formattedAvailableCredits} VOI
+              {#if hasPendingTransactions}
+                <span class="text-xs text-amber-400 ml-2 animate-pulse" title="Transaction pending confirmation">●</span>
+              {/if}
+            </h3>
+            <p class="text-xs text-theme-text opacity-50">Available Credits</p>
+          </div>
+        </div>
+
+        <!-- CDP Email (if applicable) -->
+        {#if $isCDPWallet && $cdpUserEmail}
+          <div class="flex items-center gap-1.5 text-xs text-theme-text opacity-70 mb-1">
+            <Mail class="w-3 h-3" />
+            <span>{$cdpUserEmail}</span>
+          </div>
         {/if}
-        
-        <!-- Details/Settings Button -->
+
         <button
           on:click={openDetailsModal}
-          class="p-1.5 text-theme-text opacity-70 hover:opacity-100 transition-colors"
+          class="p-1.5 text-theme-text opacity-70 hover:text-voi-400 hover:opacity-100 transition-colors"
           title="Open wallet details"
         >
-          <MoreHorizontal class="w-4 h-4" />
+          <MoreHorizontal class="w-3.5 h-3.5" />
         </button>
       </div>
+
     </div>
-  
-  <!-- Status Display -->
+
+  <!-- Status Messages (only for special states) -->
   {#if $walletStore.isLoading}
     <div class="text-center py-4">
       <div class="w-6 h-6 border-2 border-voi-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
       <p class="text-theme-text opacity-70 text-sm">Loading wallet...</p>
     </div>
   {:else if $walletStore.error}
-    <div class="text-center py-4">
-      <p class="text-red-400 text-sm mb-3">{$walletStore.error}</p>
+    <div class="text-center py-2">
+      <p class="text-red-400 text-sm mb-2">{$walletStore.error}</p>
       <button
         on:click={() => walletStore.initialize()}
-        class="px-4 py-2 bg-voi-600 hover:bg-voi-700 text-theme text-sm font-medium rounded-lg transition-colors"
+        class="px-3 py-1.5 bg-voi-600 hover:bg-voi-700 text-white text-sm rounded-lg transition-colors"
       >
         Retry
       </button>
-    </div>
-  {:else if $walletStore.isGuest && !$hasExistingWallet}
-    <!-- True new user - show Add Funds button -->
-    <div class="text-center py-4">
-      <p class="text-theme-text opacity-70 text-sm mb-3">Ready to play!</p>
-      <button
-        on:click={openDetailsModal}
-        class="px-4 py-2 bg-green-600 hover:bg-green-700 text-theme text-sm font-medium rounded-lg transition-colors"
-      >
-        Add Credits
-      </button>
-    </div>
-  {:else if $walletStore.isGuest && $hasExistingWallet}
-    <!-- Existing wallet in guest mode - show unlock with address -->
-    <div class="py-4">
-      <div class="bg-surface-tertiary rounded-lg shadow-lg border border-surface-border backdrop-blur-sm p-3 mb-3">
-        <div class="flex items-center gap-1 mb-1">
-          <p class="text-xs text-theme-text opacity-70">Address</p>
-          <Lock class="w-3 h-3 text-theme-text opacity-70" />
-        </div>
-        <div class="flex items-center gap-2">
-          <a 
-            href="https://voirewards.com/wallet/{publicWalletData?.address || ''}"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="font-mono text-sm text-voi-400 hover:text-voi-300 transition-colors underline"
-          >
-            {shortAddress}
-          </a>
-          <a
-            href="/profile/{publicWalletData?.address || ''}"
-            class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
-            title="View profile"
-          >
-            <User class="w-3 h-3" />
-          </a>
-          <button
-            on:click={copyAddress}
-            class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
-            title="Copy address"
-          >
-            {#if copied}
-              <Check class="w-3 h-3 text-green-400" />
-            {:else}
-              <Copy class="w-3 h-3" />
-            {/if}
-          </button>
-        </div>
-        {#if publicWalletData?.isPasswordless}
-          <p class="text-xs text-amber-400 mt-1">Passwordless wallet</p>
-        {/if}
-      </div>
-      <div class="text-center">
-        <button
-          on:click={openDetailsModal}
-          class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-theme text-sm font-medium rounded-lg transition-colors flex items-center gap-2 mx-auto"
-        >
-          <Unlock class="w-4 h-4" />
-          Unlock Wallet
-        </button>
-      </div>
-    </div>
-  {:else if !compact}
-    <!-- Desktop connected state - show address info -->
-    <div class="bg-surface-tertiary rounded-lg shadow-lg border border-surface-border backdrop-blur-sm p-3">
-      {#if $isCDPWallet && $cdpUserEmail}
-        <!-- CDP Email Display with Logout -->
-        <div class="flex items-center justify-between mb-2">
-          <div class="flex items-center gap-1">
-            <Mail class="w-3 h-3 text-voi-400" />
-            <p class="text-sm text-voi-400 font-medium">{$cdpUserEmail}</p>
-          </div>
-          <button
-            on:click={handleLogout}
-            class="px-2 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors flex items-center gap-1"
-            title="Logout"
-          >
-            <LogOut class="w-3 h-3" />
-            Logout
-          </button>
-        </div>
-      {/if}
-
-      <div class="flex items-center justify-between mb-1">
-        <div class="flex items-center gap-1">
-          <p class="text-xs text-theme-text opacity-70">Address</p>
-          <Unlock class="w-3 h-3 text-theme-text opacity-70" />
-        </div>
-        {#if !$isCDPWallet}
-          <button
-            on:click={() => walletStore.lock()}
-            class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
-            title="Lock wallet"
-          >
-            <Lock class="w-3 h-3" />
-          </button>
-        {/if}
-      </div>
-      <div class="flex items-center gap-2">
-        <a
-          href="https://voirewards.com/wallet/{$walletAddress || ''}"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="font-mono text-sm text-voi-400 hover:text-voi-300 transition-colors underline"
-        >
-          {shortAddress}
-        </a>
-        <a
-          href="/profile/{$walletAddress || ''}"
-          class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
-          title="View profile"
-        >
-          <User class="w-3 h-3" />
-        </a>
-        <button
-          on:click={copyAddress}
-          class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
-          title="Copy address"
-        >
-          {#if copied}
-            <Check class="w-3 h-3 text-green-400" />
-          {:else}
-            <Copy class="w-3 h-3" />
-          {/if}
-        </button>
-      </div>
-      <p class="text-xs text-theme-text opacity-70 mt-2">
-        {#if $isCDPWallet}
-          Click the menu to access wallet functions
-        {:else}
-          Click the menu to access functions • Click lock to secure
-        {/if}
-      </p>
     </div>
   {/if}
   </div>
@@ -487,6 +425,14 @@
     bind:isVisible={showStakingModal}
     on:close={() => showStakingModal = false}
     on:success={handleStakingSuccess}
+  />
+{/if}
+
+{#if showWalletListModal}
+  <WalletListModal
+    bind:isOpen={showWalletListModal}
+    on:close={() => showWalletListModal = false}
+    on:addWallet={handleAddWallet}
   />
 {/if}
 
