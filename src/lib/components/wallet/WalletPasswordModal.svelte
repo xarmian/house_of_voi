@@ -3,6 +3,7 @@
   import { walletService } from '$lib/services/wallet';
   import { algorandService } from '$lib/services/algorand';
   import { balanceManager } from '$lib/services/balanceManager';
+  import type { WalletOrigin } from '$lib/types/wallet';
   import { Trash2 } from 'lucide-svelte';
 
   export let isOpen = false;
@@ -22,7 +23,13 @@
   let showAbandonConfirm = false;
   
   // Wallet info state
-  let walletInfo: { address: string; createdAt: number; lastUsed: number; isPasswordless?: boolean } | null = null;
+  let walletInfo: {
+    address: string;
+    createdAt: number;
+    lastUsed: number;
+    origin?: WalletOrigin;
+    isPasswordless?: boolean;
+  } | null = null;
   let walletBalance: number | null = null;
   let loadingBalance = false;
 

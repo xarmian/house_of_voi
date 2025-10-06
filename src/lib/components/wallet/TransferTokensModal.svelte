@@ -2,10 +2,11 @@
   import { createEventDispatcher } from 'svelte';
   import { walletStore, walletBalance, walletAddress } from '$lib/stores/wallet';
   import { algorandService } from '$lib/services/algorand';
+  import AddressInput from '$lib/components/ui/AddressInput.svelte';
   import { Send, X, AlertTriangle, CheckCircle } from 'lucide-svelte';
-  
+
   const dispatch = createEventDispatcher();
-  
+
   let recipientAddress = '';
   let amount = '';
   let isTransferring = false;
@@ -21,6 +22,14 @@
     if (event.target === event.currentTarget) {
       closeModal();
     }
+  }
+
+  function handleAddressSelect(event: CustomEvent<{ address: string }>) {
+    recipientAddress = event.detail.address;
+  }
+
+  function handleAddressInput(event: CustomEvent<{ value: string }>) {
+    recipientAddress = event.detail.value;
   }
   
   async function transferTokens() {
@@ -146,23 +155,14 @@
         </div>
         
         <!-- Recipient Address -->
-        <div class="space-y-2">
-          <label for="recipient-address" class="block text-sm font-medium text-gray-300">
-            Recipient Address
-          </label>
-          <input
-            id="recipient-address"
-            type="text"
-            bind:value={recipientAddress}
-            placeholder="Enter 58-character Algorand address"
-            class="w-full input-field font-mono text-sm"
-            class:border-green-500={recipientAddress && isValidAddress}
-            class:border-red-500={recipientAddress && !isValidAddress}
-          />
-          {#if recipientAddress && !isValidAddress}
-            <p class="text-red-400 text-sm">Please enter a valid Algorand address (58 characters)</p>
-          {/if}
-        </div>
+        <AddressInput
+          bind:value={recipientAddress}
+          label="Recipient Address or Name"
+          placeholder="Enter Voi address or search for name (e.g., alice.hov.voi)"
+          showValidation={true}
+          on:select={handleAddressSelect}
+          on:input={handleAddressInput}
+        />
         
         <!-- Amount -->
         <div class="space-y-2">

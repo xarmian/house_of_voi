@@ -538,12 +538,12 @@
           <DollarSign class="w-6 h-6" />
           <h3 class="font-bold text-lg">Ready to Play!</h3>
         </div>
-        <p class="text-theme-text text-sm mb-4">Add funds to your wallet to start spinning</p>
+        <p class="text-theme-text text-sm mb-4">Create, Login, or Import an account to start spinning</p>
         <button
           class="px-6 py-3 bg-green-600 hover:bg-green-700 font-semibold rounded-lg transition-colors text-theme"
           on:click={() => walletActions.triggerWalletSetup()}
         >
-          Add Funds to Play
+          Create, Login, or Import Account
         </button>
       </div>
     </div>

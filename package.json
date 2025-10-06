@@ -20,6 +20,9 @@
   "description": "",
   "dependencies": {
     "@algorandfoundation/algokit-utils": "^7.1.0",
+    "@coinbase/cdp-core": "^0.0.42",
+    "@coinbase/cdp-hooks": "^0.0.42",
+    "@coinbase/wallet-sdk": "^4.3.4",
     "@supabase/supabase-js": "^2.56.0",
     "@sveltejs/adapter-auto": "^6.1.0",
     "algosdk": "^2.11.0",

@@ -1,3 +1,5 @@
+import type { WalletOrigin } from './wallet';
+
 export interface EncryptedWallet {
   encryptedPrivateKey: string;
   encryptedMnemonic: string;
@@ -5,6 +7,7 @@ export interface EncryptedWallet {
     address: string;
     createdAt: number;
     lastUsed: number;
+    origin?: WalletOrigin;
   };
   salt: string;
   iv: string;

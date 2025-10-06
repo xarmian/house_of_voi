@@ -10,7 +10,6 @@
 
   // Gateway modal state
   let showWalletGateway = false;
-  let showAddFundsAfterUnlock = true;
 
   // Subscribe to wallet store
   $: wallet = $walletStore;
@@ -29,15 +28,13 @@
     handleStartWalletSetup();
   }
 
-  // Handle wallet setup initiation from Add Funds button
+  // Handle wallet setup initiation
   function handleStartWalletSetup() {
-    showAddFundsAfterUnlock = true; // Show Add Funds after unlock when explicitly adding funds
     showWalletGateway = true;
   }
 
-  // Handle unlock-only flow (no Add Funds after)
+  // Handle unlock flow
   function handleUnlockWallet() {
-    showAddFundsAfterUnlock = false; // Don't show Add Funds after unlock
     showWalletGateway = true;
   }
 
@@ -73,6 +70,5 @@
 <!-- Wallet setup gateway -->
 <WalletSetupGateway
   bind:isOpen={showWalletGateway}
-  {showAddFundsAfterUnlock}
   on:close={handleGatewayClose}
 />

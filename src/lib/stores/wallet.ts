@@ -1,4 +1,4 @@
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived, get, readable } from 'svelte/store';
 import type { WalletState, WalletAccount } from '$lib/types/wallet';
 import { walletService } from '$lib/services/wallet';
 import { algorandService } from '$lib/services/algorand';
@@ -465,22 +465,22 @@ function createWalletStore() {
 
     async changePassword(newPassword: string) {
       if (!browser) return;
-      
+
       let currentAccount: WalletAccount | null = null;
-      
+
       update(state => {
         currentAccount = state.account;
         return { ...state, isLoading: true, error: null };
       });
-      
+
       try {
         if (!currentAccount) {
           throw new Error('No wallet account available');
         }
-        
+
         // Re-encrypt wallet with new password
         await walletService.changeWalletPassword(currentAccount, newPassword);
-        
+
         update(state => ({
           ...state,
           isLoading: false,
@@ -493,6 +493,106 @@ function createWalletStore() {
           error: error instanceof Error ? error.message : 'Failed to change password'
         }));
         throw error;
+      }
+    },
+
+    async loginWithCDP(email: string, otpCode: string) {
+      if (!browser) return;
+
+      update(state => ({ ...state, isLoading: true, error: null }));
+
+      try {
+        // Import CDP wallet service
+        const { cdpWalletService } = await import('$lib/services/cdpWallet');
+
+        // Authenticate with CDP and derive Voi wallet
+        const voiWallet = await cdpWalletService.authenticateAndDeriveWallet(email, otpCode);
+
+        // Clear existing wallet first
+        walletService.clearWallet();
+        stopBalanceMonitoring();
+
+        // Store the derived Voi wallet with empty password (passwordless for CDP login)
+        await walletService.storeWallet(voiWallet, '', { origin: 'cdp' });
+
+        // Get balance for the derived wallet
+        if (!algorandService) {
+          throw new Error('AlgorandService not available');
+        }
+        const balance = await balanceManager.getBalance(voiWallet.address);
+
+        set({
+          account: voiWallet,
+          balance,
+          isConnected: true,
+          isGuest: false,
+          isLoading: false,
+          isLocked: false,
+          error: null,
+          lastUpdated: Date.now()
+        });
+
+        startBalanceMonitoring(voiWallet.address);
+
+        // Update CDP email after successful login
+        updateCDPUserEmail();
+
+      } catch (error) {
+        update(state => ({
+          ...state,
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Failed to login with email'
+        }));
+        throw error;
+      }
+    },
+
+    async logoutCDP() {
+      if (!browser) return;
+
+      try {
+        // Import CDP wallet service
+        const { cdpWalletService } = await import('$lib/services/cdpWallet');
+
+        // Sign out from CDP
+        await cdpWalletService.signOut();
+
+        // Clear wallet and return to guest mode
+        walletService.clearWallet();
+        stopBalanceMonitoring();
+
+        // Clear CDP email
+        cdpUserEmail.set(null);
+
+        set({
+          account: null,
+          balance: 0,
+          isConnected: false,
+          isGuest: true,
+          isLoading: false,
+          isLocked: false,
+          error: null,
+          lastUpdated: null
+        });
+      } catch (error) {
+        console.error('Failed to logout from CDP:', error);
+        // Still clear local wallet even if CDP logout fails
+        walletService.clearWallet();
+        stopBalanceMonitoring();
+
+        // Clear CDP email
+        cdpUserEmail.set(null);
+
+        set({
+          account: null,
+          balance: 0,
+          isConnected: false,
+          isGuest: true,
+          isLoading: false,
+          isLocked: false,
+          error: null,
+          lastUpdated: null
+        });
       }
     },
 
@@ -549,3 +649,153 @@ export const hasExistingWallet = derived(
     return walletService.hasStoredWallet();
   }
 );
+
+// Check if current wallet is a CDP wallet by checking CDP sign-in status
+// This is checked once when wallet state changes, not on an interval
+export const isCDPWallet = derived(
+  walletStore,
+  ($wallet) => {
+    if (!browser) {
+      return false;
+    }
+
+    if ($wallet.account?.origin === 'cdp') {
+      return true;
+    }
+
+    const publicData = walletService.getPublicWalletData();
+    if (publicData?.origin === 'cdp') {
+      return true;
+    }
+
+    // Legacy fallback: passwordless wallets without explicit origin were CDP
+    if (!publicData?.origin && walletService.isPasswordlessWallet()) {
+      return true;
+    }
+
+    return false;
+  }
+);
+
+// Get CDP user email - only checked when components explicitly need it
+export const cdpUserEmail = writable<string | null>(null);
+
+let lastFetchedCdpWalletAddress: string | null = null;
+let cdpEmailFetchPromise: Promise<string | null> | null = null;
+
+// Helper function to fetch and update CDP email with deduplication
+export async function updateCDPUserEmail({
+  address,
+  force = false
+}: {
+  address?: string | null;
+  force?: boolean;
+} = {}): Promise<string | null> {
+  if (!browser) return null;
+
+  const walletState = get(walletStore);
+  const activeAddress = address ?? walletState.account?.address ?? null;
+
+  if (!activeAddress) {
+    cdpUserEmail.set(null);
+    lastFetchedCdpWalletAddress = null;
+    return null;
+  }
+
+  const publicData = walletService.getPublicWalletData();
+  const walletOrigin =
+    walletState.account?.origin ??
+    publicData?.origin ??
+    (publicData?.isPasswordless ? 'cdp' : undefined);
+
+  if (walletOrigin !== 'cdp') {
+    cdpUserEmail.set(null);
+    lastFetchedCdpWalletAddress = null;
+    return null;
+  }
+
+  const currentEmail = get(cdpUserEmail);
+  if (!force && activeAddress === lastFetchedCdpWalletAddress && currentEmail) {
+    return currentEmail;
+  }
+
+  if (cdpEmailFetchPromise) {
+    if (!force) {
+      return cdpEmailFetchPromise;
+    }
+    try {
+      await cdpEmailFetchPromise;
+    } catch {
+      // Ignore previous failure and continue with forced refresh
+    }
+  }
+
+  cdpEmailFetchPromise = (async () => {
+    try {
+      const { cdpWalletService } = await import('$lib/services/cdpWallet');
+
+      const initialized = await cdpWalletService.initializeCDP();
+      if (!initialized) {
+        cdpUserEmail.set(null);
+        lastFetchedCdpWalletAddress = null;
+        return null;
+      }
+
+      const isSignedIn = await cdpWalletService.isSignedIn();
+      if (!isSignedIn) {
+        cdpUserEmail.set(null);
+        lastFetchedCdpWalletAddress = null;
+        return null;
+      }
+
+      const user = await cdpWalletService.getCurrentUser();
+      // Email is nested in authenticationMethods
+      const email = (user as any)?.authenticationMethods?.email?.email ?? null;
+
+      cdpUserEmail.set(email);
+      lastFetchedCdpWalletAddress = activeAddress;
+      return email;
+    } catch (error) {
+      console.error('Error getting CDP user:', error);
+      cdpUserEmail.set(null);
+      lastFetchedCdpWalletAddress = null;
+      return null;
+    }
+  })();
+
+  try {
+    return await cdpEmailFetchPromise;
+  } finally {
+    cdpEmailFetchPromise = null;
+  }
+}
+
+if (browser) {
+  walletStore.subscribe(($wallet) => {
+    const isConnected = $wallet.isConnected && !$wallet.isLocked;
+    const connectedAddress = isConnected ? $wallet.account?.address ?? null : null;
+    const publicData = walletService.getPublicWalletData();
+    const walletOrigin =
+      $wallet.account?.origin ??
+      publicData?.origin ??
+      (publicData?.isPasswordless ? 'cdp' : undefined);
+    const isWalletCDP = walletOrigin === 'cdp';
+
+    if (isConnected && isWalletCDP && connectedAddress) {
+      const email = get(cdpUserEmail);
+      if (
+        connectedAddress !== lastFetchedCdpWalletAddress ||
+        (!email && !cdpEmailFetchPromise)
+      ) {
+        updateCDPUserEmail({ address: connectedAddress });
+      }
+    } else {
+      if (get(cdpUserEmail) !== null) {
+        cdpUserEmail.set(null);
+      }
+      if (!isConnected) {
+        lastFetchedCdpWalletAddress = null;
+      }
+    }
+  });
+}

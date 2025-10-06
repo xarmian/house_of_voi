@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { walletStore } from '$lib/stores/wallet';
+  import { walletStore, isCDPWallet } from '$lib/stores/wallet';
   import { Send, Download, Upload, RotateCcw, X, AlertTriangle, Settings, Key } from 'lucide-svelte';
   import ExportWalletModal from './ExportWalletModal.svelte';
   import ImportWalletModal from './ImportWalletModal.svelte';
@@ -38,11 +38,11 @@
   function openImportWallet() {
     showImportWallet = true;
   }
-  
+
   function openTransferTokens() {
     showTransferTokens = true;
   }
-  
+
   function openChangePassword() {
     showChangePassword = true;
   }
@@ -139,86 +139,111 @@
     <div class="p-6 space-y-4">
       
       {#if !showResetConfirmation && !showChangePassword}
-        <!-- Transfer Tokens -->
-        <button
-          on:click={openTransferTokens}
-          class="w-full p-4 bg-surface-primary bg-opacity-50 hover:bg-surface-secondary hover:bg-opacity-50 rounded-lg transition-colors text-left"
-        >
-          <div class="flex items-center gap-3">
-            <div class="p-2 bg-blue-600 rounded-lg">
-              <Send class="w-5 h-5 text-theme" />
-            </div>
-            <div>
-              <h3 class="font-medium text-theme">Transfer Tokens</h3>
-              <p class="text-sm text-gray-400">Send VOI to another wallet</p>
-            </div>
+        {#if $isCDPWallet}
+          <div class="p-4 bg-surface-primary bg-opacity-50 border border-surface-border rounded-lg text-sm text-gray-300">
+            <p class="font-medium text-theme mb-2">Coinbase CDP Wallet</p>
+            <p>
+              Your CDP wallet keys stay with Coinbase. Set a local password to encrypt the
+              derived Voi wallet stored on this device.
+            </p>
           </div>
-        </button>
-        
-        <!-- Export Account -->
-        <button
-          on:click={openExportWallet}
-          class="w-full p-4 bg-surface-primary bg-opacity-50 hover:bg-surface-secondary hover:bg-opacity-50 rounded-lg transition-colors text-left"
-        >
-          <div class="flex items-center gap-3">
-            <div class="p-2 bg-green-600 rounded-lg">
-              <Download class="w-5 h-5 text-theme" />
+
+          <button
+            on:click={openChangePassword}
+            class="w-full mt-4 p-4 bg-surface-primary bg-opacity-50 hover:bg-surface-secondary hover:bg-opacity-50 rounded-lg transition-colors text-left"
+          >
+            <div class="flex items-center gap-3">
+              <div class="p-2 bg-orange-600 rounded-lg">
+                <Key class="w-5 h-5 text-theme" />
+              </div>
+              <div>
+                <h3 class="font-medium text-theme">Set / Change Password</h3>
+                <p class="text-sm text-gray-400">Encrypt this device's copy of your CDP wallet</p>
+              </div>
             </div>
-            <div>
-              <h3 class="font-medium text-theme">Export Account</h3>
-              <p class="text-sm text-gray-400">Backup your wallet keys and recovery phrase</p>
+          </button>
+        {:else}
+          <!-- Transfer Tokens -->
+          <button
+            on:click={openTransferTokens}
+            class="w-full p-4 bg-surface-primary bg-opacity-50 hover:bg-surface-secondary hover:bg-opacity-50 rounded-lg transition-colors text-left"
+          >
+            <div class="flex items-center gap-3">
+              <div class="p-2 bg-blue-600 rounded-lg">
+                <Send class="w-5 h-5 text-theme" />
+              </div>
+              <div>
+                <h3 class="font-medium text-theme">Transfer Tokens</h3>
+                <p class="text-sm text-gray-400">Send VOI to another wallet</p>
+              </div>
             </div>
-          </div>
-        </button>
-        
-        <!-- Import Account -->
-        <button
-          on:click={openImportWallet}
-          class="w-full p-4 bg-surface-primary bg-opacity-50 hover:bg-surface-secondary hover:bg-opacity-50 rounded-lg transition-colors text-left"
-        >
-          <div class="flex items-center gap-3">
-            <div class="p-2 bg-purple-600 rounded-lg">
-              <Upload class="w-5 h-5 text-theme" />
+          </button>
+
+          <!-- Export Account -->
+          <button
+            on:click={openExportWallet}
+            class="w-full p-4 bg-surface-primary bg-opacity-50 hover:bg-surface-secondary hover:bg-opacity-50 rounded-lg transition-colors text-left"
+          >
+            <div class="flex items-center gap-3">
+              <div class="p-2 bg-green-600 rounded-lg">
+                <Download class="w-5 h-5 text-theme" />
+              </div>
+              <div>
+                <h3 class="font-medium text-theme">Export Account</h3>
+                <p class="text-sm text-gray-400">Backup your wallet keys and recovery phrase</p>
+              </div>
             </div>
-            <div>
-              <h3 class="font-medium text-theme">Import Account</h3>
-              <p class="text-sm text-gray-400">Replace current wallet with existing account</p>
+          </button>
+
+          <!-- Import Account -->
+          <button
+            on:click={openImportWallet}
+            class="w-full p-4 bg-surface-primary bg-opacity-50 hover:bg-surface-secondary hover:bg-opacity-50 rounded-lg transition-colors text-left"
+          >
+            <div class="flex items-center gap-3">
+              <div class="p-2 bg-purple-600 rounded-lg">
+                <Upload class="w-5 h-5 text-theme" />
+              </div>
+              <div>
+                <h3 class="font-medium text-theme">Import Account</h3>
+                <p class="text-sm text-gray-400">Replace current wallet with an imported account</p>
+              </div>
             </div>
-          </div>
-        </button>
-        
-        <!-- Change Password -->
-        <button
-          on:click={openChangePassword}
-          class="w-full p-4 bg-surface-primary bg-opacity-50 hover:bg-surface-secondary hover:bg-opacity-50 rounded-lg transition-colors text-left"
-        >
-          <div class="flex items-center gap-3">
-            <div class="p-2 bg-orange-600 rounded-lg">
-              <Key class="w-5 h-5 text-theme" />
+          </button>
+
+          <!-- Change Password -->
+          <button
+            on:click={openChangePassword}
+            class="w-full p-4 bg-surface-primary bg-opacity-50 hover:bg-surface-secondary hover:bg-opacity-50 rounded-lg transition-colors text-left"
+          >
+            <div class="flex items-center gap-3">
+              <div class="p-2 bg-orange-600 rounded-lg">
+                <Key class="w-5 h-5 text-theme" />
+              </div>
+              <div>
+                <h3 class="font-medium text-theme">Change Password</h3>
+                <p class="text-sm text-gray-400">Update your wallet password or remove it</p>
+              </div>
             </div>
-            <div>
-              <h3 class="font-medium text-theme">Change Password</h3>
-              <p class="text-sm text-gray-400">Update your wallet password or remove it</p>
+          </button>
+
+          <!-- Reset to New Wallet -->
+          <button
+            on:click={openResetConfirmation}
+            class="w-full p-4 bg-red-900/20 hover:bg-red-900/30 border border-red-700/50 rounded-lg transition-colors text-left"
+          >
+            <div class="flex items-center gap-3">
+              <div class="p-2 bg-red-600 rounded-lg">
+                <RotateCcw class="w-5 h-5 text-theme" />
+              </div>
+              <div>
+                <h3 class="font-medium text-red-400">Reset to New Wallet</h3>
+                <p class="text-sm text-red-300">⚠️ DANGEROUS: Creates a brand new wallet</p>
+              </div>
             </div>
-          </div>
-        </button>
-        
-        <!-- Reset to New Wallet -->
-        <button
-          on:click={openResetConfirmation}
-          class="w-full p-4 bg-red-900/20 hover:bg-red-900/30 border border-red-700/50 rounded-lg transition-colors text-left"
-        >
-          <div class="flex items-center gap-3">
-            <div class="p-2 bg-red-600 rounded-lg">
-              <RotateCcw class="w-5 h-5 text-theme" />
-            </div>
-            <div>
-              <h3 class="font-medium text-red-400">Reset to New Wallet</h3>
-              <p class="text-sm text-red-300">⚠️ DANGEROUS: Creates a brand new wallet</p>
-            </div>
-          </div>
-        </button>
-        
+          </button>
+        {/if}
+
       {:else if showResetConfirmation}
         <!-- Reset Confirmation -->
         <div class="space-y-4">

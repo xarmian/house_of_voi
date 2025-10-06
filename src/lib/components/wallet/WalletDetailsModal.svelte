@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { walletStore, walletBalance, walletAddress, isWalletConnected } from '$lib/stores/wallet';
-  import { Copy, RefreshCw, Plus, Lock, Unlock, X, Settings } from 'lucide-svelte';
+  import { walletStore, walletBalance, walletAddress, isWalletConnected, isCDPWallet, cdpUserEmail } from '$lib/stores/wallet';
+  import { Copy, RefreshCw, Plus, Lock, Unlock, X, Settings, Send, LogOut, Mail } from 'lucide-svelte';
   import { createEventDispatcher } from 'svelte';
   import AddFundsModal from './AddFundsModal.svelte';
   import WalletSettingsModal from './WalletSettingsModal.svelte';
+  import TransferTokensModal from './TransferTokensModal.svelte';
   
   const dispatch = createEventDispatcher();
   
@@ -11,8 +12,10 @@
   
   let showAddFunds = false;
   let showSettings = false;
+  let showTransferTokens = false;
   let isRefreshing = false;
   let copySuccess = false;
+  let isLoggingOut = false;
   
   // Format balance for display
   $: formattedBalance = ($walletBalance / 1_000_000).toFixed(6);
@@ -44,13 +47,29 @@
   function openSettings() {
     showSettings = true;
   }
-  
+
+  function openTransferTokens() {
+    showTransferTokens = true;
+  }
+
   function lockWallet() {
     walletStore.lock();
   }
-  
+
   function unlockWallet() {
     walletStore.unlock();
+  }
+
+  async function logoutCDP() {
+    isLoggingOut = true;
+    try {
+      await walletStore.logoutCDP();
+      closeModal();
+    } catch (error) {
+      console.error('Failed to logout:', error);
+    } finally {
+      isLoggingOut = false;
+    }
   }
   
   function closeModal() {
@@ -139,6 +158,17 @@
         
         <!-- Address Display -->
         <div class="bg-slate-700/50 rounded-lg p-4 mb-6">
+          {#if $isCDPWallet && $cdpUserEmail}
+            <!-- CDP Email Display -->
+            <div class="mb-4 pb-4 border-b border-slate-600">
+              <div class="flex items-center gap-2 mb-2">
+                <Mail class="w-4 h-4 text-voi-400" />
+                <p class="text-sm text-gray-400">Email</p>
+              </div>
+              <p class="text-base text-voi-400 font-medium">{$cdpUserEmail}</p>
+            </div>
+          {/if}
+
           <div class="flex items-center justify-between">
             <div class="flex-1 min-w-0">
               <p class="text-sm text-gray-400 mb-1">Wallet Address</p>
@@ -152,7 +182,7 @@
               <Copy class="w-4 h-4" />
             </button>
           </div>
-          
+
           {#if copySuccess}
             <p class="text-voi-400 text-sm mt-2">Address copied to clipboard!</p>
           {/if}
@@ -167,25 +197,52 @@
             <Plus class="w-4 h-4" />
             Add Credits
           </button>
-          
+
           <button
-            on:click={openSettings}
+            on:click={openTransferTokens}
             class="btn-secondary flex items-center justify-center gap-2"
           >
+            <Send class="w-4 h-4" />
+            Transfer
+          </button>
+        </div>
+
+        <!-- Settings / security controls -->
+        <div class="mb-6">
+          <button
+            on:click={openSettings}
+            class="w-full btn-secondary flex items-center justify-center gap-2"
+          >
             <Settings class="w-4 h-4" />
-            Settings
+            {$isCDPWallet ? 'Security' : 'Settings'}
           </button>
         </div>
         
-        <!-- Lock Section -->
+        <!-- Lock/Logout Section -->
         <div class="mb-6">
-          <button
-            on:click={lockWallet}
-            class="w-full bg-amber-600 hover:bg-amber-700 text-theme py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
-          >
-            <Lock class="w-4 h-4" />
-            Lock Wallet
-          </button>
+          {#if $isCDPWallet}
+            <button
+              on:click={logoutCDP}
+              disabled={isLoggingOut}
+              class="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-600/50 text-theme py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
+            >
+              {#if isLoggingOut}
+                <div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                Logging out...
+              {:else}
+                <LogOut class="w-4 h-4" />
+                Logout
+              {/if}
+            </button>
+          {:else}
+            <button
+              on:click={lockWallet}
+              class="w-full bg-amber-600 hover:bg-amber-700 text-theme py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
+            >
+              <Lock class="w-4 h-4" />
+              Lock Wallet
+            </button>
+          {/if}
         </div>
         
         <!-- Security Warning -->
@@ -225,6 +282,12 @@
       showSettings = false;
       closeModal();
     }}
+  />
+{/if}
+
+{#if showTransferTokens}
+  <TransferTokensModal
+    on:close={() => showTransferTokens = false}
   />
 {/if}
 

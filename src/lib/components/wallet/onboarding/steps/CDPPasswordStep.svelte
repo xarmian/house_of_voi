@@ -1,0 +1,135 @@
+<script lang="ts">
+  import { createEventDispatcher } from 'svelte';
+
+  export let isLoading = false;
+
+  const dispatch = createEventDispatcher<{
+    submit: { password: string | null };
+  }>();
+
+  let password = '';
+  let confirmPassword = '';
+  let showPassword = false;
+  let localError = '';
+
+  function handleSubmit() {
+    if (password.trim().length > 0) {
+      if (password.trim().length < 4) {
+        localError = 'Password must be at least 4 characters';
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        localError = 'Passwords do not match';
+        return;
+      }
+    }
+
+    localError = '';
+    dispatch('submit', { password: password.trim() || null });
+  }
+
+  function handleSkip() {
+    dispatch('submit', { password: null });
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      handleSubmit();
+    }
+  }
+</script>
+
+<div class="px-6 py-6 space-y-6">
+  <div class="text-sm text-slate-300 bg-blue-900/20 border border-blue-600/30 rounded-lg p-4">
+    <p class="font-medium text-blue-400 mb-2">🔒 Add extra protection (optional)</p>
+    <p class="text-slate-300">
+      You can add a password for extra security on this device. Your account is already protected by your email login, so this is optional but recommended.
+    </p>
+  </div>
+
+  {#if localError}
+    <div class="p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
+      <p class="text-red-400 text-sm">{localError}</p>
+    </div>
+  {/if}
+
+  <div class="space-y-4">
+    <div class="space-y-2">
+      <label for="password" class="block text-sm font-medium text-slate-300">
+        New password <span class="text-slate-500">(optional)</span>
+      </label>
+      <div class="relative">
+        <input
+          id="password"
+          type={showPassword ? 'text' : 'password'}
+          bind:value={password}
+          on:keydown={handleKeydown}
+          disabled={isLoading}
+          placeholder="Enter a secure password"
+          class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-theme placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          autocomplete="new-password"
+        />
+        <button
+          type="button"
+          on:click={() => showPassword = !showPassword}
+          disabled={isLoading}
+          class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 disabled:opacity-50"
+        >
+          {#if showPassword}
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L6.5 6.5m3.378 3.378a3 3 0 004.243 4.243M21.5 6.5l-15 15" />
+            </svg>
+          {:else}
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.543 7-1.275 4.057-5.065 7-9.543 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+          {/if}
+        </button>
+      </div>
+    </div>
+
+    <div class="space-y-2">
+      <label for="confirm-password" class="block text-sm font-medium text-slate-300">
+        Confirm password
+      </label>
+      <input
+        id="confirm-password"
+        type={showPassword ? 'text' : 'password'}
+        bind:value={confirmPassword}
+        on:keydown={handleKeydown}
+        disabled={isLoading}
+        placeholder="Re-enter your password"
+        class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-theme placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+        autocomplete="new-password"
+      />
+    </div>
+  </div>
+
+  <div class="flex justify-between items-center pt-4">
+    <button
+      type="button"
+      on:click={handleSkip}
+      disabled={isLoading}
+      class="text-sm text-slate-300 hover:text-theme transition-colors disabled:opacity-50"
+    >
+      Skip for now
+    </button>
+
+    <button
+      type="button"
+      on:click={handleSubmit}
+      disabled={isLoading}
+      class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-theme rounded-lg transition-colors disabled:opacity-50 flex items-center space-x-2"
+    >
+      {#if isLoading}
+        <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" />
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
+      {/if}
+      <span>{isLoading ? 'Saving...' : 'Set Password'}</span>
+    </button>
+  </div>
+</div>

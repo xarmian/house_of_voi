@@ -1,9 +1,12 @@
+export type WalletOrigin = 'generated' | 'imported' | 'cdp' | 'legacy';
+
 export interface WalletAccount {
   address: string;
   privateKey: string;
   mnemonic: string;
   createdAt?: number;
   isLocked: boolean;
+  origin?: WalletOrigin;
 }
 
 export interface WalletState {

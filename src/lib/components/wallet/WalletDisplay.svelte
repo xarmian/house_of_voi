@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { walletStore, walletBalance, walletAddress, isWalletConnected, hasExistingWallet, type BalanceChangeEventDetail } from '$lib/stores/wallet';
+  import { walletStore, walletBalance, walletAddress, isWalletConnected, hasExistingWallet, isCDPWallet, cdpUserEmail, type BalanceChangeEventDetail } from '$lib/stores/wallet';
   import { reservedBalance } from '$lib/stores/queue';
   import { walletService } from '$lib/services/wallet';
   import { algorandService } from '$lib/services/algorand';
   import { balanceManager } from '$lib/services/balanceManager';
-  import { Wallet, MoreHorizontal, RefreshCw, Unlock, Lock, TrendingUp, Copy, Check, User } from 'lucide-svelte';
+  import type { WalletOrigin } from '$lib/types/wallet';
+  import { Wallet, MoreHorizontal, RefreshCw, Unlock, Lock, TrendingUp, Copy, Check, User, Mail, LogOut } from 'lucide-svelte';
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import WalletDetailsModal from './WalletDetailsModal.svelte';
   import GamingWalletStakingModal from './GamingWalletStakingModal.svelte';
@@ -32,7 +33,13 @@
   let pendingDeductions = 0;
   
   // Public wallet data for locked wallets
-  let publicWalletData: { address: string; createdAt: number; lastUsed: number; isPasswordless?: boolean } | null = null;
+  let publicWalletData: {
+    address: string;
+    createdAt: number;
+    lastUsed: number;
+    origin?: WalletOrigin;
+    isPasswordless?: boolean;
+  } | null = null;
   let publicBalance: number | null = null;
   let loadingPublicBalance = false;
   
@@ -104,16 +111,16 @@
 
   onMount(() => {
     loadPublicWalletData();
-    
+
     // Subscribe to balance changes
     balanceChangeUnsubscribe = walletStore.onBalanceChange(handleBalanceChange);
-    
+
     // Check for pending transactions initially
     checkPendingTransactions();
-    
+
     // Periodically check for pending transaction changes
     const pendingCheckInterval = setInterval(checkPendingTransactions, 1000);
-    
+
     return () => {
       clearInterval(pendingCheckInterval);
     };
@@ -176,6 +183,12 @@
       } catch (err) {
         console.error('Failed to copy address:', err);
       }
+    }
+  }
+
+  function handleLogout() {
+    if (confirm('Are you sure you want to logout? Your account will remain on this device.')) {
+      walletStore.lock();
     }
   }
 </script>
@@ -388,21 +401,41 @@
   {:else if !compact}
     <!-- Desktop connected state - show address info -->
     <div class="bg-surface-tertiary rounded-lg shadow-lg border border-surface-border backdrop-blur-sm p-3">
+      {#if $isCDPWallet && $cdpUserEmail}
+        <!-- CDP Email Display with Logout -->
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-1">
+            <Mail class="w-3 h-3 text-voi-400" />
+            <p class="text-sm text-voi-400 font-medium">{$cdpUserEmail}</p>
+          </div>
+          <button
+            on:click={handleLogout}
+            class="px-2 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors flex items-center gap-1"
+            title="Logout"
+          >
+            <LogOut class="w-3 h-3" />
+            Logout
+          </button>
+        </div>
+      {/if}
+
       <div class="flex items-center justify-between mb-1">
         <div class="flex items-center gap-1">
           <p class="text-xs text-theme-text opacity-70">Address</p>
           <Unlock class="w-3 h-3 text-theme-text opacity-70" />
         </div>
-        <button
-          on:click={() => walletStore.lock()}
-          class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
-          title="Lock wallet"
-        >
-          <Lock class="w-3 h-3" />
-        </button>
+        {#if !$isCDPWallet}
+          <button
+            on:click={() => walletStore.lock()}
+            class="p-1 text-theme-text opacity-70 hover:opacity-100 transition-colors"
+            title="Lock wallet"
+          >
+            <Lock class="w-3 h-3" />
+          </button>
+        {/if}
       </div>
       <div class="flex items-center gap-2">
-        <a 
+        <a
           href="https://voirewards.com/wallet/{$walletAddress || ''}"
           target="_blank"
           rel="noopener noreferrer"
@@ -430,7 +463,11 @@
         </button>
       </div>
       <p class="text-xs text-theme-text opacity-70 mt-2">
-        Click the menu to access functions • Click lock to secure
+        {#if $isCDPWallet}
+          Click the menu to access wallet functions
+        {:else}
+          Click the menu to access functions • Click lock to secure
+        {/if}
       </p>
     </div>
   {/if}

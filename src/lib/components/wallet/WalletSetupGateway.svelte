@@ -2,131 +2,159 @@
   import { createEventDispatcher } from 'svelte';
   import { walletStore } from '$lib/stores/wallet';
   import { walletService } from '$lib/services/wallet';
-  import WalletPasswordModal from './WalletPasswordModal.svelte';
-  import WalletSetupModal from './WalletSetupModal.svelte';
-  import AddFundsModal from './AddFundsModal.svelte';
+  import WalletOnboardingWizard from './onboarding/WalletOnboardingWizard.svelte';
 
   export let isOpen = false;
-  export let showAddFundsAfterUnlock = true;
 
   const dispatch = createEventDispatcher<{
     close: void;
     walletReady: void;
   }>();
 
-  // Modal states
-  let showPasswordModal = false;
-  let showSetupModal = false;
-  let showAddFundsModal = false;
-  let showLegacyMigrationModal = false;
-
   // Loading and error states
   let isLoading = false;
   let error = '';
+
+  // Wallet creation state
+  let pendingWalletPassword = '';
+  let generatedMnemonic = '';
+
+  // Wizard reference
+  let wizard: WalletOnboardingWizard;
+
+  // Determine initial wizard flow
+  let initialFlow: 'choose' | 'unlock' = 'choose';
+  let showLegacyMigrationModal = false;
 
   // Subscribe to wallet store
   $: wallet = $walletStore;
 
   // When modal opens, determine which flow to show
-  $: if (isOpen && !showPasswordModal && !showSetupModal && !showAddFundsModal && !showLegacyMigrationModal) {
+  $: if (isOpen && !showLegacyMigrationModal) {
     handleOpenFlow();
   }
 
   async function handleOpenFlow() {
     if (wallet.isConnected) {
-      // Already connected, show Add Funds directly
-      showAddFundsModal = true;
+      // Already connected, close modal
+      handleClose();
     } else if (wallet.isGuest) {
       // Guest mode, check if existing wallet exists
       if (walletService.hasStoredWallet()) {
         if (walletService.isLegacyWallet()) {
           showLegacyMigrationModal = true;
         } else {
-          showPasswordModal = true;
+          initialFlow = 'unlock';
         }
       } else {
-        showSetupModal = true;
+        initialFlow = 'choose';
       }
     } else if (wallet.isLocked) {
       // Wallet exists but locked
       if (walletService.isLegacyWallet()) {
         showLegacyMigrationModal = true;
       } else {
-        showPasswordModal = true;
+        initialFlow = 'unlock';
       }
     }
   }
 
-  // Handle password unlock
-  async function handlePasswordUnlock(event: CustomEvent<{ password: string }>) {
+  // Wizard event handlers
+  async function handleUnlock(event: CustomEvent<{ password: string }>) {
     const { password } = event.detail;
-    isLoading = true;
+    if (wizard) wizard.setLoading(true);
     error = '';
 
     try {
       await walletStore.unlock(password);
-      showPasswordModal = false;
-      if (showAddFundsAfterUnlock) {
-        showAddFundsModal = true; // Show Add Funds directly after unlock
-      } else {
-        handleClose(); // Just close the modal
+
+      if ($walletStore.account) {
+        if (wizard) {
+          wizard.setWalletAddress($walletStore.account.address);
+          wizard.completeFlow();
+        }
       }
-      dispatch('walletReady');
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to unlock wallet';
+      const errorMsg = err instanceof Error ? err.message : 'Failed to unlock wallet';
+      if (wizard) wizard.setError(errorMsg);
     } finally {
-      isLoading = false;
+      if (wizard) wizard.setLoading(false);
     }
   }
 
-  // Handle abandon wallet
-  function handleAbandonWallet() {
-    // Clear the existing wallet
-    walletService.clearWallet();
-    
-    // Reset wallet store to guest mode
-    walletStore.resetWallet();
-    
-    // Close password modal and show setup modal for new wallet
-    showPasswordModal = false;
-    showSetupModal = true;
-    
-    error = '';
-  }
-
-  // Handle wallet creation
   async function handleCreateWallet(event: CustomEvent<{ password: string }>) {
     const { password } = event.detail;
-    isLoading = true;
+    if (wizard) wizard.setLoading(true);
     error = '';
 
     try {
-      await walletStore.createWallet(password);
-      showSetupModal = false;
-      showAddFundsModal = true; // Show Add Funds directly after creation
-      dispatch('walletReady');
+      // Generate wallet but don't store it yet
+      const account = await walletService.generateWallet();
+
+      // Save the password and mnemonic for later
+      pendingWalletPassword = password;
+      generatedMnemonic = account.mnemonic;
+
+      // Pass mnemonic to wizard to show backup step
+      if (wizard) wizard.setMnemonic(account.mnemonic);
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to create wallet';
+      const errorMsg = err instanceof Error ? err.message : 'Failed to generate wallet';
+      if (wizard) wizard.setError(errorMsg);
     } finally {
-      isLoading = false;
+      if (wizard) wizard.setLoading(false);
     }
   }
 
-  // Handle wallet import
+  async function handleConfirmMnemonicBackup() {
+    if (wizard) wizard.setLoading(true);
+    error = '';
+
+    try {
+      // Import the wallet from mnemonic (to recreate the account)
+      const account = await walletService.importWallet(generatedMnemonic);
+
+      // Clear existing wallet first
+      walletService.clearWallet();
+
+      // Store the wallet with password and origin as 'generated' (not 'imported')
+      await walletService.storeWallet(account, pendingWalletPassword, { origin: 'generated' });
+
+      // Now unlock it to populate the wallet store
+      await walletStore.unlock(pendingWalletPassword);
+
+      // Clear sensitive data
+      pendingWalletPassword = '';
+      generatedMnemonic = '';
+
+      if ($walletStore.account && wizard) {
+        wizard.setWalletAddress($walletStore.account.address);
+        wizard.completeFlow();
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to create wallet';
+      if (wizard) wizard.setError(errorMsg);
+    } finally {
+      if (wizard) wizard.setLoading(false);
+    }
+  }
+
   async function handleImportWallet(event: CustomEvent<{ mnemonic: string; password: string }>) {
     const { mnemonic, password } = event.detail;
-    isLoading = true;
+    if (wizard) wizard.setLoading(true);
     error = '';
 
     try {
       await walletStore.importWallet(mnemonic, password);
-      showSetupModal = false;
-      showAddFundsModal = true; // Show Add Funds directly after import
-      dispatch('walletReady');
+
+      if ($walletStore.account && wizard) {
+        wizard.setWalletAddress($walletStore.account.address);
+        wizard.completeFlow();
+      }
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to import wallet';
+      const errorMsg = err instanceof Error ? err.message : 'Failed to import wallet';
+      if (wizard) wizard.setError(errorMsg);
     } finally {
-      isLoading = false;
+      if (wizard) wizard.setLoading(false);
     }
   }
 
@@ -141,11 +169,16 @@
         // Successfully recovered legacy wallet, now prompt to set password
         const password = prompt('Your wallet was recovered! Please set a new password to secure it:');
         if (password && password.length >= 4) {
-          await walletService.storeWallet(account, password);
+          await walletService.storeWallet(account, password, { origin: account.origin });
           await walletStore.unlock(password);
           showLegacyMigrationModal = false;
-          showAddFundsModal = true; // Show Add Funds directly after recovery
-          dispatch('walletReady');
+
+          if ($walletStore.account && wizard) {
+            wizard.setWalletAddress($walletStore.account.address);
+            wizard.completeFlow();
+          } else {
+            dispatch('walletReady');
+          }
         } else {
           error = 'Password must be at least 4 characters';
         }
@@ -162,56 +195,88 @@
   // Handle legacy wallet manual recovery
   function handleLegacyManualRecover() {
     showLegacyMigrationModal = false;
-    showSetupModal = true;
+    initialFlow = 'choose';
+  }
+
+  async function handleCDPLogin(event: CustomEvent<{ email: string; otpCode: string }>) {
+    const { email, otpCode } = event.detail;
+    if (wizard) wizard.setLoading(true);
+    error = '';
+
+    try {
+      // Use the wallet store flow so CDP metadata stays in sync
+      await walletStore.loginWithCDP(email, otpCode);
+      // Wizard will automatically proceed to CDP password step
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to authenticate with email';
+      if (wizard) wizard.setError(errorMsg);
+    } finally {
+      if (wizard) wizard.setLoading(false);
+    }
+  }
+
+  async function handleCDPPasswordSet(event: CustomEvent<{ password: string | null }>) {
+    const { password } = event.detail;
+    if (wizard) wizard.setLoading(true);
+    error = '';
+
+    try {
+      if (password) {
+        await walletStore.changePassword(password);
+      }
+
+      if ($walletStore.account && wizard) {
+        wizard.setWalletAddress($walletStore.account.address);
+        // Wizard will automatically complete
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to set password';
+      if (wizard) wizard.setError(errorMsg);
+    } finally {
+      if (wizard) wizard.setLoading(false);
+    }
   }
 
   // Handle modal close
   function handleClose() {
     isOpen = false;
-    showPasswordModal = false;
-    showSetupModal = false;
-    showAddFundsModal = false;
     showLegacyMigrationModal = false;
     error = '';
     dispatch('close');
   }
 
-  // Handle sub-modal cancellations
-  function handleCancel() {
-    // If user cancels from setup/password, close entire gateway
-    handleClose();
+  function handleWalletReady() {
+    dispatch('walletReady');
+  }
+
+  function handleAbandonWallet() {
+    // Clear the existing wallet
+    walletService.clearWallet();
+
+    // Reset wallet store to guest mode
+    walletStore.resetWallet();
+
+    error = '';
   }
 </script>
 
-<!-- Gateway wrapper - only shows background when any modal is open -->
-{#if isOpen && (showPasswordModal || showSetupModal || showAddFundsModal || showLegacyMigrationModal)}
-  <!-- Password input modal -->
-  <WalletPasswordModal
-    bind:isOpen={showPasswordModal}
-    {isLoading}
-    {error}
-    on:confirm={handlePasswordUnlock}
-    on:cancel={handleCancel}
+<!-- New Wizard-based Gateway -->
+{#if isOpen && !showLegacyMigrationModal}
+  <WalletOnboardingWizard
+    bind:this={wizard}
+    bind:isOpen
+    {initialFlow}
+    on:close={handleClose}
+    on:walletReady={handleWalletReady}
+    on:unlock={handleUnlock}
+    on:createWallet={handleCreateWallet}
+    on:confirmMnemonicBackup={handleConfirmMnemonicBackup}
+    on:importWallet={handleImportWallet}
+    on:cdpLogin={handleCDPLogin}
+    on:cdpPasswordSet={handleCDPPasswordSet}
     on:abandon={handleAbandonWallet}
   />
-
-  <!-- Wallet setup modal -->
-  <WalletSetupModal
-    bind:isOpen={showSetupModal}
-    {isLoading}
-    {error}
-    on:createWallet={handleCreateWallet}
-    on:importWallet={handleImportWallet}
-    on:cancel={handleCancel}
-  />
-
-  <!-- Add Funds modal (when connected) -->
-  {#if showAddFundsModal && $walletStore.account}
-    <AddFundsModal
-      address={$walletStore.account.address}
-      on:close={handleClose}
-    />
-  {/if}
+{/if}
 
   <!-- Legacy wallet migration modal -->
   {#if showLegacyMigrationModal}
@@ -266,7 +331,7 @@
         <div class="px-6 py-4 border-t border-slate-700 flex justify-end">
           <button
             type="button"
-            on:click={handleCancel}
+            on:click={handleClose}
             disabled={isLoading}
             class="px-4 py-2 text-slate-300 hover:text-theme transition-colors disabled:opacity-50"
           >
@@ -276,4 +341,4 @@
       </div>
     </div>
   {/if}
-{/if}
+

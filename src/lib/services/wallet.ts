@@ -1,6 +1,6 @@
 import algosdk from 'algosdk';
 import CryptoJS from 'crypto-js';
-import type { WalletAccount } from '$lib/types/wallet';
+import type { WalletAccount, WalletOrigin } from '$lib/types/wallet';
 import type { EncryptedWallet } from '$lib/types/security';
 import { browser } from '$app/environment';
 
@@ -20,7 +20,8 @@ export class WalletService {
       privateKey: Array.from(account.sk, (byte: number) => byte.toString(16).padStart(2, '0')).join(''),
       mnemonic,
       createdAt: Date.now(),
-      isLocked: false
+      isLocked: false,
+      origin: 'generated'
     };
   }
 
@@ -37,7 +38,8 @@ export class WalletService {
         privateKey: Array.from(account.sk, (byte: number) => byte.toString(16).padStart(2, '0')).join(''),
         mnemonic: mnemonic.trim(),
         createdAt: Date.now(),
-        isLocked: false
+        isLocked: false,
+        origin: 'imported'
       };
     } catch (error) {
       throw new Error('Invalid mnemonic phrase. Please check your recovery phrase and try again.');
@@ -47,11 +49,22 @@ export class WalletService {
   /**
    * Encrypt and store wallet securely with password
    */
-  async storeWallet(wallet: WalletAccount, password: string): Promise<void> {
+  async storeWallet(
+    wallet: WalletAccount,
+    password: string,
+    options: { origin?: WalletOrigin } = {}
+  ): Promise<void> {
     if (!browser) return;
 
     const salt = CryptoJS.lib.WordArray.random(16);
     const iv = CryptoJS.lib.WordArray.random(16);
+
+    const walletOrigin: WalletOrigin = options.origin ?? wallet.origin ?? 'generated';
+    const createdAt = wallet.createdAt || Date.now();
+    const lastUsed = Date.now();
+
+    wallet.origin = walletOrigin;
+    wallet.createdAt = createdAt;
     
     // For empty passwords, use a consistent but weak key
     const encryptionKey = password.trim() === '' ? 
@@ -76,8 +89,9 @@ export class WalletService {
       encryptedMnemonic,
       publicData: {
         address: wallet.address,
-        createdAt: wallet.createdAt || Date.now(),
-        lastUsed: Date.now()
+        createdAt,
+        lastUsed,
+        origin: walletOrigin
       },
       salt: salt.toString(),
       iv: iv.toString(),
@@ -151,12 +165,16 @@ export class WalletService {
         throw new Error('Failed to decrypt wallet data');
       }
 
+      const origin: WalletOrigin | undefined =
+        encryptedWallet.publicData.origin ?? (encryptedWallet.isPasswordless ? 'cdp' : undefined);
+
       return {
         address: encryptedWallet.publicData.address,
         privateKey: decryptedPrivateKey,
         mnemonic: decryptedMnemonic,
         createdAt: encryptedWallet.publicData.createdAt,
-        isLocked: false
+        isLocked: false,
+        origin
       };
     } catch (error) {
       console.error('Error retrieving wallet:', error);
@@ -222,7 +240,8 @@ export class WalletService {
         privateKey: decryptedPrivateKey,
         mnemonic: decryptedMnemonic,
         createdAt: encryptedWallet.publicData.createdAt,
-        isLocked: false
+        isLocked: false,
+        origin: 'legacy'
       };
     } catch (error) {
       console.error('Error recovering legacy wallet:', error);
@@ -352,7 +371,13 @@ export class WalletService {
   /**
    * Get public wallet data without requiring password
    */
-  getPublicWalletData(): { address: string; createdAt: number; lastUsed: number; isPasswordless?: boolean } | null {
+  getPublicWalletData(): {
+    address: string;
+    createdAt: number;
+    lastUsed: number;
+    origin?: WalletOrigin;
+    isPasswordless?: boolean;
+  } | null {
     if (!browser) return null;
     
     try {
@@ -360,8 +385,14 @@ export class WalletService {
       if (!encryptedData) return null;
       
       const encryptedWallet: EncryptedWallet = JSON.parse(encryptedData);
+      const origin: WalletOrigin | undefined =
+        encryptedWallet.publicData.origin ?? (encryptedWallet.isPasswordless ? 'cdp' : undefined);
+
       return {
-        ...encryptedWallet.publicData,
+        address: encryptedWallet.publicData.address,
+        createdAt: encryptedWallet.publicData.createdAt,
+        lastUsed: encryptedWallet.publicData.lastUsed,
+        origin,
         isPasswordless: encryptedWallet.isPasswordless
       };
     } catch (error) {
@@ -395,7 +426,7 @@ export class WalletService {
     if (!browser) return;
     
     // Simply re-store the wallet with the new password
-    await this.storeWallet(account, newPassword);
+    await this.storeWallet(account, newPassword, { origin: account.origin });
   }
 
 }

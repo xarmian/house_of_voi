@@ -90,7 +90,7 @@ export const CONTRACTS_CONFIG: MultiContractConfig = {
         betaMode: false
       }
     },
-    {
+    /*{
       id: 'alpha-2',
       name: 'New Alpha Slots',
       description: 'A new alpha slot machine for testing',
@@ -177,7 +177,7 @@ export const CONTRACTS_CONFIG: MultiContractConfig = {
         leaderboardEnabled: true,
         betaMode: false
       }
-    }
+    }*/
   ],
   defaultContractId: 'alpha-1',
   globalSettings: {
