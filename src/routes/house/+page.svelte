@@ -64,7 +64,7 @@
   );
 
   // Available wallets to enable (all supported by avm-wallet-svelte)
-  const availableWallets = ['Kibisis', 'LuteWallet', 'WalletConnect'];
+  const availableWallets = ['Kibisis', 'LuteWallet', 'VoiWallet', 'WalletConnect'];
 
   onMount(async () => {
     // Initialize multi-contract stores first

@@ -26,7 +26,7 @@
     "@supabase/supabase-js": "^2.56.0",
     "@sveltejs/adapter-auto": "^6.1.0",
     "algosdk": "^2.11.0",
-    "avm-wallet-svelte": "^0.8.1",
+    "avm-wallet-svelte": "^0.9.2",
     "buffer": "^6.0.3",
     "chart.js": "^4.5.0",
     "crypto-browserify": "^3.12.1",
