@@ -33,7 +33,7 @@
   function handleStartWalletSetup(event?: CustomEvent) {
     // Check if this is an "add wallet" request vs initial setup
     const detail = event?.detail;
-    if (detail?.mode === 'add' || ($wallet.availableWallets && $wallet.availableWallets.length > 0)) {
+    if (detail?.mode === 'add' || (wallet.availableWallets && wallet.availableWallets.length > 0)) {
       gatewayMode = 'add';
     } else {
       gatewayMode = 'setup';

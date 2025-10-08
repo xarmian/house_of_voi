@@ -96,15 +96,17 @@
     error = '';
 
     try {
-      // Generate wallet but don't store it yet
-      const account = await walletService.generateWallet();
+      // Use walletStore.createWallet which properly handles multi-wallet collections
+      await walletStore.createWallet(password);
 
-      // Save the password and mnemonic for later
-      pendingWalletPassword = password;
-      generatedMnemonic = account.mnemonic;
+      // Get the generated mnemonic from the newly created wallet
+      if ($walletStore.account && wizard) {
+        generatedMnemonic = $walletStore.account.mnemonic;
+        pendingWalletPassword = password;
 
-      // Pass mnemonic to wizard to show backup step
-      if (wizard) wizard.setMnemonic(account.mnemonic);
+        // Pass mnemonic to wizard to show backup step
+        wizard.setMnemonic($walletStore.account.mnemonic);
+      }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to generate wallet';
       if (wizard) wizard.setError(errorMsg);
@@ -118,18 +120,7 @@
     error = '';
 
     try {
-      // Import the wallet from mnemonic (to recreate the account)
-      const account = await walletService.importWallet(generatedMnemonic);
-
-      // Clear existing wallet first
-      walletService.clearWallet();
-
-      // Store the wallet with password and origin as 'generated' (not 'imported')
-      await walletService.storeWallet(account, pendingWalletPassword, { origin: 'generated' });
-
-      // Now unlock it to populate the wallet store
-      await walletStore.unlock(pendingWalletPassword);
-
+      // Wallet is already created and stored, just need to confirm backup
       // Clear sensitive data
       pendingWalletPassword = '';
       generatedMnemonic = '';
@@ -139,7 +130,7 @@
         wizard.completeFlow();
       }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to create wallet';
+      const errorMsg = err instanceof Error ? err.message : 'Failed to confirm backup';
       if (wizard) wizard.setError(errorMsg);
     } finally {
       if (wizard) wizard.setLoading(false);

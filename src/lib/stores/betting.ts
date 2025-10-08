@@ -19,7 +19,7 @@ function createBettingStore() {
   // Get user's betting preferences for initial state
   const prefs = get(bettingPreferences);
   const defaultPaylines = prefs.defaultPaylines;
-  
+
   const { subscribe, set, update } = writable<BettingState>({
     betPerLine: BETTING_CONSTANTS.DEFAULT_BET_PER_LINE,
     selectedPaylines: defaultPaylines,
@@ -27,6 +27,65 @@ function createBettingStore() {
     isValidBet: true,
     errors: [],
     lastBet: null
+  });
+
+  // Track previous wallet state to detect changes
+  let previousBalance = 0;
+  let previousAddress: string | null = null;
+
+  // Subscribe to wallet changes and re-validate when balance or address changes
+  const unsubscribeWalletBalance = walletBalance.subscribe(balance => {
+    const currentAddress = get(walletAddress);
+
+    // Only re-validate if we have an address and something actually changed
+    if (currentAddress && (balance !== previousBalance || currentAddress !== previousAddress)) {
+      // Get current betting state
+      const currentState = get({ subscribe });
+
+      // Re-validate the current bet with the new balance
+      const validation = validateBet(
+        currentState.betPerLine,
+        currentState.selectedPaylines,
+        balance
+      );
+
+      // Update validation state if anything changed
+      if (validation.isValid !== currentState.isValidBet ||
+          JSON.stringify(validation.errors) !== JSON.stringify(currentState.errors)) {
+        update(state => ({
+          ...state,
+          isValidBet: validation.isValid,
+          errors: validation.errors
+        }));
+      }
+
+      // Update tracking variables
+      previousBalance = balance;
+      previousAddress = currentAddress;
+    }
+  });
+
+  const unsubscribeWalletAddress = walletAddress.subscribe(address => {
+    // When address changes, also trigger re-validation
+    if (address && address !== previousAddress) {
+      const currentBalance = get(walletBalance);
+      const currentState = get({ subscribe });
+
+      const validation = validateBet(
+        currentState.betPerLine,
+        currentState.selectedPaylines,
+        currentBalance
+      );
+
+      update(state => ({
+        ...state,
+        isValidBet: validation.isValid,
+        errors: validation.errors
+      }));
+
+      previousAddress = address;
+      previousBalance = currentBalance;
+    }
   });
 
   function validateBet(betPerLine: number, selectedPaylines: number, walletBalance: number): BetValidationResult {
